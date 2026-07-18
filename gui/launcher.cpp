@@ -105,21 +105,25 @@ enum {
 
 const GroupingMode groupingModes[] = {
 	// I18N: Group name for the game list
-	{"none",     _sc("None", "group"),         nullptr,                 kGroupByNone},
+	{"none",     _sc("None", "group"),                nullptr,                 kGroupByNone},
 	// I18N: Group name for the game list, grouped by the first letter of the game title
-	{"initial",  _sc("First letter", "group"), _sc("Initial", "group"), kGroupByFirstLetter},
+	{"initial",  _sc("First letter", "group"),        _sc("Initial", "group"), kGroupByFirstLetter},
 	// I18N: Group name for the game list, grouped by game engine
-	{"engine",   _sc("Engine", "group"),       nullptr,                 kGroupByEngine},
+	{"engine",   _sc("Engine", "group"),              nullptr,                 kGroupByEngine},
 	// I18N: Group name for the game list, grouped by game series
-	{"series",   _sc("Series", "group"),       nullptr,                 kGroupBySeries},
+	{"series",   _sc("Series", "group"),              nullptr,                 kGroupBySeries},
+	// I18N: Group name for the game list, grouped by game series, sorted by year
+	{"series-year", _sc("Series+Year", "group"),      nullptr,                 kGroupBySeriesThenYear},
 	// I18N: Group name for the game list, grouped by game publisher
-	{"company",  _sc("Publisher", "group"),    nullptr,                 kGroupByCompany},
+	{"company",  _sc("Publisher", "group"),           nullptr,                 kGroupByCompany},
+	// I18N: Group name for the game list, grouped by game publisher, sorted by year
+	{"company-year",  _sc("Publisher+Year", "group"), nullptr,                 kGroupByCompanyThenYear},
 	// I18N: Group name for the game list, grouped by language
-	{"language", _sc("Language", "group"),     nullptr,                 kGroupByLanguage},
+	{"language", _sc("Language", "group"),            nullptr,                 kGroupByLanguage},
 	// I18N: Group name for the game list, grouped by game platform
-	{"platform", _sc("Platform", "group"),     nullptr,                 kGroupByPlatform},
+	{"platform", _sc("Platform", "group"),            nullptr,                 kGroupByPlatform},
 	// I18N: Group name for the game list, grouped by year
-	{"year", _sc("Year", "year"),              nullptr,                 kGroupByYear},
+	{"year", _sc("Year", "group"),                    nullptr,                 kGroupByYear},
 	{nullptr, nullptr, nullptr, kGroupByNone}
 };
 
@@ -380,9 +384,26 @@ void LauncherDialog::close() {
 }
 
 struct LauncherEntryComparator {
-	bool operator()(const LauncherEntry &x, const LauncherEntry &y) const {
-			return scumm_compareDictionary(x.description.c_str(), y.description.c_str()) < 0;
+	LauncherEntryComparator(GroupingMethod grouping, const MetadataParser &metadataParser)
+		: _grouping(grouping), _metadataParser(metadataParser) {
 	}
+
+	bool operator()(const LauncherEntry &x, const LauncherEntry &y) const {
+		if (_grouping == kGroupByCompanyThenYear || _grouping == kGroupBySeriesThenYear) {
+			const MetadataGame &xMetadata = _metadataParser._gameInfo.getValOrDefault(
+				buildQualifiedGameName(x.engineid, x.gameid));
+			const MetadataGame &yMetadata = _metadataParser._gameInfo.getValOrDefault(
+				buildQualifiedGameName(y.engineid, y.gameid));
+
+			if (xMetadata.year != yMetadata.year)
+				return yMetadata.year.empty() || (!xMetadata.year.empty() && xMetadata.year < yMetadata.year);
+		}
+
+		return scumm_compareDictionary(x.description.c_str(), y.description.c_str()) < 0;
+	}
+
+	GroupingMethod _grouping;
+	const MetadataParser &_metadataParser;
 };
 
 
@@ -651,8 +672,8 @@ Common::Array<LauncherEntry> LauncherDialog::generateEntries(const Common::Confi
 			domainList.push_back(LauncherEntry(domain._key, engineid, gameid, description, title, &domain._value));
 	}
 
-	// Now sort the list in dictionary order
-	Common::sort(domainList.begin(), domainList.end(), LauncherEntryComparator());
+	// Sort the list before applying the selected grouping
+	Common::sort(domainList.begin(), domainList.end(), LauncherEntryComparator(_groupBy, _metadataParser));
 
 	return domainList;
 }
@@ -1343,6 +1364,7 @@ void LauncherSimple::groupEntries(const Common::Array<LauncherEntry> &metadata) 
 		}
 		break;
 	}
+	case kGroupByCompanyThenYear: // Fall-through intentional
 	case kGroupByCompany: {
 		for (const auto &entry : metadata) {
 			attrs.push_back(_metadataParser._gameInfo[buildQualifiedGameName(entry.engineid, entry.gameid)].company_id);
@@ -1360,6 +1382,7 @@ void LauncherSimple::groupEntries(const Common::Array<LauncherEntry> &metadata) 
 		}
 		break;
 	}
+	case kGroupBySeriesThenYear: // Fall-through intentional
 	case kGroupBySeries: {
 		for (const auto &entry : metadata) {
 			attrs.push_back(_metadataParser._gameInfo[buildQualifiedGameName(entry.engineid, entry.gameid)].series_id);
@@ -1588,6 +1611,7 @@ void LauncherGrid::groupEntries(const Common::Array<LauncherEntry> &metadata) {
 		}
 		break;
 	}
+	case kGroupByCompanyThenYear: // Fall-through intentional
 	case kGroupByCompany: {
 		for (const auto &entry : metadata) {
 			attrs.push_back(_metadataParser._gameInfo[buildQualifiedGameName(entry.engineid, entry.gameid)].company_id);
@@ -1605,6 +1629,7 @@ void LauncherGrid::groupEntries(const Common::Array<LauncherEntry> &metadata) {
 		}
 		break;
 	}
+	case kGroupBySeriesThenYear: // Fall-through intentional
 	case kGroupBySeries: {
 		for (const auto &entry : metadata) {
 			attrs.push_back(_metadataParser._gameInfo[buildQualifiedGameName(entry.engineid, entry.gameid)].series_id);
