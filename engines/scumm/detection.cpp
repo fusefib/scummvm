@@ -241,6 +241,9 @@ DetectedGames ScummMetaEngineDetection::detectGames(const Common::FSList &fslist
 		game.appendGUIOptions(getGameGUIOptionsDescriptionLanguage(x->language));
 		game.appendGUIOptions(getGameGUIOptionsDescriptionPlatform(x->game.platform));
 
+		if (x->game.id == GID_BIRTHDAYRED || x->game.id == GID_BIRTHDAYYELLOW)
+			game.addExtraEntry("shared_blues_birthday_profile", "true");
+
 		if (x->game.features & GF_TESTING)
 			game.gameSupportLevel = kTestingGame;
 

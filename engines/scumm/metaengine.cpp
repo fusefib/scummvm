@@ -707,6 +707,15 @@ static const ExtraGuiOption comiObjectLabelsOption = {
 	0
 };
 
+static const ExtraGuiOption sharedBluesBirthdayProfileOption = {
+	_s("Use shared Red/Yellow profile"),
+	_s("Share player profiles and progress between the Red and Yellow discs."),
+	"shared_blues_birthday_profile",
+	false,
+	0,
+	0
+};
+
 static const ExtraGuiOption mmnesClassicPaletteOption = {
 	_s("Use NES Classic Palette"),
 	_s("Use a more neutral color palette that closely emulates the NES Classic"),
@@ -997,6 +1006,11 @@ const ExtraGuiOptions ScummMetaEngine::getExtraGuiOptions(const Common::String &
 		if (!language.equals("en")) {
 			options.push_back(enableCOMISong);
 		}
+	}
+	const bool isInGame = !target.empty() && target == ConfMan.getActiveDomainName();
+	if (target.empty() || (!isInGame && gameid == "BluesBirthday" &&
+			(extra == "Red" || extra == "Yellow"))) {
+		options.push_back(sharedBluesBirthdayProfileOption);
 	}
 	if (target.empty() || platform == Common::kPlatformNES) {
 		options.push_back(mmnesClassicPaletteOption);

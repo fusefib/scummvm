@@ -20,6 +20,7 @@
  */
 
 #include "common/archive.h"
+#include "common/config-manager.h"
 #include "common/savefile.h"
 
 #include "scumm/actor.h"
@@ -161,7 +162,13 @@ Common::String ScummEngine_v60he::convertSavePath(const byte *src) {
 	}
 
 	// Prepend the target name
-	filePath = _targetName + '-' + filePath;
+	Common::String savePrefix = _targetName;
+
+	if ((_game.id == GID_BIRTHDAYYELLOW || _game.id == GID_BIRTHDAYRED) &&
+			ConfMan.getBool("shared_blues_birthday_profile"))
+		savePrefix = _game.gameid;
+
+	filePath = savePrefix + '-' + filePath;
 
 	debug(2, "convertSavePath out: '%s'", filePath.c_str());
 
