@@ -25,6 +25,7 @@
 #include "common/macresman.h"
 #include "common/md5.h"
 #include "common/events.h"
+#include "common/savefile.h"
 #include "common/str.h"
 #include "common/system.h"
 #include "common/translation.h"
@@ -2724,6 +2725,137 @@ int ScummEngine::getTalkSpeed() {
 #pragma mark --- Main loop ---
 #pragma mark -
 
+#ifdef ENABLE_HE
+
+static Common::StringArray listBirthdaySavefiles(Common::SaveFileManager *saveFileMan,
+		const Common::String &prefix, const Common::String &excludedPrefix = Common::String()) {
+	static const char *const patterns[] = {
+		"Blues1.nam", "*.bca", "*.sga", "*.sgb", "*.sgc", "*.sgd"
+	};
+	Common::StringArray files;
+
+	for (const char *pattern : patterns) {
+		for (const Common::String &file : saveFileMan->listSavefiles(prefix + pattern)) {
+			if (excludedPrefix.empty() || !file.hasPrefixIgnoreCase(excludedPrefix))
+				files.push_back(file);
+		}
+	}
+	return files;
+}
+
+static bool removeBirthdaySavefiles(Common::SaveFileManager *saveFileMan,
+		const Common::StringArray &files) {
+	bool success = true;
+	for (const Common::String &file : files) {
+		if (saveFileMan->removeSavefile(file)) {
+			debug("Removed Blue's Birthday save file '%s'", file.c_str());
+		} else {
+			warning("Could not remove Blue's Birthday save file '%s': %s",
+				file.c_str(), saveFileMan->getErrorDesc().c_str());
+			success = false;
+		}
+	}
+	return success;
+}
+
+static bool renameBirthdaySavefiles(Common::SaveFileManager *saveFileMan, const Common::StringArray &files,
+		const Common::String &oldPrefix, const Common::String &newPrefix) {
+	bool success = true;
+	for (const Common::String &oldName : files) {
+		Common::String newName = newPrefix + oldName.substr(oldPrefix.size());
+		if (saveFileMan->renameSavefile(oldName, newName)) {
+			debug("Renamed Blue's Birthday save file '%s' to '%s'", oldName.c_str(), newName.c_str());
+		} else {
+			warning("Could not rename Blue's Birthday save file '%s' to '%s': %s",
+				oldName.c_str(), newName.c_str(), saveFileMan->getErrorDesc().c_str());
+			success = false;
+		}
+	}
+	return success;
+}
+
+static Common::U32String describeBirthdaySavefiles(const Common::StringArray &files,
+		const Common::String &prefix) {
+	Common::U32String players;
+	bool yellowAccessed = false;
+	bool redAccessed = false;
+
+	for (const Common::String &file : files) {
+		Common::String name = file.substr(prefix.size());
+		if (name.hasSuffixIgnoreCase(".bca")) {
+			name.erase(name.size() - 4);
+			if (!players.empty())
+				players += Common::U32String(", ");
+			players += Common::U32String(name);
+		} else if (name.hasSuffixIgnoreCase(".sga") || name.hasSuffixIgnoreCase(".sgb")) {
+			yellowAccessed = true;
+		} else if (name.hasSuffixIgnoreCase(".sgc") || name.hasSuffixIgnoreCase(".sgd")) {
+			redAccessed = true;
+		}
+	}
+
+	if (players.empty())
+		players = _("unknown");
+	// I18N: Summary of a Blue's Birthday profile. Each of the Red/Yellow Discs have two pathways after profile creation.
+	// A pathway is known to be "accessed" because its save file exists; its progress is unknown.
+	// (The user could quit right after profile creation, before accesing any of the Discs' pathways.)
+	// Accessed pathways are gameplay and informative as to which saves/profile to keep.
+	return Common::U32String::format(_("Players: %S\nYellow pathways accessed: %S\nRed pathways accessed: %S"),
+		players.c_str(), yellowAccessed ? _("yes").c_str() : _("no").c_str(),
+		redAccessed ? _("yes").c_str() : _("no").c_str());
+}
+
+static bool resolveBirthdaySavefiles(Common::SaveFileManager *saveFileMan,
+		const Common::String &target, const Common::String &gameId) {
+	Common::String sharedPrefix = gameId + '-';
+	Common::String targetPrefix = target + '-';
+	if (sharedPrefix.equalsIgnoreCase(targetPrefix))
+		return true;
+
+	Common::StringArray targetFiles = listBirthdaySavefiles(saveFileMan, targetPrefix);
+	Common::StringArray sharedFiles = listBirthdaySavefiles(saveFileMan, sharedPrefix, targetPrefix);
+	debug("Found %u shared and %u target-specific Blue's Birthday save files",
+		sharedFiles.size(), targetFiles.size());
+
+	if (targetFiles.empty())
+		return true;
+	if (sharedFiles.empty()) {
+		debug("Migrating Blue's Birthday save files from '%s' to '%s'",
+			targetPrefix.c_str(), sharedPrefix.c_str());
+		return renameBirthdaySavefiles(saveFileMan, targetFiles, targetPrefix, sharedPrefix);
+	}
+
+	// I18N: The %s values are save-file prefixes. The %S values describe the players and whether each disc's pathways were accessed.
+	Common::U32String message = Common::U32String::format(_(
+		"ScummVM found two separate Blue's Birthday profiles.\n\n"
+		"Shared profile (%s):\n%S\n\nThis target's profile (%s):\n%S\n\n"
+		"Choose the profile to keep. The other profile and all of its progress will be permanently deleted."),
+		sharedPrefix.c_str(), describeBirthdaySavefiles(sharedFiles, sharedPrefix).c_str(),
+		targetPrefix.c_str(), describeBirthdaySavefiles(targetFiles, targetPrefix).c_str());
+	Common::U32StringArray alternateButtons;
+	// I18N: Use the profile belonging to the currently launched Blue's Birthday target.
+	alternateButtons.push_back(_("Use this profile"));
+	alternateButtons.push_back(_("Cancel"));
+	// I18N: Use the existing shared profile, detected based on the standard shared name.
+	int choice = GUI::MessageDialog(message, _("Use shared profile"), alternateButtons,
+		Graphics::kTextAlignLeft).runModal();
+
+	if (choice == GUI::kMessageOK) {
+		debug("Selected the existing shared Blue's Birthday profile");
+		return removeBirthdaySavefiles(saveFileMan, targetFiles);
+	}
+	if (choice == GUI::kMessageAlt) {
+		debug("Selected the target-specific Blue's Birthday profile");
+		return removeBirthdaySavefiles(saveFileMan, sharedFiles) &&
+			renameBirthdaySavefiles(saveFileMan, targetFiles, targetPrefix, sharedPrefix);
+	}
+
+	debug("Blue's Birthday profile selection canceled; preserving both save sets");
+	return false;
+}
+
+#endif // ENABLE_HE
+
 Common::Error ScummEngine::go() {
 #ifdef ENABLE_SCUMM_7_8
 	if (_game.id == GID_REBEL1) {
@@ -2739,6 +2871,12 @@ Common::Error ScummEngine::go() {
 		rebel->runGame();
 		return Common::kNoError;
 	}
+#endif
+
+#ifdef ENABLE_HE
+	if ((_game.id == GID_BIRTHDAYYELLOW || _game.id == GID_BIRTHDAYRED) &&
+			!resolveBirthdaySavefiles(_saveFileMan, _targetName, _game.gameid))
+		return Common::kUserCanceled;
 #endif
 
 	setTotalPlayTime();
