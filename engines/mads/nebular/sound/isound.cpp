@@ -385,11 +385,11 @@ void ISound::startSpeaker() {
 	_sweepInitialized = false;
 	_alternationToggle = false;
 	outputDivisor(_currentDivisor);
-	_pitRenderer.setGate(true);
+	_pitRenderer.setControl(true, true);
 }
 
 void ISound::stopSpeaker() {
-	_pitRenderer.setGate(false);
+	_pitRenderer.setControl(false, false);
 	_sweepInitialized = false;
 }
 
