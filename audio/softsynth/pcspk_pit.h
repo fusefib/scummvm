@@ -22,6 +22,7 @@
 #ifndef AUDIO_SOFTSYNTH_PCSPK_PIT_H
 #define AUDIO_SOFTSYNTH_PCSPK_PIT_H
 
+#include "common/array.h"
 #include "common/scummsys.h"
 
 namespace Audio {
@@ -44,15 +45,36 @@ public:
 	int16 generateSample(byte volume);
 
 private:
+	enum {
+		kFractionalPhases = 32,
+		kImpulseDurationUs = 3125
+	};
+
+	void initializeImpulse();
+	void addTransition(int level, double sampleFraction);
+	void advanceCounter();
+	bool isUndersampled(uint16 count) const;
+
 	uint32 _sampleRate;
 	uint32 _pitClock;
 	uint64 _phase;
+	uint64 _sampleCounter;
 	uint16 _count;
 	uint16 _pendingCount;
 	bool _hasPendingCount;
 	bool _counterLoaded;
 	bool _gate;
 	bool _high;
+	bool _undersampled;
+	bool _hasUndersampledReload;
+	uint64 _lastUndersampledReloadSample;
+
+	uint32 _impulseLength;
+	uint32 _impulseHead;
+	Common::Array<double> _impulseLut;
+	Common::Array<double> _impulseBuffer;
+	double _reconstructedLevel;
+	int _targetLevel;
 };
 
 } // End of namespace Audio
