@@ -135,6 +135,7 @@ ISound::ISound(Audio::Mixer *mixer, const Common::Path &filename, const OverlayL
 	_lastOutputDivisor(0),
 	_pendingDivisor(0),
 	_hasPendingDivisor(false),
+	_counterLoaded(false),
 	_speakerHigh(true),
 	_pitchStep(0),
 	_directDivisor(0),
@@ -384,11 +385,14 @@ void ISound::outputDivisor(uint16 divisor) {
 	// half-cycle. The new count is loaded at the next output transition.
 	// This is especially important while the noise service rewrites the
 	// divisor: restarting the waveform on every write creates false tones.
-	if (_speakerGate && _lastOutputDivisor) {
+	// Count zero is a valid loaded value representing 65536, so it cannot
+	// also serve as the "counter has not been loaded" sentinel.
+	if (_speakerGate && _counterLoaded) {
 		_pendingDivisor = divisor;
 		_hasPendingDivisor = true;
 	} else {
 		_lastOutputDivisor = divisor;
+		_counterLoaded = true;
 		_pendingDivisor = 0;
 		_hasPendingDivisor = false;
 		_oscillatorPhase = 0;
@@ -635,25 +639,39 @@ int16 ISound::generateSample() {
 	if (!_speakerGate)
 		return 0;
 
-	// A PIT divisor of zero represents 65536.
-	_oscillatorPhase += kPitClockHz;
+	// Integrate the PIT output level over this PCM sample. Returning only the
+	// level at the sample endpoint discards the position of every transition
+	// crossed inside the sample and turns small edge movements into whole-sample
+	// amplitude changes.
+	uint64 phaseToAdvance = kPitClockHz;
+	int64 signedArea = 0;
 
-	for (;;) {
+	while (phaseToAdvance) {
+		// A programmed PIT count of zero represents 65536.
 		const uint32 effectiveDivisor =
 			_lastOutputDivisor ? _lastOutputDivisor : 0x10000;
 		const uint32 halfCount = _speakerHigh ?
 			(effectiveDivisor + 1) / 2 : effectiveDivisor / 2;
+		// Intel specifies a minimum count of 2 for mode 3. Keep the existing
+		// compatibility behavior for the out-of-range count 1 instead of
+		// changing it as part of this rendering fix.
 		const uint64 halfPeriod = (uint64)MAX<uint32>(halfCount, 1) *
 			_outputRate;
-		if (_oscillatorPhase < halfPeriod)
-			break;
+		const uint64 toTransition = halfPeriod - _oscillatorPhase;
+		const uint64 advance = MIN<uint64>(phaseToAdvance, toTransition);
 
-		_oscillatorPhase -= halfPeriod;
-		_speakerHigh = !_speakerHigh;
-		if (_hasPendingDivisor) {
-			_lastOutputDivisor = _pendingDivisor;
-			_pendingDivisor = 0;
-			_hasPendingDivisor = false;
+		signedArea += _speakerHigh ? (int64)advance : -(int64)advance;
+		_oscillatorPhase += advance;
+		phaseToAdvance -= advance;
+
+		if (_oscillatorPhase == halfPeriod) {
+			_oscillatorPhase = 0;
+			_speakerHigh = !_speakerHigh;
+			if (_hasPendingDivisor) {
+				_lastOutputDivisor = _pendingDivisor;
+				_pendingDivisor = 0;
+				_hasPendingDivisor = false;
+			}
 		}
 	}
 
@@ -661,7 +679,7 @@ int16 ISound::generateSample() {
 		return 0;
 
 	const int amplitude = 127 * outputVolume();
-	return _speakerHigh ? amplitude : -amplitude;
+	return (int16)((int64)amplitude * signedArea / kPitClockHz);
 }
 
 int ISound::readBuffer(int16 *buffer, int numSamples) {

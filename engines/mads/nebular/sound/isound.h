@@ -95,6 +95,7 @@ protected:
 	uint16 _lastOutputDivisor;
 	uint16 _pendingDivisor;
 	bool _hasPendingDivisor;
+	bool _counterLoaded;
 	bool _speakerHigh;
 	uint16 _pitchStep;
 	uint16 _directDivisor;
