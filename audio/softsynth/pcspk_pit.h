@@ -37,7 +37,15 @@ namespace Audio {
  */
 class PCSpeakerPITRenderer {
 public:
+	enum OutputProfile {
+		kUnfiltered,
+		kPCSpeakerFiltered
+	};
+
 	PCSpeakerPITRenderer(uint32 sampleRate, uint32 pitClock = 1193182);
+	PCSpeakerPITRenderer(uint32 sampleRate, OutputProfile profile,
+			uint32 pitClock = 1193182);
+	~PCSpeakerPITRenderer();
 
 	void reset();
 	void writeMode3Count(uint16 count);
@@ -45,6 +53,8 @@ public:
 	int16 generateSample(byte volume);
 
 private:
+	class PCSpeakerOutputFilter;
+
 	enum {
 		kFractionalPhases = 32,
 		kImpulseDurationUs = 3125
@@ -75,6 +85,10 @@ private:
 	Common::Array<double> _impulseBuffer;
 	double _reconstructedLevel;
 	int _targetLevel;
+	PCSpeakerOutputFilter *_outputFilter;
+
+	PCSpeakerPITRenderer(const PCSpeakerPITRenderer &);
+	PCSpeakerPITRenderer &operator=(const PCSpeakerPITRenderer &);
 };
 
 } // End of namespace Audio

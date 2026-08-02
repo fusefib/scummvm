@@ -27,13 +27,120 @@
 
 namespace Audio {
 
+class PCSpeakerPITRenderer::PCSpeakerOutputFilter {
+private:
+	struct Section {
+		double b0;
+		double b1;
+		double b2;
+		double a1;
+		double a2;
+		double z1;
+		double z2;
+
+		Section() :
+			b0(0.0), b1(0.0), b2(0.0), a1(0.0), a2(0.0),
+			z1(0.0), z2(0.0) {
+		}
+
+		double process(double input) {
+			const double output = b0 * input + z1;
+			z1 = b1 * input - a1 * output + z2;
+			z2 = b2 * input - a2 * output;
+			return output;
+		}
+
+		void clear() {
+			z1 = 0.0;
+			z2 = 0.0;
+		}
+	};
+
+	Section _highPassFirst;
+	Section _highPassSecond;
+	Section _lowPassFirst;
+	Section _lowPassSecond;
+
+	static void configureFirstOrder(Section &section, double sampleRate,
+			double cutoff, bool highPass) {
+		const double k = tan(M_PI * cutoff / sampleRate);
+		const double normalization = 1.0 / (1.0 + k);
+
+		section.b0 = (highPass ? 1.0 : k) * normalization;
+		section.b1 = (highPass ? -1.0 : k) * normalization;
+		section.b2 = 0.0;
+		section.a1 = (k - 1.0) * normalization;
+		section.a2 = 0.0;
+	}
+
+	static void configureSecondOrder(Section &section, double sampleRate,
+			double cutoff, bool highPass) {
+		// The complex pole pair of a third-order Butterworth filter has Q=1.
+		const double k = tan(M_PI * cutoff / sampleRate);
+		const double normalization = 1.0 / (1.0 + k + k * k);
+		const double b0 = (highPass ? 1.0 : k * k) * normalization;
+
+		section.b0 = b0;
+		section.b1 = (highPass ? -2.0 : 2.0) * b0;
+		section.b2 = b0;
+		section.a1 = 2.0 * (k * k - 1.0) * normalization;
+		section.a2 = (1.0 - k + k * k) * normalization;
+	}
+
+public:
+	PCSpeakerOutputFilter(uint32 sampleRate) {
+		const double highPassCutoff = MIN<double>(120.0, sampleRate * 0.1);
+		const double lowPassCutoff = MIN<double>(4300.0, sampleRate * 0.45);
+		configureFirstOrder(_highPassFirst, sampleRate,
+			highPassCutoff, true);
+		configureSecondOrder(_highPassSecond, sampleRate,
+			highPassCutoff, true);
+		configureFirstOrder(_lowPassFirst, sampleRate,
+			lowPassCutoff, false);
+		configureSecondOrder(_lowPassSecond, sampleRate,
+			lowPassCutoff, false);
+		reset(-1.0);
+	}
+
+	void reset(double inputLevel) {
+		_highPassFirst.clear();
+		_highPassSecond.clear();
+		_lowPassFirst.clear();
+		_lowPassSecond.clear();
+
+		// Initialize the first high-pass section at the steady state of the
+		// disabled speaker's negative rail. This avoids a synthetic startup
+		// edge while still clearing all dynamic filter history.
+		_highPassFirst.z1 = -_highPassFirst.b0 * inputLevel;
+	}
+
+	double process(double input) {
+		double output = _highPassFirst.process(input);
+		output = _highPassSecond.process(output);
+		output = _lowPassFirst.process(output);
+		return _lowPassSecond.process(output);
+	}
+};
+
 PCSpeakerPITRenderer::PCSpeakerPITRenderer(uint32 sampleRate, uint32 pitClock) :
+	PCSpeakerPITRenderer(sampleRate, kUnfiltered, pitClock) {
+}
+
+PCSpeakerPITRenderer::PCSpeakerPITRenderer(uint32 sampleRate,
+		OutputProfile profile, uint32 pitClock) :
 	_sampleRate(sampleRate),
-	_pitClock(pitClock) {
+	_pitClock(pitClock),
+	_outputFilter(nullptr) {
 	assert(_sampleRate);
 	assert(_pitClock);
+	if (profile == kPCSpeakerFiltered)
+		_outputFilter = new PCSpeakerOutputFilter(sampleRate);
 	initializeImpulse();
 	reset();
+}
+
+PCSpeakerPITRenderer::~PCSpeakerPITRenderer() {
+	delete _outputFilter;
 }
 
 void PCSpeakerPITRenderer::initializeImpulse() {
@@ -102,6 +209,8 @@ void PCSpeakerPITRenderer::reset() {
 		_impulseBuffer[i] = 0.0;
 	_reconstructedLevel = -1.0;
 	_targetLevel = -1;
+	if (_outputFilter)
+		_outputFilter->reset(_reconstructedLevel);
 }
 
 bool PCSpeakerPITRenderer::isUndersampled(uint16 count) const {
@@ -256,7 +365,9 @@ int16 PCSpeakerPITRenderer::generateSample(byte volume) {
 
 	// Volume is deliberately applied after reconstruction: a mute or volume
 	// change must not alter PIT, impulse-tail, or later filter state.
-	const double scaled = _reconstructedLevel * 127.0 * volume;
+	const double output = _outputFilter ?
+		_outputFilter->process(_reconstructedLevel) : _reconstructedLevel;
+	const double scaled = output * 127.0 * volume;
 	const int32 rounded = (int32)(scaled < 0.0 ?
 		scaled - 0.5 : scaled + 0.5);
 	return (int16)CLIP<int32>(rounded, -32768, 32767);
