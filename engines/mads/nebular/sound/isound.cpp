@@ -103,14 +103,13 @@ ISound::ISound(Audio::Mixer *mixer, const Common::Path &filename) :
 
 ISound::ISound(Audio::Mixer *mixer, const Common::Path &filename, const OverlayLayout &layout) :
 		SoundDriver(mixer, filename, (int)layout.dataOffset, (int)layout.initializedDataSize),
-	_speakerGate(false),
 	_noiseEnabled(false),
 	_updatesEnabled(false),
 	_masterVolume(255),
 	_outputRate(mixer->getOutputRate()),
 	_sequenceAccumulator(0),
 	_noiseAccumulator(0),
-	_oscillatorPhase(0),
+	_pitRenderer(_outputRate, kPitClockHz),
 	_frameCounter(0),
 	_randomSeed(0),
 	_commandParam(0),
@@ -132,11 +131,6 @@ ISound::ISound(Audio::Mixer *mixer, const Common::Path &filename, const OverlayL
 	_fineOffset(0),
 	_noiseMask(0),
 	_currentDivisor(0),
-	_lastOutputDivisor(0),
-	_pendingDivisor(0),
-	_hasPendingDivisor(false),
-	_counterLoaded(false),
-	_speakerHigh(true),
 	_pitchStep(0),
 	_directDivisor(0),
 	_alternationReload(0),
@@ -197,8 +191,6 @@ void ISound::resetDriver() {
 	_outerLoopCount = 0;
 	_noiseMask = 0;
 	_currentDivisor = 0;
-	_pendingDivisor = 0;
-	_hasPendingDivisor = false;
 	_pitchStep = 0;
 	_gateOffset = 0;
 	_fineOffset = 0;
@@ -381,23 +373,7 @@ byte ISound::outputVolume() const {
 }
 
 void ISound::outputDivisor(uint16 divisor) {
-	// Reprogramming an 8254 counter in mode 3 does not restart the current
-	// half-cycle. The new count is loaded at the next output transition.
-	// This is especially important while the noise service rewrites the
-	// divisor: restarting the waveform on every write creates false tones.
-	// Count zero is a valid loaded value representing 65536, so it cannot
-	// also serve as the "counter has not been loaded" sentinel.
-	if (_speakerGate && _counterLoaded) {
-		_pendingDivisor = divisor;
-		_hasPendingDivisor = true;
-	} else {
-		_lastOutputDivisor = divisor;
-		_counterLoaded = true;
-		_pendingDivisor = 0;
-		_hasPendingDivisor = false;
-		_oscillatorPhase = 0;
-		_speakerHigh = true;
-	}
+	_pitRenderer.writeMode3Count(divisor);
 }
 
 void ISound::startSpeaker() {
@@ -408,15 +384,12 @@ void ISound::startSpeaker() {
 	_sweepInitialized = false;
 	_alternationToggle = false;
 	outputDivisor(_currentDivisor);
-	_speakerGate = true;
+	_pitRenderer.setGate(true);
 }
 
 void ISound::stopSpeaker() {
-	_speakerGate = false;
+	_pitRenderer.setGate(false);
 	_sweepInitialized = false;
-	_hasPendingDivisor = false;
-	_oscillatorPhase = 0;
-	_speakerHigh = true;
 }
 
 void ISound::processOrdinaryEvent() {
@@ -636,50 +609,7 @@ void ISound::setVolume(int volume) {
 }
 
 int16 ISound::generateSample() {
-	if (!_speakerGate)
-		return 0;
-
-	// Integrate the PIT output level over this PCM sample. Returning only the
-	// level at the sample endpoint discards the position of every transition
-	// crossed inside the sample and turns small edge movements into whole-sample
-	// amplitude changes.
-	uint64 phaseToAdvance = kPitClockHz;
-	int64 signedArea = 0;
-
-	while (phaseToAdvance) {
-		// A programmed PIT count of zero represents 65536.
-		const uint32 effectiveDivisor =
-			_lastOutputDivisor ? _lastOutputDivisor : 0x10000;
-		const uint32 halfCount = _speakerHigh ?
-			(effectiveDivisor + 1) / 2 : effectiveDivisor / 2;
-		// Intel specifies a minimum count of 2 for mode 3. Keep the existing
-		// compatibility behavior for the out-of-range count 1 instead of
-		// changing it as part of this rendering fix.
-		const uint64 halfPeriod = (uint64)MAX<uint32>(halfCount, 1) *
-			_outputRate;
-		const uint64 toTransition = halfPeriod - _oscillatorPhase;
-		const uint64 advance = MIN<uint64>(phaseToAdvance, toTransition);
-
-		signedArea += _speakerHigh ? (int64)advance : -(int64)advance;
-		_oscillatorPhase += advance;
-		phaseToAdvance -= advance;
-
-		if (_oscillatorPhase == halfPeriod) {
-			_oscillatorPhase = 0;
-			_speakerHigh = !_speakerHigh;
-			if (_hasPendingDivisor) {
-				_lastOutputDivisor = _pendingDivisor;
-				_pendingDivisor = 0;
-				_hasPendingDivisor = false;
-			}
-		}
-	}
-
-	if (!_masterVolume)
-		return 0;
-
-	const int amplitude = 127 * outputVolume();
-	return (int16)((int64)amplitude * signedArea / kPitClockHz);
+	return _pitRenderer.generateSample(outputVolume());
 }
 
 int ISound::readBuffer(int16 *buffer, int numSamples) {
