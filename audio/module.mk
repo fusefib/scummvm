@@ -70,6 +70,7 @@ MODULE_OBJS := \
 	softsynth/fluidsynth.o \
 	softsynth/eas.o \
 	softsynth/pcspk.o \
+	softsynth/pcspk_pit.o \
 	softsynth/ay8912.o
 
 ifdef USE_HMI_AUDIO
