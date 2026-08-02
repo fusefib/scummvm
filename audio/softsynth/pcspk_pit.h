@@ -59,6 +59,7 @@ private:
 		kFractionalPhases = 32,
 		kImpulseDurationUs = 3125
 	};
+	static const double kAccumulatorDecay;
 
 	void initializeImpulse();
 	void addTransition(int level, double sampleFraction);

@@ -27,6 +27,8 @@
 
 namespace Audio {
 
+const double PCSpeakerPITRenderer::kAccumulatorDecay = 0.999;
+
 class PCSpeakerPITRenderer::PCSpeakerOutputFilter {
 private:
 	struct Section {
@@ -99,19 +101,14 @@ public:
 			lowPassCutoff, false);
 		configureSecondOrder(_lowPassSecond, sampleRate,
 			lowPassCutoff, false);
-		reset(-1.0);
+		reset();
 	}
 
-	void reset(double inputLevel) {
+	void reset() {
 		_highPassFirst.clear();
 		_highPassSecond.clear();
 		_lowPassFirst.clear();
 		_lowPassSecond.clear();
-
-		// Initialize the first high-pass section at the steady state of the
-		// disabled speaker's negative rail. This avoids a synthetic startup
-		// edge while still clearing all dynamic filter history.
-		_highPassFirst.z1 = -_highPassFirst.b0 * inputLevel;
 	}
 
 	double process(double input) {
@@ -208,10 +205,10 @@ void PCSpeakerPITRenderer::reset() {
 	_impulseHead = 0;
 	for (uint i = 0; i < _impulseBuffer.size(); ++i)
 		_impulseBuffer[i] = 0.0;
-	_reconstructedLevel = -1.0;
+	_reconstructedLevel = 0.0;
 	_targetLevel = -1;
 	if (_outputFilter)
-		_outputFilter->reset(_reconstructedLevel);
+		_outputFilter->reset();
 }
 
 bool PCSpeakerPITRenderer::isUndersampled(uint16 count) const {
@@ -381,6 +378,11 @@ int16 PCSpeakerPITRenderer::generateSample(byte volume) {
 	// change must not alter PIT, impulse-tail, or later filter state.
 	const double output = _outputFilter ?
 		_outputFilter->process(_reconstructedLevel) : _reconstructedLevel;
+	// A lossless impulse accumulator would retain a permanent rail after the
+	// last transition. Apply the same leaky integration used by the reference
+	// renderer here, so the unfiltered profile bypasses only the optional
+	// speaker-output frequency shaping.
+	_reconstructedLevel *= kAccumulatorDecay;
 	const double scaled = output * 127.0 * volume;
 	const int32 rounded = (int32)(scaled < 0.0 ?
 		scaled - 0.5 : scaled + 0.5);
