@@ -303,10 +303,6 @@ void PCSpeakerPITRenderer::writeMode3Count(uint16 count) {
 	}
 }
 
-void PCSpeakerPITRenderer::setGate(bool enabled) {
-	setControl(enabled, enabled);
-}
-
 void PCSpeakerPITRenderer::setControl(bool timerGate, bool speakerEnabled) {
 	const bool timerGateChanged = timerGate != _timerGate;
 	_timerGate = timerGate;

@@ -49,7 +49,6 @@ public:
 
 	void reset();
 	void writeMode3Count(uint16 count);
-	void setGate(bool enabled);
 	void setControl(bool timerGate, bool speakerEnabled);
 	int16 generateSample(byte volume);
 
