@@ -199,7 +199,8 @@ void PCSpeakerPITRenderer::reset() {
 	_pendingCount = 0;
 	_hasPendingCount = false;
 	_counterLoaded = false;
-	_gate = false;
+	_timerGate = false;
+	_speakerEnabled = false;
 	_high = true;
 	_undersampled = false;
 	_hasUndersampledReload = false;
@@ -219,6 +220,18 @@ bool PCSpeakerPITRenderer::isUndersampled(uint16 count) const {
 	// Mode 3 formally requires count >= 2. Treat count 1 as undersampled
 	// compatibility input rather than inventing specified 8254 behavior.
 	return count && count < minimumCount;
+}
+
+int PCSpeakerPITRenderer::outputLevel() const {
+	if (!_speakerEnabled)
+		return -1;
+
+	// Disabling the timer gate forces mode-3 OUT high. Port 0x61 bit 1
+	// controls whether that output reaches the physical speaker separately.
+	if (!_timerGate)
+		return 1;
+
+	return _high ? 1 : -1;
 }
 
 void PCSpeakerPITRenderer::addTransition(int level, double sampleFraction) {
@@ -253,21 +266,20 @@ void PCSpeakerPITRenderer::writeMode3Count(uint16 count) {
 			_lastUndersampledReloadSample;
 		const bool rapidReload = _hasUndersampledReload &&
 			sampleGap * 1000 <= _sampleRate;
-		if (_gate && rapidReload) {
-			const int level = -_targetLevel;
-			_high = level > 0;
-			addTransition(level, 0.0);
-		}
+		if (!_undersampled)
+			_high = false;
+		else if (_timerGate && _speakerEnabled && rapidReload)
+			_high = !_high;
 
 		_count = count;
 		_pendingCount = 0;
 		_hasPendingCount = false;
 		_counterLoaded = true;
 		_phase = 0;
-		_high = true;
 		_undersampled = true;
 		_hasUndersampledReload = true;
 		_lastUndersampledReloadSample = _sampleCounter;
+		addTransition(outputLevel(), 0.0);
 		return;
 	}
 
@@ -277,7 +289,7 @@ void PCSpeakerPITRenderer::writeMode3Count(uint16 count) {
 
 	// A mode-3 count written while the counter is running is transferred at
 	// the next half-cycle rather than restarting the current waveform.
-	if (_gate && _counterLoaded && !wasUndersampled) {
+	if (_timerGate && _counterLoaded && !wasUndersampled) {
 		_pendingCount = count;
 		_hasPendingCount = true;
 	} else {
@@ -287,37 +299,43 @@ void PCSpeakerPITRenderer::writeMode3Count(uint16 count) {
 		_counterLoaded = true;
 		_phase = 0;
 		_high = true;
-		if (_gate)
-			addTransition(1, 0.0);
+		addTransition(outputLevel(), 0.0);
 	}
 }
 
 void PCSpeakerPITRenderer::setGate(bool enabled) {
-	const bool changed = enabled != _gate;
-	_gate = enabled;
-	if (enabled) {
-		if (changed) {
-			_phase = 0;
-			_high = true;
-			if (!_undersampled)
-				addTransition(1, 0.0);
+	setControl(enabled, enabled);
+}
+
+void PCSpeakerPITRenderer::setControl(bool timerGate, bool speakerEnabled) {
+	const bool timerGateChanged = timerGate != _timerGate;
+	_timerGate = timerGate;
+	_speakerEnabled = speakerEnabled;
+
+	if (timerGateChanged) {
+		if (!timerGate && _hasPendingCount) {
+			// A gate stop cancels the current half-cycle. Retain the newest
+			// programmed count so the next start does not revert to an older
+			// divisor which happened to be active before the stop.
+			_count = _pendingCount;
+			_pendingCount = 0;
+			_hasPendingCount = false;
 		}
-		return;
+
+		_phase = 0;
+		// Counts which cannot be represented at the mixer rate remain on the
+		// suppressed compatibility level when restarted. Gate-low OUT is
+		// nevertheless always high, as represented by outputLevel().
+		_high = !timerGate || !_undersampled;
 	}
 
-	// With the speaker disabled the physical output is held at its negative
-	// rail. Do not clear the impulse tail: it contains the audible edge and
-	// must be allowed to settle naturally.
-	if (changed)
-		addTransition(-1, 0.0);
-	_pendingCount = 0;
-	_hasPendingCount = false;
-	_phase = 0;
-	_high = true;
+	// Evaluate the two port-0x61 controls together. This prevents a combined
+	// update from exposing an intermediate speaker level.
+	addTransition(outputLevel(), 0.0);
 }
 
 void PCSpeakerPITRenderer::advanceCounter() {
-	if (!_gate || !_counterLoaded || _undersampled)
+	if (!_timerGate || !_counterLoaded || _undersampled)
 		return;
 
 	// Phase is expressed in PIT-clock/output-rate products, avoiding timer
@@ -349,7 +367,7 @@ void PCSpeakerPITRenderer::advanceCounter() {
 				_pendingCount = 0;
 				_hasPendingCount = false;
 			}
-			addTransition(_high ? 1 : -1,
+			addTransition(outputLevel(),
 				(double)elapsed / _pitClock);
 		}
 	}

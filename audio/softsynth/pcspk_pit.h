@@ -31,9 +31,9 @@ namespace Audio {
  * Renders the output of an 8254-compatible PIT channel in mode 3.
  *
  * Unlike PCSpeakerStream, this class accepts the raw counter writes and gate
- * changes made by a DOS sound driver. Counter reloads are deferred until the
- * next half-cycle, matching the behavior needed by programs which repeatedly
- * reprogram channel 2.
+ * control changes made by a DOS sound driver. Counter reloads are deferred
+ * until the next half-cycle, matching the behavior needed by programs which
+ * repeatedly reprogram channel 2.
  */
 class PCSpeakerPITRenderer {
 public:
@@ -50,6 +50,7 @@ public:
 	void reset();
 	void writeMode3Count(uint16 count);
 	void setGate(bool enabled);
+	void setControl(bool timerGate, bool speakerEnabled);
 	int16 generateSample(byte volume);
 
 private:
@@ -64,6 +65,7 @@ private:
 	void addTransition(int level, double sampleFraction);
 	void advanceCounter();
 	bool isUndersampled(uint16 count) const;
+	int outputLevel() const;
 
 	uint32 _sampleRate;
 	uint32 _pitClock;
@@ -73,7 +75,8 @@ private:
 	uint16 _pendingCount;
 	bool _hasPendingCount;
 	bool _counterLoaded;
-	bool _gate;
+	bool _timerGate;
+	bool _speakerEnabled;
 	bool _high;
 	bool _undersampled;
 	bool _hasUndersampledReload;
