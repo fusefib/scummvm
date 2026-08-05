@@ -41,8 +41,12 @@ namespace Audio {
 class PCSpeakerPITRenderer : public EmulatedChip {
 public:
 	enum OutputProfile {
+		/** DOSBox-compatible impulse output without its optional filters. */
 		kUnfiltered,
-		kPCSpeakerFiltered
+		/** DOSBox-compatible impulse output with PC speaker filters. */
+		kPCSpeakerFiltered,
+		/** Lossless reconstruction for analysis; retains a permanent DC rail. */
+		kRawReconstruction
 	};
 
 	PCSpeakerPITRenderer(uint32 sampleRate, uint32 pitClock = 1193182);
@@ -63,7 +67,7 @@ protected:
 	void generateSamples(int16 *buffer, int numSamples) override;
 
 private:
-	class PCSpeakerOutputFilter;
+	class PCSpeakerOutputStage;
 
 	enum {
 		kFractionalPhases = 32,
@@ -84,7 +88,6 @@ private:
 	uint32 _sampleRate;
 	uint32 _pitClock;
 	byte _volume;
-	int32 _accumulatorDecay;
 	uint64 _phase;
 	uint64 _sampleCounter;
 	uint16 _count;
@@ -104,7 +107,7 @@ private:
 	Common::Array<int32> _impulseBuffer;
 	int32 _reconstructedLevel;
 	int _targetLevel;
-	PCSpeakerOutputFilter *_outputFilter;
+	PCSpeakerOutputStage *_outputStage;
 
 	PCSpeakerPITRenderer(const PCSpeakerPITRenderer &);
 	PCSpeakerPITRenderer &operator=(const PCSpeakerPITRenderer &);

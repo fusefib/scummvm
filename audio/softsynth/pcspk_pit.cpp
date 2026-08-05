@@ -54,7 +54,7 @@ int32 multiplyFixed(int32 value, int32 coefficient, uint fracBits) {
 
 } // namespace
 
-class PCSpeakerPITRenderer::PCSpeakerOutputFilter {
+class PCSpeakerPITRenderer::PCSpeakerOutputStage {
 private:
 	struct Section {
 		int32 b0;
@@ -91,6 +91,9 @@ private:
 	Section _highPassSecond;
 	Section _lowPassFirst;
 	Section _lowPassSecond;
+	int32 _accumulatorDecay;
+	bool _decayEnabled;
+	bool _filterEnabled;
 
 	static void configureFirstOrder(Section &section, double sampleRate,
 			double cutoff, bool highPass) {
@@ -127,7 +130,17 @@ private:
 	}
 
 public:
-	PCSpeakerOutputFilter(uint32 sampleRate) {
+	PCSpeakerOutputStage(uint32 sampleRate, OutputProfile profile) :
+		_accumulatorDecay(0),
+		_decayEnabled(profile != kRawReconstruction),
+		_filterEnabled(profile == kPCSpeakerFiltered) {
+		// The raw profile intentionally omits this coupling approximation. The
+		// two DOSBox-compatible profiles preserve its fixed-48-kHz time constant
+		// when ScummVM uses another mixer rate.
+		_accumulatorDecay = fixedFromDouble(
+			pow(0.999, (double)kReferenceSampleRate / sampleRate),
+			kCoefficientFracBits);
+
 		// Trigonometric coefficient construction happens once. Coefficients are
 		// immediately quantized to Q2.30; the real-time filter uses integers.
 		const double highPassCutoff = MIN<double>(120.0, sampleRate * 0.1);
@@ -151,10 +164,18 @@ public:
 	}
 
 	int32 process(int32 input) {
+		if (!_filterEnabled)
+			return input;
+
 		int32 output = _highPassFirst.process(input);
 		output = _highPassSecond.process(output);
 		output = _lowPassFirst.process(output);
 		return _lowPassSecond.process(output);
+	}
+
+	int32 decay(int32 input) const {
+		return _decayEnabled ? multiplyFixed(input, _accumulatorDecay,
+			kCoefficientFracBits) : input;
 	}
 };
 
@@ -167,17 +188,10 @@ PCSpeakerPITRenderer::PCSpeakerPITRenderer(uint32 sampleRate,
 	_sampleRate(sampleRate),
 	_pitClock(pitClock),
 	_volume(0),
-	_accumulatorDecay(0),
-	_outputFilter(nullptr) {
+	_outputStage(nullptr) {
 	assert(_sampleRate);
 	assert(_pitClock);
-	// DOSBox Staging applies 0.999 once per sample at its fixed 48 kHz PC
-	// speaker rate. Preserve that time constant at arbitrary mixer rates.
-	_accumulatorDecay = fixedFromDouble(
-		pow(0.999, (double)kReferenceSampleRate / _sampleRate),
-		kCoefficientFracBits);
-	if (profile == kPCSpeakerFiltered)
-		_outputFilter = new PCSpeakerOutputFilter(sampleRate);
+	_outputStage = new PCSpeakerOutputStage(sampleRate, profile);
 	initializeImpulse();
 	reset();
 }
@@ -186,7 +200,7 @@ PCSpeakerPITRenderer::~PCSpeakerPITRenderer() {
 	// EmulatedChip may still be referenced by the mixer thread. Stop it before
 	// destroying the synthesis and filter state owned by this subclass.
 	stop();
-	delete _outputFilter;
+	delete _outputStage;
 }
 
 bool PCSpeakerPITRenderer::init() {
@@ -285,8 +299,7 @@ void PCSpeakerPITRenderer::reset() {
 		_impulseBuffer[i] = 0;
 	_reconstructedLevel = 0;
 	_targetLevel = -1;
-	if (_outputFilter)
-		_outputFilter->reset();
+	_outputStage->reset();
 }
 
 bool PCSpeakerPITRenderer::isUndersampled(uint16 count) const {
@@ -465,14 +478,11 @@ int16 PCSpeakerPITRenderer::generateSampleUnlocked(byte volume) {
 
 	// Volume is deliberately applied after reconstruction: a mute or volume
 	// change must not alter PIT, impulse-tail, or later filter state.
-	const int32 output = _outputFilter ?
-		_outputFilter->process(_reconstructedLevel) : _reconstructedLevel;
+	const int32 output = _outputStage->process(_reconstructedLevel);
 	// A lossless impulse accumulator would retain a permanent rail after the
-	// last transition. Apply the same leaky integration used by the reference
-	// renderer here, so the unfiltered profile bypasses only the optional
-	// speaker-output frequency shaping.
-	_reconstructedLevel = multiplyFixed(_reconstructedLevel,
-		_accumulatorDecay, kCoefficientFracBits);
+	// last transition. The DOSBox-compatible output profiles apply its leaky
+	// integration here; only the analysis profile deliberately bypasses it.
+	_reconstructedLevel = _outputStage->decay(_reconstructedLevel);
 	const int64 scaled = (int64)output * 127 * volume;
 	const int64 half = (int64)1 << (kSampleFracBits - 1);
 	const int32 rounded = saturateInt32(scaled < 0 ?
