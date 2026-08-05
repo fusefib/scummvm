@@ -171,20 +171,12 @@ int EmulatedChip::readBufferRational(int16 *buffer, int numSamples) {
 			_callbackPhase -= _callbackThreshold;
 			if (_callback && _callback->isValid())
 				(*_callback)();
-		} while (_useRationalCallbacks &&
-			_callbackPhase >= _callbackThreshold);
+		} while (_callbackPhase >= _callbackThreshold);
+		assert(_useRationalCallbacks);
 
 		generateSamples(buffer, stereoFactor);
 		buffer += stereoFactor;
 		--len;
-
-		// Changing back to the integer scheduler from the callback is
-		// supported, although current users keep one scheduling mode for
-		// their entire lifetime.
-		if (!_useRationalCallbacks && len) {
-			readBuffer(buffer, len * stereoFactor);
-			return numSamples;
-		}
 	}
 
 	return numSamples;
@@ -212,6 +204,13 @@ void EmulatedChip::stopCallbacks() {
 }
 
 void EmulatedChip::setCallbackFrequency(int timerFrequency) {
+	// The two schedulers carry phase in different representations. Existing
+	// users may retune within one mode, but changing modes mid-stream has no
+	// evidenced hardware contract and would introduce an ambiguous extra tick.
+	assert(!_isActive || !_useRationalCallbacks);
+	if (_isActive && _useRationalCallbacks)
+		return;
+
 	_baseFreq = timerFrequency;
 	assert(_baseFreq != 0);
 	_useRationalCallbacks = false;
@@ -234,6 +233,10 @@ void EmulatedChip::start(TimerCallback *callback,
 
 void EmulatedChip::setCallbackFrequency(uint32 frequencyNumerator,
 		uint32 frequencyDenominator) {
+	assert(!_isActive || _useRationalCallbacks);
+	if (_isActive && !_useRationalCallbacks)
+		return;
+
 	assert(frequencyNumerator != 0);
 	assert(frequencyDenominator != 0);
 

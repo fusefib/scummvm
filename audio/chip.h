@@ -119,12 +119,14 @@ public:
 	using Chip::start;
 
 	/**
-	 * Start the sound chip with callbacks at an exact rational frequency.
+	 * Start callbacks at a drift-free rational average frequency.
 	 *
 	 * This overload is intended for emulated hardware whose callback clock is
 	 * derived from integer clock and divider values. Existing integer-frequency
-	 * users retain the legacy 16.16 scheduler used by Chip::start(). The first
-	 * rational callback occurs after one complete interval.
+	 * users retain the legacy 16.16 scheduler used by Chip::start(). Individual
+	 * callbacks are quantized to mixer-sample boundaries, and the first rational
+	 * callback occurs after one complete interval. Switching scheduling modes
+	 * while the chip is active is unsupported.
 	 */
 	void start(TimerCallback *callback, uint32 frequencyNumerator,
 			uint32 frequencyDenominator);
