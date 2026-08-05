@@ -93,7 +93,7 @@ void RealChip::onTimer() {
 			(*_callback)();
 }
 
-EmulatedChip::EmulatedChip() :
+EmulatedChip::EmulatedChip(Mixer::SoundType soundType) :
 	_nextTick(0),
 	_samplesPerTick(0),
 	_baseFreq(0),
@@ -102,6 +102,7 @@ EmulatedChip::EmulatedChip() :
 	_callbackThreshold(0),
 	_callbackPhase(0),
 	_isActive(false),
+	_soundType(soundType),
 	_handle(new Audio::SoundHandle()) { }
 
 EmulatedChip::~EmulatedChip() {
@@ -199,7 +200,7 @@ void EmulatedChip::startCallbacks(int timerFrequency) {
 }
 
 void EmulatedChip::startMixerStream() {
-	g_system->getMixer()->playStream(Audio::Mixer::kPlainSoundType, _handle, this, -1, Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
+	g_system->getMixer()->playStream(_soundType, _handle, this, -1, Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
 	_isActive = true;
 }
 

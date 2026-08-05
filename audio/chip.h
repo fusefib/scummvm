@@ -26,9 +26,9 @@
 #include "common/ptr.h"
 
 #include "audio/audiostream.h"
+#include "audio/mixer.h"
 
 namespace Audio {
-class SoundHandle;
 
 class Chip {
 public:
@@ -114,7 +114,7 @@ protected:
 	static const int FIXP_SHIFT = 16;
 
 public:
-	EmulatedChip();
+	explicit EmulatedChip(Mixer::SoundType soundType = Mixer::kPlainSoundType);
 	virtual ~EmulatedChip();
 	using Chip::start;
 
@@ -169,6 +169,7 @@ private:
 	uint64 _callbackThreshold;
 	uint64 _callbackPhase;
 	bool _isActive;
+	Mixer::SoundType _soundType;
 
 	Audio::SoundHandle *_handle;
 };

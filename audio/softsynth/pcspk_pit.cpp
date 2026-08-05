@@ -185,6 +185,7 @@ PCSpeakerPITRenderer::PCSpeakerPITRenderer(uint32 sampleRate, uint32 pitClock) :
 
 PCSpeakerPITRenderer::PCSpeakerPITRenderer(uint32 sampleRate,
 		OutputProfile profile, uint32 pitClock) :
+	EmulatedChip(Mixer::kSFXSoundType),
 	_sampleRate(sampleRate),
 	_pitClock(pitClock),
 	_volume(0),
