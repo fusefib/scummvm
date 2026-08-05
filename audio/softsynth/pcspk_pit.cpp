@@ -127,6 +127,7 @@ PCSpeakerPITRenderer::PCSpeakerPITRenderer(uint32 sampleRate,
 		OutputProfile profile, uint32 pitClock) :
 	_sampleRate(sampleRate),
 	_pitClock(pitClock),
+	_volume(0),
 	_outputFilter(nullptr) {
 	assert(_sampleRate);
 	assert(_pitClock);
@@ -137,7 +138,14 @@ PCSpeakerPITRenderer::PCSpeakerPITRenderer(uint32 sampleRate,
 }
 
 PCSpeakerPITRenderer::~PCSpeakerPITRenderer() {
+	// EmulatedChip may still be referenced by the mixer thread. Stop it before
+	// destroying the synthesis and filter state owned by this subclass.
+	stop();
 	delete _outputFilter;
+}
+
+bool PCSpeakerPITRenderer::init() {
+	return true;
 }
 
 void PCSpeakerPITRenderer::initializeImpulse() {
@@ -190,6 +198,8 @@ void PCSpeakerPITRenderer::initializeImpulse() {
 }
 
 void PCSpeakerPITRenderer::reset() {
+	Common::StackLock lock(_mutex);
+
 	_phase = 0;
 	_sampleCounter = 0;
 	_count = 0;
@@ -255,6 +265,8 @@ void PCSpeakerPITRenderer::addTransition(int level, double sampleFraction) {
 }
 
 void PCSpeakerPITRenderer::writeMode3Count(uint16 count) {
+	Common::StackLock lock(_mutex);
+
 	if (isUndersampled(count)) {
 		// Counts above Nyquist cannot be represented as ordinary oscillation.
 		// Rapid reloads are nevertheless used as a noise source, so preserve
@@ -301,6 +313,8 @@ void PCSpeakerPITRenderer::writeMode3Count(uint16 count) {
 }
 
 void PCSpeakerPITRenderer::setControl(bool timerGate, bool speakerEnabled) {
+	Common::StackLock lock(_mutex);
+
 	const bool timerGateChanged = timerGate != _timerGate;
 	_timerGate = timerGate;
 	_speakerEnabled = speakerEnabled;
@@ -366,7 +380,12 @@ void PCSpeakerPITRenderer::advanceCounter() {
 	}
 }
 
-int16 PCSpeakerPITRenderer::generateSample(byte volume) {
+void PCSpeakerPITRenderer::setVolume(byte volume) {
+	Common::StackLock lock(_mutex);
+	_volume = volume;
+}
+
+int16 PCSpeakerPITRenderer::generateSampleUnlocked(byte volume) {
 	advanceCounter();
 
 	_reconstructedLevel += _impulseBuffer[_impulseHead];
@@ -387,6 +406,17 @@ int16 PCSpeakerPITRenderer::generateSample(byte volume) {
 	const int32 rounded = (int32)(scaled < 0.0 ?
 		scaled - 0.5 : scaled + 0.5);
 	return (int16)CLIP<int32>(rounded, -32768, 32767);
+}
+
+int16 PCSpeakerPITRenderer::generateSample(byte volume) {
+	Common::StackLock lock(_mutex);
+	return generateSampleUnlocked(volume);
+}
+
+void PCSpeakerPITRenderer::generateSamples(int16 *buffer, int numSamples) {
+	Common::StackLock lock(_mutex);
+	for (int i = 0; i < numSamples; ++i)
+		buffer[i] = generateSampleUnlocked(_volume);
 }
 
 } // End of namespace Audio

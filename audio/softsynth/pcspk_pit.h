@@ -22,7 +22,10 @@
 #ifndef AUDIO_SOFTSYNTH_PCSPK_PIT_H
 #define AUDIO_SOFTSYNTH_PCSPK_PIT_H
 
+#include "audio/chip.h"
+
 #include "common/array.h"
+#include "common/mutex.h"
 #include "common/scummsys.h"
 
 namespace Audio {
@@ -35,7 +38,7 @@ namespace Audio {
  * until the next half-cycle, matching the behavior needed by programs which
  * repeatedly reprogram channel 2.
  */
-class PCSpeakerPITRenderer {
+class PCSpeakerPITRenderer : public EmulatedChip {
 public:
 	enum OutputProfile {
 		kUnfiltered,
@@ -45,12 +48,19 @@ public:
 	PCSpeakerPITRenderer(uint32 sampleRate, uint32 pitClock = 1193182);
 	PCSpeakerPITRenderer(uint32 sampleRate, OutputProfile profile,
 			uint32 pitClock = 1193182);
-	~PCSpeakerPITRenderer();
+	~PCSpeakerPITRenderer() override;
 
+	bool init();
 	void reset();
 	void writeMode3Count(uint16 count);
 	void setControl(bool timerGate, bool speakerEnabled);
+	void setVolume(byte volume);
 	int16 generateSample(byte volume);
+	bool isStereo() const override { return false; }
+	int getRate() const override { return _sampleRate; }
+
+protected:
+	void generateSamples(int16 *buffer, int numSamples) override;
 
 private:
 	class PCSpeakerOutputFilter;
@@ -64,11 +74,14 @@ private:
 	void initializeImpulse();
 	void addTransition(int level, double sampleFraction);
 	void advanceCounter();
+	int16 generateSampleUnlocked(byte volume);
 	bool isUndersampled(uint16 count) const;
 	int outputLevel() const;
 
+	Common::Mutex _mutex;
 	uint32 _sampleRate;
 	uint32 _pitClock;
+	byte _volume;
 	uint64 _phase;
 	uint64 _sampleCounter;
 	uint16 _count;
