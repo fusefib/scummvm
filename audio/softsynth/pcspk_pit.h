@@ -54,12 +54,10 @@ public:
 			uint32 pitClock = 1193182);
 	~PCSpeakerPITRenderer() override;
 
-	bool init();
 	void reset();
 	void writeMode3Count(uint16 count);
 	void setControl(bool timerGate, bool speakerEnabled);
 	void setVolume(byte volume);
-	int16 generateSample(byte volume);
 	bool isStereo() const override { return false; }
 	int getRate() const override { return _sampleRate; }
 

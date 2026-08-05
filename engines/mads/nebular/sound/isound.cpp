@@ -21,6 +21,7 @@
 
 #include "common/endian.h"
 #include "common/file.h"
+#include "common/func.h"
 #include "common/textconsole.h"
 #include "common/util.h"
 #include "mads/nebular/sound/isound.h"
@@ -109,10 +110,8 @@ ISound::ISound(Audio::Mixer *mixer, const Common::Path &filename, const OverlayL
 	_noiseEnabled(false),
 	_updatesEnabled(false),
 	_masterVolume(255),
-	_outputRate(mixer->getOutputRate()),
-	_hostTimerAccumulator(0),
 	_sequenceServiceCountdown(1),
-	_pitRenderer(_outputRate,
+	_pitRenderer(mixer->getOutputRate(),
 		Audio::PCSpeakerPITRenderer::kPCSpeakerFiltered, kPitClockHz),
 	_frameCounter(0),
 	_randomSeed(0),
@@ -151,13 +150,16 @@ ISound::ISound(Audio::Mixer *mixer, const Common::Path &filename, const OverlayL
 	_randomSeed = readSequenceUint16(0x00f9);
 
 	initializeDriver();
-	_mixer->playStream(Audio::Mixer::kSFXSoundType, &_speakerHandle,
-		this, -1, Audio::Mixer::kMaxChannelVolume, 0,
-		DisposeAfterUse::NO, true);
+	_pitRenderer.setVolume(outputVolume());
+	_pitRenderer.start(new Common::Functor0Mem<void, ISound>(
+		this, &ISound::hostServiceTick), kPitClockHz,
+		kHostTimerDivisor * kHostServiceDivider);
 }
 
 ISound::~ISound() {
-	_mixer->stopHandle(_speakerHandle);
+	// Stop the mixer callback before it can observe partially destroyed driver
+	// state. PCSpeakerPITRenderer repeats this defensively in its destructor.
+	_pitRenderer.stop();
 }
 
 byte ISound::readSequenceByte(uint16 offset) const {
@@ -588,8 +590,22 @@ void ISound::noiseTick() {
 	outputDivisor(divisor);
 }
 
+void ISound::hostServiceTick() {
+	Common::StackLock lock(_driverMutex);
+
+	// The host calls export 4 before export 3 when both are due. Consequently,
+	// a poll result changes noise on the following service tick.
+	if (_noiseEnabled)
+		noiseTick();
+
+	if (!--_sequenceServiceCountdown) {
+		_sequenceServiceCountdown = kSequenceServiceDivider;
+		timerTick();
+	}
+}
+
 int ISound::poll() {
-	// Playback advances from the audio stream at the native host cadence.
+	// Playback advances from the PC speaker chip at the native host cadence.
 	return 0;
 }
 
@@ -610,39 +626,7 @@ int ISound::stop() {
 void ISound::setVolume(int volume) {
 	Common::StackLock lock(_driverMutex);
 	_masterVolume = CLIP(volume, 0, 255);
-}
-
-int16 ISound::generateSample() {
-	return _pitRenderer.generateSample(outputVolume());
-}
-
-int ISound::readBuffer(int16 *buffer, int numSamples) {
-	Common::StackLock lock(_driverMutex);
-
-	const uint64 serviceThreshold = (uint64)_outputRate *
-		kHostTimerDivisor * kHostServiceDivider;
-
-	for (int sample = 0; sample < numSamples; ++sample) {
-		_hostTimerAccumulator += kPitClockHz;
-		while (_hostTimerAccumulator >= serviceThreshold) {
-			_hostTimerAccumulator -= serviceThreshold;
-
-			// The host calls export 4 before export 3 when both are due.
-			// Consequently, a poll result changes noise on the next service
-			// tick rather than the current one.
-			if (_noiseEnabled)
-				noiseTick();
-
-			if (!--_sequenceServiceCountdown) {
-				_sequenceServiceCountdown = kSequenceServiceDivider;
-				timerTick();
-			}
-		}
-
-		buffer[sample] = generateSample();
-	}
-
-	return numSamples;
+	_pitRenderer.setVolume(outputVolume());
 }
 
 } // namespace Sound

@@ -203,10 +203,6 @@ PCSpeakerPITRenderer::~PCSpeakerPITRenderer() {
 	delete _outputStage;
 }
 
-bool PCSpeakerPITRenderer::init() {
-	return true;
-}
-
 void PCSpeakerPITRenderer::initializeImpulse() {
 	_impulseLength = MAX<uint32>(
 		2, ((uint64)_sampleRate * kImpulseDurationUs + 999999) / 1000000);
@@ -489,11 +485,6 @@ int16 PCSpeakerPITRenderer::generateSampleUnlocked(byte volume) {
 		-(((-scaled) + half) >> kSampleFracBits) :
 		(scaled + half) >> kSampleFracBits);
 	return (int16)CLIP<int32>(rounded, -32768, 32767);
-}
-
-int16 PCSpeakerPITRenderer::generateSample(byte volume) {
-	Common::StackLock lock(_mutex);
-	return generateSampleUnlocked(volume);
 }
 
 void PCSpeakerPITRenderer::generateSamples(int16 *buffer, int numSamples) {

@@ -22,7 +22,6 @@
 #ifndef MADS_NEBULAR_SOUND_ISOUND_H
 #define MADS_NEBULAR_SOUND_ISOUND_H
 
-#include "audio/audiostream.h"
 #include "audio/mixer.h"
 #include "audio/softsynth/pcspk_pit.h"
 #include "mads/core/sound_manager.h"
@@ -40,7 +39,7 @@ namespace Sound {
  * ScummVM implements the interpreter natively and reads the original data
  * segment; it does not execute the 16-bit overlay code.
  */
-class ISound : public SoundDriver, public Audio::AudioStream {
+class ISound : public SoundDriver {
 public:
 	enum {
 		kPitClockHz = 1193182,
@@ -60,12 +59,9 @@ protected:
 		uint16 dataSegmentSize;
 	};
 
-	Audio::SoundHandle _speakerHandle;
 	bool _noiseEnabled;
 	bool _updatesEnabled;
 	int _masterVolume;
-	int _outputRate;
-	uint64 _hostTimerAccumulator;
 	byte _sequenceServiceCountdown;
 	Audio::PCSpeakerPITRenderer _pitRenderer;
 
@@ -123,6 +119,7 @@ protected:
 	void playSequence(uint16 sequenceOffset, byte priority);
 
 	void update();
+	void hostServiceTick();
 	void timerTick();
 	void noiseTick();
 	void processSequenceTick();
@@ -143,7 +140,6 @@ protected:
 	void startSpeaker();
 	void stopSpeaker();
 	byte outputVolume() const;
-	int16 generateSample();
 
 public:
 	ISound(Audio::Mixer *mixer, const Common::Path &filename);
@@ -153,20 +149,6 @@ public:
 	int poll() override;
 	void noise() override;
 	void setVolume(int volume) override;
-
-	int readBuffer(int16 *buffer, int numSamples) override;
-	bool isStereo() const override {
-		return false;
-	}
-	bool endOfData() const override {
-		return false;
-	}
-	bool endOfStream() const override {
-		return false;
-	}
-	int getRate() const override {
-		return _outputRate;
-	}
 
 	uint16 frameCounter() const {
 		return _frameCounter;
