@@ -106,7 +106,7 @@ protected:
 
 	static OverlayLayout readOverlayLayout(const Common::Path &filename);
 
-	ISound(Audio::Mixer *mixer,const Common::Path &filename, const OverlayLayout &layout);
+	ISound(Audio::Mixer *mixer, const Common::Path &filename, const OverlayLayout &layout);
 
 	byte readSequenceByte(uint16 offset) const;
 	uint16 readSequenceUint16(uint16 offset) const;

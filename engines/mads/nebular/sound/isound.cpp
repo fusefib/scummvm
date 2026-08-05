@@ -91,7 +91,8 @@ ISound::OverlayLayout ISound::readOverlayLayout(
 
 	// The descriptor's nominal 100 Hz value identifies the expected overlay
 	// ABI. The native host supplies its actual callbacks from a separate PIT
-	// cascade, reconstructed in readBuffer().
+	// cascade supplied by the PC speaker chip's drift-free rational callback
+	// scheduler at mixer-sample resolution.
 	if (result.dataSegmentSize < result.initializedDataSize ||
 		result.dataSegmentSize < kMinimumDataSegmentSize ||
 		timerHz != 100 || exportCount != 11)
