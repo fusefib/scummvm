@@ -27,34 +27,63 @@
 
 namespace Audio {
 
-const double PCSpeakerPITRenderer::kAccumulatorDecay = 0.999;
+namespace {
+
+int32 saturateInt32(int64 value) {
+	if (value > 0x7fffffffLL)
+		return 0x7fffffff;
+	if (value < -0x80000000LL)
+		return -0x7fffffff - 1;
+	return (int32)value;
+}
+
+int32 fixedFromDouble(double value, uint fracBits) {
+	const double scale = (double)((uint64)1 << fracBits);
+	const double scaled = value * scale;
+	return saturateInt32((int64)(scaled < 0.0 ? scaled - 0.5 : scaled + 0.5));
+}
+
+int32 multiplyFixed(int32 value, int32 coefficient, uint fracBits) {
+	const int64 product = (int64)value * coefficient;
+	const int64 half = (int64)1 << (fracBits - 1);
+	const int64 rounded = product < 0 ?
+		-(((-product) + half) >> fracBits) :
+		(product + half) >> fracBits;
+	return saturateInt32(rounded);
+}
+
+} // namespace
 
 class PCSpeakerPITRenderer::PCSpeakerOutputFilter {
 private:
 	struct Section {
-		double b0;
-		double b1;
-		double b2;
-		double a1;
-		double a2;
-		double z1;
-		double z2;
+		int32 b0;
+		int32 b1;
+		int32 b2;
+		int32 a1;
+		int32 a2;
+		int32 z1;
+		int32 z2;
 
 		Section() :
-			b0(0.0), b1(0.0), b2(0.0), a1(0.0), a2(0.0),
-			z1(0.0), z2(0.0) {
+			b0(0), b1(0), b2(0), a1(0), a2(0), z1(0), z2(0) {
 		}
 
-		double process(double input) {
-			const double output = b0 * input + z1;
-			z1 = b1 * input - a1 * output + z2;
-			z2 = b2 * input - a2 * output;
+		int32 process(int32 input) {
+			const int32 output = saturateInt32((int64)
+				multiplyFixed(input, b0, kCoefficientFracBits) + z1);
+			z1 = saturateInt32((int64)
+				multiplyFixed(input, b1, kCoefficientFracBits) -
+				multiplyFixed(output, a1, kCoefficientFracBits) + z2);
+			z2 = saturateInt32((int64)
+				multiplyFixed(input, b2, kCoefficientFracBits) -
+				multiplyFixed(output, a2, kCoefficientFracBits));
 			return output;
 		}
 
 		void clear() {
-			z1 = 0.0;
-			z2 = 0.0;
+			z1 = 0;
+			z2 = 0;
 		}
 	};
 
@@ -68,11 +97,14 @@ private:
 		const double k = tan(M_PI * cutoff / sampleRate);
 		const double normalization = 1.0 / (1.0 + k);
 
-		section.b0 = (highPass ? 1.0 : k) * normalization;
-		section.b1 = (highPass ? -1.0 : k) * normalization;
-		section.b2 = 0.0;
-		section.a1 = (k - 1.0) * normalization;
-		section.a2 = 0.0;
+		section.b0 = fixedFromDouble(
+			(highPass ? 1.0 : k) * normalization, kCoefficientFracBits);
+		section.b1 = fixedFromDouble(
+			(highPass ? -1.0 : k) * normalization, kCoefficientFracBits);
+		section.b2 = 0;
+		section.a1 = fixedFromDouble(
+			(k - 1.0) * normalization, kCoefficientFracBits);
+		section.a2 = 0;
 	}
 
 	static void configureSecondOrder(Section &section, double sampleRate,
@@ -82,15 +114,22 @@ private:
 		const double normalization = 1.0 / (1.0 + k + k * k);
 		const double b0 = (highPass ? 1.0 : k * k) * normalization;
 
-		section.b0 = b0;
-		section.b1 = (highPass ? -2.0 : 2.0) * b0;
-		section.b2 = b0;
-		section.a1 = 2.0 * (k * k - 1.0) * normalization;
-		section.a2 = (1.0 - k + k * k) * normalization;
+		section.b0 = fixedFromDouble(b0, kCoefficientFracBits);
+		section.b1 = fixedFromDouble(
+			(highPass ? -2.0 : 2.0) * b0, kCoefficientFracBits);
+		section.b2 = section.b0;
+		section.a1 = fixedFromDouble(
+			2.0 * (k * k - 1.0) * normalization,
+			kCoefficientFracBits);
+		section.a2 = fixedFromDouble(
+			(1.0 - k + k * k) * normalization,
+			kCoefficientFracBits);
 	}
 
 public:
 	PCSpeakerOutputFilter(uint32 sampleRate) {
+		// Trigonometric coefficient construction happens once. Coefficients are
+		// immediately quantized to Q2.30; the real-time filter uses integers.
 		const double highPassCutoff = MIN<double>(120.0, sampleRate * 0.1);
 		const double lowPassCutoff = MIN<double>(4300.0, sampleRate * 0.45);
 		configureFirstOrder(_highPassFirst, sampleRate,
@@ -111,8 +150,8 @@ public:
 		_lowPassSecond.clear();
 	}
 
-	double process(double input) {
-		double output = _highPassFirst.process(input);
+	int32 process(int32 input) {
+		int32 output = _highPassFirst.process(input);
 		output = _highPassSecond.process(output);
 		output = _lowPassFirst.process(output);
 		return _lowPassSecond.process(output);
@@ -128,9 +167,15 @@ PCSpeakerPITRenderer::PCSpeakerPITRenderer(uint32 sampleRate,
 	_sampleRate(sampleRate),
 	_pitClock(pitClock),
 	_volume(0),
+	_accumulatorDecay(0),
 	_outputFilter(nullptr) {
 	assert(_sampleRate);
 	assert(_pitClock);
+	// DOSBox Staging applies 0.999 once per sample at its fixed 48 kHz PC
+	// speaker rate. Preserve that time constant at arbitrary mixer rates.
+	_accumulatorDecay = fixedFromDouble(
+		pow(0.999, (double)kReferenceSampleRate / _sampleRate),
+		kCoefficientFracBits);
 	if (profile == kPCSpeakerFiltered)
 		_outputFilter = new PCSpeakerOutputFilter(sampleRate);
 	initializeImpulse();
@@ -151,9 +196,12 @@ bool PCSpeakerPITRenderer::init() {
 void PCSpeakerPITRenderer::initializeImpulse() {
 	_impulseLength = MAX<uint32>(
 		2, ((uint64)_sampleRate * kImpulseDurationUs + 999999) / 1000000);
-	_impulseLut.resize(_impulseLength * kFractionalPhases, 0.0);
-	_impulseBuffer.resize(_impulseLength + 2, 0.0);
+	_impulseLut.resize(_impulseLength * kFractionalPhases, 0);
+	_impulseBuffer.resize(_impulseLength + 2, 0);
 
+	// Sinc construction is a one-time initialization cost. Quantizing its
+	// result to Q8.24 removes floating point from sample generation while
+	// keeping over seven decimal digits of coefficient precision.
 	// Keep the reconstruction bandwidth constant at ordinary mixer rates, but
 	// stay below Nyquist when a backend requests a lower rate.
 	const double cutoff = MIN<double>(14500.0, _sampleRate * 0.45);
@@ -161,6 +209,7 @@ void PCSpeakerPITRenderer::initializeImpulse() {
 
 	for (uint32 phase = 0; phase < kFractionalPhases; ++phase) {
 		const double fraction = (double)phase / kFractionalPhases;
+		Common::Array<double> phaseCoefficients(_impulseLength, 0.0);
 		double sum = 0.0;
 
 		for (uint32 tap = 0; tap < _impulseLength; ++tap) {
@@ -181,7 +230,7 @@ void PCSpeakerPITRenderer::initializeImpulse() {
 				coefficient = window * sinc;
 			}
 
-			_impulseLut[phase * _impulseLength + tap] = coefficient;
+			phaseCoefficients[tap] = coefficient;
 			sum += coefficient;
 		}
 
@@ -189,11 +238,30 @@ void PCSpeakerPITRenderer::initializeImpulse() {
 		// response therefore settles to the requested rail without phase-
 		// dependent gain or long-term DC drift.
 		if (fabs(sum) < 1e-12) {
-			_impulseLut[phase * _impulseLength] = 1.0;
+			phaseCoefficients[0] = 1.0;
 			sum = 1.0;
 		}
-		for (uint32 tap = 0; tap < _impulseLength; ++tap)
-			_impulseLut[phase * _impulseLength + tap] /= sum;
+		uint32 largestTap = 0;
+		int32 largestCoefficient = 0;
+		int64 fixedSum = 0;
+		for (uint32 tap = 0; tap < _impulseLength; ++tap) {
+			const uint32 index = phase * _impulseLength + tap;
+			const int32 coefficient = fixedFromDouble(
+				phaseCoefficients[tap] / sum, kSampleFracBits);
+			_impulseLut[index] = coefficient;
+			fixedSum += coefficient;
+			if (ABS<int32>(coefficient) > ABS<int32>(largestCoefficient)) {
+				largestCoefficient = coefficient;
+				largestTap = tap;
+			}
+		}
+
+		// Correct quantization residue at the strongest tap. Every phase still
+		// integrates to exactly one, so fixed-point conversion adds no DC bias.
+		const uint32 largestIndex = phase * _impulseLength + largestTap;
+		_impulseLut[largestIndex] = saturateInt32((int64)
+			_impulseLut[largestIndex] +
+			((int64)1 << kSampleFracBits) - fixedSum);
 	}
 }
 
@@ -214,8 +282,8 @@ void PCSpeakerPITRenderer::reset() {
 	_lastUndersampledReloadSample = 0;
 	_impulseHead = 0;
 	for (uint i = 0; i < _impulseBuffer.size(); ++i)
-		_impulseBuffer[i] = 0.0;
-	_reconstructedLevel = 0.0;
+		_impulseBuffer[i] = 0;
+	_reconstructedLevel = 0;
 	_targetLevel = -1;
 	if (_outputFilter)
 		_outputFilter->reset();
@@ -241,15 +309,16 @@ int PCSpeakerPITRenderer::outputLevel() const {
 	return _high ? 1 : -1;
 }
 
-void PCSpeakerPITRenderer::addTransition(int level, double sampleFraction) {
+void PCSpeakerPITRenderer::addTransition(int level, uint64 elapsedPitClocks) {
 	if (level == _targetLevel)
 		return;
 
 	const int delta = level - _targetLevel;
 	_targetLevel = level;
 
-	sampleFraction = CLIP<double>(sampleFraction, 0.0, 1.0);
-	uint32 phase = (uint32)(sampleFraction * kFractionalPhases + 0.5);
+	elapsedPitClocks = MIN<uint64>(elapsedPitClocks, _pitClock);
+	uint32 phase = (uint32)((elapsedPitClocks * kFractionalPhases +
+		_pitClock / 2) / _pitClock);
 	uint32 sampleOffset = 0;
 	if (phase == kFractionalPhases) {
 		phase = 0;
@@ -259,8 +328,9 @@ void PCSpeakerPITRenderer::addTransition(int level, double sampleFraction) {
 	for (uint32 tap = 0; tap < _impulseLength; ++tap) {
 		const uint32 bufferIndex =
 			(_impulseHead + sampleOffset + tap) % _impulseBuffer.size();
-		_impulseBuffer[bufferIndex] += delta *
-			_impulseLut[phase * _impulseLength + tap];
+		_impulseBuffer[bufferIndex] = saturateInt32((int64)
+			_impulseBuffer[bufferIndex] +
+			(int64)delta * _impulseLut[phase * _impulseLength + tap]);
 	}
 }
 
@@ -288,7 +358,7 @@ void PCSpeakerPITRenderer::writeMode3Count(uint16 count) {
 		_undersampled = true;
 		_hasUndersampledReload = true;
 		_lastUndersampledReloadSample = _sampleCounter;
-		addTransition(outputLevel(), 0.0);
+		addTransition(outputLevel());
 		return;
 	}
 
@@ -308,7 +378,7 @@ void PCSpeakerPITRenderer::writeMode3Count(uint16 count) {
 		_counterLoaded = true;
 		_phase = 0;
 		_high = true;
-		addTransition(outputLevel(), 0.0);
+		addTransition(outputLevel());
 	}
 }
 
@@ -338,7 +408,7 @@ void PCSpeakerPITRenderer::setControl(bool timerGate, bool speakerEnabled) {
 
 	// Evaluate the two port-0x61 controls together. This prevents a combined
 	// update from exposing an intermediate speaker level.
-	addTransition(outputLevel(), 0.0);
+	addTransition(outputLevel());
 }
 
 void PCSpeakerPITRenderer::advanceCounter() {
@@ -374,8 +444,7 @@ void PCSpeakerPITRenderer::advanceCounter() {
 				_pendingCount = 0;
 				_hasPendingCount = false;
 			}
-			addTransition(outputLevel(),
-				(double)elapsed / _pitClock);
+			addTransition(outputLevel(), elapsed);
 		}
 	}
 }
@@ -388,23 +457,27 @@ void PCSpeakerPITRenderer::setVolume(byte volume) {
 int16 PCSpeakerPITRenderer::generateSampleUnlocked(byte volume) {
 	advanceCounter();
 
-	_reconstructedLevel += _impulseBuffer[_impulseHead];
-	_impulseBuffer[_impulseHead] = 0.0;
+	_reconstructedLevel = saturateInt32((int64)_reconstructedLevel +
+		_impulseBuffer[_impulseHead]);
+	_impulseBuffer[_impulseHead] = 0;
 	_impulseHead = (_impulseHead + 1) % _impulseBuffer.size();
 	++_sampleCounter;
 
 	// Volume is deliberately applied after reconstruction: a mute or volume
 	// change must not alter PIT, impulse-tail, or later filter state.
-	const double output = _outputFilter ?
+	const int32 output = _outputFilter ?
 		_outputFilter->process(_reconstructedLevel) : _reconstructedLevel;
 	// A lossless impulse accumulator would retain a permanent rail after the
 	// last transition. Apply the same leaky integration used by the reference
 	// renderer here, so the unfiltered profile bypasses only the optional
 	// speaker-output frequency shaping.
-	_reconstructedLevel *= kAccumulatorDecay;
-	const double scaled = output * 127.0 * volume;
-	const int32 rounded = (int32)(scaled < 0.0 ?
-		scaled - 0.5 : scaled + 0.5);
+	_reconstructedLevel = multiplyFixed(_reconstructedLevel,
+		_accumulatorDecay, kCoefficientFracBits);
+	const int64 scaled = (int64)output * 127 * volume;
+	const int64 half = (int64)1 << (kSampleFracBits - 1);
+	const int32 rounded = saturateInt32(scaled < 0 ?
+		-(((-scaled) + half) >> kSampleFracBits) :
+		(scaled + half) >> kSampleFracBits);
 	return (int16)CLIP<int32>(rounded, -32768, 32767);
 }
 

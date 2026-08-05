@@ -67,12 +67,14 @@ private:
 
 	enum {
 		kFractionalPhases = 32,
-		kImpulseDurationUs = 3125
+		kImpulseDurationUs = 3125,
+		kSampleFracBits = 24,
+		kCoefficientFracBits = 30,
+		kReferenceSampleRate = 48000
 	};
-	static const double kAccumulatorDecay;
 
 	void initializeImpulse();
-	void addTransition(int level, double sampleFraction);
+	void addTransition(int level, uint64 elapsedPitClocks = 0);
 	void advanceCounter();
 	int16 generateSampleUnlocked(byte volume);
 	bool isUndersampled(uint16 count) const;
@@ -82,6 +84,7 @@ private:
 	uint32 _sampleRate;
 	uint32 _pitClock;
 	byte _volume;
+	int32 _accumulatorDecay;
 	uint64 _phase;
 	uint64 _sampleCounter;
 	uint16 _count;
@@ -97,9 +100,9 @@ private:
 
 	uint32 _impulseLength;
 	uint32 _impulseHead;
-	Common::Array<double> _impulseLut;
-	Common::Array<double> _impulseBuffer;
-	double _reconstructedLevel;
+	Common::Array<int32> _impulseLut;
+	Common::Array<int32> _impulseBuffer;
+	int32 _reconstructedLevel;
 	int _targetLevel;
 	PCSpeakerOutputFilter *_outputFilter;
 
