@@ -116,9 +116,23 @@ protected:
 public:
 	EmulatedChip();
 	virtual ~EmulatedChip();
+	using Chip::start;
+
+	/**
+	 * Start the sound chip with callbacks at an exact rational frequency.
+	 *
+	 * This overload is intended for emulated hardware whose callback clock is
+	 * derived from integer clock and divider values. Existing integer-frequency
+	 * users retain the legacy 16.16 scheduler used by Chip::start(). The first
+	 * rational callback occurs after one complete interval.
+	 */
+	void start(TimerCallback *callback, uint32 frequencyNumerator,
+			uint32 frequencyDenominator);
 
 	// Chip API
 	void setCallbackFrequency(int timerFrequency) override;
+	void setCallbackFrequency(uint32 frequencyNumerator,
+			uint32 frequencyDenominator);
 
 	// AudioStream API
 	int readBuffer(int16 *buffer, const int numSamples) override;
@@ -143,10 +157,18 @@ protected:
 	virtual void generateSamples(int16 *buffer, int numSamples) = 0;
 
 private:
+	int readBufferRational(int16 *buffer, int numSamples);
+	void startMixerStream();
+
 	int _baseFreq;
 
 	int _nextTick;
 	int _samplesPerTick;
+	bool _useRationalCallbacks;
+	uint32 _callbackFrequencyNumerator;
+	uint64 _callbackThreshold;
+	uint64 _callbackPhase;
+	bool _isActive;
 
 	Audio::SoundHandle *_handle;
 };

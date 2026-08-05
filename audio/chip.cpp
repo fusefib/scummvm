@@ -97,6 +97,11 @@ EmulatedChip::EmulatedChip() :
 	_nextTick(0),
 	_samplesPerTick(0),
 	_baseFreq(0),
+	_useRationalCallbacks(false),
+	_callbackFrequencyNumerator(0),
+	_callbackThreshold(0),
+	_callbackPhase(0),
+	_isActive(false),
 	_handle(new Audio::SoundHandle()) { }
 
 EmulatedChip::~EmulatedChip() {
@@ -110,6 +115,9 @@ EmulatedChip::~EmulatedChip() {
 }
 
 int EmulatedChip::readBuffer(int16 *buffer, const int numSamples) {
+	if (_useRationalCallbacks)
+		return readBufferRational(buffer, numSamples);
+
 	const int stereoFactor = isStereo() ? 2 : 1;
 	int len = numSamples / stereoFactor;
 	int step;
@@ -136,22 +144,76 @@ int EmulatedChip::readBuffer(int16 *buffer, const int numSamples) {
 	return numSamples;
 }
 
+int EmulatedChip::readBufferRational(int16 *buffer, int numSamples) {
+	const int stereoFactor = isStereo() ? 2 : 1;
+	int len = numSamples / stereoFactor;
+
+	while (len) {
+		const uint64 phaseRemaining = _callbackThreshold - _callbackPhase;
+		const uint64 samplesToCallback =
+			(phaseRemaining + _callbackFrequencyNumerator - 1) /
+			_callbackFrequencyNumerator;
+		const int step = (int)MIN<uint64>(len, samplesToCallback - 1);
+
+		generateSamples(buffer, step * stereoFactor);
+		_callbackPhase += (uint64)step * _callbackFrequencyNumerator;
+		buffer += step * stereoFactor;
+		len -= step;
+		if (!len)
+			break;
+
+		// The hardware time represented by this sample reaches the timer
+		// boundary. Run callbacks before generating it, matching drivers which
+		// apply a timer update to the sample whose interval crossed the boundary.
+		_callbackPhase += _callbackFrequencyNumerator;
+		do {
+			_callbackPhase -= _callbackThreshold;
+			if (_callback && _callback->isValid())
+				(*_callback)();
+		} while (_useRationalCallbacks &&
+			_callbackPhase >= _callbackThreshold);
+
+		generateSamples(buffer, stereoFactor);
+		buffer += stereoFactor;
+		--len;
+
+		// Changing back to the integer scheduler from the callback is
+		// supported, although current users keep one scheduling mode for
+		// their entire lifetime.
+		if (!_useRationalCallbacks && len) {
+			readBuffer(buffer, len * stereoFactor);
+			return numSamples;
+		}
+	}
+
+	return numSamples;
+}
+
 int EmulatedChip::getRate() const {
 	return g_system->getMixer()->getOutputRate();
 }
 
 void EmulatedChip::startCallbacks(int timerFrequency) {
 	setCallbackFrequency(timerFrequency);
+	startMixerStream();
+}
+
+void EmulatedChip::startMixerStream() {
 	g_system->getMixer()->playStream(Audio::Mixer::kPlainSoundType, _handle, this, -1, Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
+	_isActive = true;
 }
 
 void EmulatedChip::stopCallbacks() {
-	g_system->getMixer()->stopHandle(*_handle);
+	if (_isActive) {
+		g_system->getMixer()->stopHandle(*_handle);
+		_isActive = false;
+	}
 }
 
 void EmulatedChip::setCallbackFrequency(int timerFrequency) {
 	_baseFreq = timerFrequency;
 	assert(_baseFreq != 0);
+	_useRationalCallbacks = false;
 
 	int d = getRate() / _baseFreq;
 	int r = getRate() % _baseFreq;
@@ -160,6 +222,24 @@ void EmulatedChip::setCallbackFrequency(int timerFrequency) {
 	// but less prone to arithmetic overflow.
 
 	_samplesPerTick = (d << FIXP_SHIFT) + (r << FIXP_SHIFT) / _baseFreq;
+}
+
+void EmulatedChip::start(TimerCallback *callback,
+		uint32 frequencyNumerator, uint32 frequencyDenominator) {
+	_callback.reset(callback);
+	setCallbackFrequency(frequencyNumerator, frequencyDenominator);
+	startMixerStream();
+}
+
+void EmulatedChip::setCallbackFrequency(uint32 frequencyNumerator,
+		uint32 frequencyDenominator) {
+	assert(frequencyNumerator != 0);
+	assert(frequencyDenominator != 0);
+
+	_callbackFrequencyNumerator = frequencyNumerator;
+	_callbackThreshold = (uint64)getRate() * frequencyDenominator;
+	_callbackPhase = 0;
+	_useRationalCallbacks = true;
 }
 
 } // End of namespace Audio
