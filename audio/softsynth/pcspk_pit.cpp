@@ -21,6 +21,7 @@
 
 #include "audio/softsynth/pcspk_pit.h"
 
+#include "common/hashmap.h"
 #include "common/util.h"
 
 #include <math.h>
@@ -87,6 +88,13 @@ private:
 		}
 	};
 
+	struct FilterConfiguration {
+		Section highPassFirst;
+		Section highPassSecond;
+		Section lowPassFirst;
+		Section lowPassSecond;
+	};
+
 	Section _highPassFirst;
 	Section _highPassSecond;
 	Section _lowPassFirst;
@@ -134,25 +142,51 @@ public:
 		_accumulatorDecay(0),
 		_decayEnabled(profile != kRawReconstruction),
 		_filterEnabled(profile == kPCSpeakerFiltered) {
-		// The raw profile intentionally omits this coupling approximation. The
-		// two DOSBox-compatible profiles preserve its fixed-48-kHz time constant
-		// when ScummVM uses another mixer rate.
-		_accumulatorDecay = fixedFromDouble(
-			pow(0.999, (double)kReferenceSampleRate / sampleRate),
-			kCoefficientFracBits);
+		if (_decayEnabled) {
+			static Common::Mutex decayCacheMutex;
+			static Common::HashMap<uint32, int32> decayCache;
+			Common::StackLock lock(decayCacheMutex);
 
-		// Trigonometric coefficient construction happens once. Coefficients are
-		// immediately quantized to Q2.30; the real-time filter uses integers.
-		const double highPassCutoff = MIN<double>(120.0, sampleRate * 0.1);
-		const double lowPassCutoff = MIN<double>(4300.0, sampleRate * 0.45);
-		configureFirstOrder(_highPassFirst, sampleRate,
-			highPassCutoff, true);
-		configureSecondOrder(_highPassSecond, sampleRate,
-			highPassCutoff, true);
-		configureFirstOrder(_lowPassFirst, sampleRate,
-			lowPassCutoff, false);
-		configureSecondOrder(_lowPassSecond, sampleRate,
-			lowPassCutoff, false);
+			if (!decayCache.contains(sampleRate)) {
+				// DOSBox applies 0.999 at its fixed 48-kHz device rate. Preserve
+				// that time constant when ScummVM uses another mixer rate, then
+				// cache the Q2.30 result for later section-driver instances.
+				decayCache.setVal(sampleRate, fixedFromDouble(
+					pow(0.999, (double)kReferenceSampleRate / sampleRate),
+					kCoefficientFracBits));
+			}
+			_accumulatorDecay = decayCache.getVal(sampleRate);
+		}
+
+		if (_filterEnabled) {
+			static Common::Mutex filterCacheMutex;
+			static Common::HashMap<uint32, FilterConfiguration> filterCache;
+			Common::StackLock lock(filterCacheMutex);
+
+			if (!filterCache.contains(sampleRate)) {
+				FilterConfiguration configuration;
+				const double highPassCutoff =
+					MIN<double>(120.0, sampleRate * 0.1);
+				const double lowPassCutoff =
+					MIN<double>(4300.0, sampleRate * 0.45);
+				configureFirstOrder(configuration.highPassFirst,
+					sampleRate, highPassCutoff, true);
+				configureSecondOrder(configuration.highPassSecond,
+					sampleRate, highPassCutoff, true);
+				configureFirstOrder(configuration.lowPassFirst,
+					sampleRate, lowPassCutoff, false);
+				configureSecondOrder(configuration.lowPassSecond,
+					sampleRate, lowPassCutoff, false);
+				filterCache.setVal(sampleRate, configuration);
+			}
+
+			const FilterConfiguration &configuration =
+				filterCache.getVal(sampleRate);
+			_highPassFirst = configuration.highPassFirst;
+			_highPassSecond = configuration.highPassSecond;
+			_lowPassFirst = configuration.lowPassFirst;
+			_lowPassSecond = configuration.lowPassSecond;
+		}
 		reset();
 	}
 
@@ -205,6 +239,27 @@ PCSpeakerPITRenderer::~PCSpeakerPITRenderer() {
 }
 
 void PCSpeakerPITRenderer::initializeImpulse() {
+	struct ImpulseConfiguration {
+		uint32 length;
+		Common::Array<int32> coefficients;
+
+		ImpulseConfiguration() : length(0) {
+		}
+	};
+
+	static Common::Mutex impulseCacheMutex;
+	static Common::HashMap<uint32, ImpulseConfiguration> impulseCache;
+	Common::StackLock cacheLock(impulseCacheMutex);
+
+	if (impulseCache.contains(_sampleRate)) {
+		const ImpulseConfiguration &configuration =
+			impulseCache.getVal(_sampleRate);
+		_impulseLength = configuration.length;
+		_impulseLut = configuration.coefficients;
+		_impulseBuffer.resize(_impulseLength + 2, 0);
+		return;
+	}
+
 	_impulseLength = MAX<uint32>(
 		2, ((uint64)_sampleRate * kImpulseDurationUs + 999999) / 1000000);
 	_impulseLut.resize(_impulseLength * kFractionalPhases, 0);
@@ -217,10 +272,10 @@ void PCSpeakerPITRenderer::initializeImpulse() {
 	// stay below Nyquist when a backend requests a lower rate.
 	const double cutoff = MIN<double>(14500.0, _sampleRate * 0.45);
 	const double center = _impulseLength / 2.0;
+	Common::Array<double> phaseCoefficients(_impulseLength, 0.0);
 
 	for (uint32 phase = 0; phase < kFractionalPhases; ++phase) {
 		const double fraction = (double)phase / kFractionalPhases;
-		Common::Array<double> phaseCoefficients(_impulseLength, 0.0);
 		double sum = 0.0;
 
 		for (uint32 tap = 0; tap < _impulseLength; ++tap) {
@@ -267,13 +322,23 @@ void PCSpeakerPITRenderer::initializeImpulse() {
 			}
 		}
 
-		// Correct quantization residue at the strongest tap. Every phase still
-		// integrates to exactly one, so fixed-point conversion adds no DC bias.
+		// Correct quantization residue at the strongest tap. The supported
+		// kernels leave enough headroom for the correction without saturation.
 		const uint32 largestIndex = phase * _impulseLength + largestTap;
-		_impulseLut[largestIndex] = saturateInt32((int64)
-			_impulseLut[largestIndex] +
-			((int64)1 << kSampleFracBits) - fixedSum);
+		const int32 previousCoefficient = _impulseLut[largestIndex];
+		const int64 adjustedCoefficient = (int64)previousCoefficient +
+			((int64)1 << kSampleFracBits) - fixedSum;
+		assert(adjustedCoefficient >= -0x80000000LL &&
+			adjustedCoefficient <= 0x7fffffffLL);
+		_impulseLut[largestIndex] = (int32)adjustedCoefficient;
+		fixedSum += adjustedCoefficient - previousCoefficient;
+		assert(fixedSum == ((int64)1 << kSampleFracBits));
 	}
+
+	ImpulseConfiguration configuration;
+	configuration.length = _impulseLength;
+	configuration.coefficients = _impulseLut;
+	impulseCache.setVal(_sampleRate, configuration);
 }
 
 void PCSpeakerPITRenderer::reset() {

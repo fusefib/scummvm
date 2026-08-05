@@ -45,7 +45,7 @@ public:
 		kUnfiltered,
 		/** DOSBox-compatible impulse output with PC speaker filters. */
 		kPCSpeakerFiltered,
-		/** Lossless reconstruction for analysis; retains a permanent DC rail. */
+		/** Raw undecayed reconstruction for analysis; retains the logical DC rail. */
 		kRawReconstruction
 	};
 
