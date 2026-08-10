@@ -86,7 +86,7 @@ public:
 
 class SoundManager {
 protected:
-	enum DriverType { SOUND_ADLIB, SOUND_MT32, SOUND_PCSPEAKER, SOUND_PAS };
+	enum DriverType { SOUND_ADLIB, SOUND_MT32, SOUND_GM, SOUND_PCSPEAKER, SOUND_PAS };
 	Audio::Mixer *_mixer;
 	DriverType _driverType;
 	bool &_soundFlag;
@@ -105,7 +105,8 @@ protected:
 	virtual void loadDriver(int sectionNum) = 0;
 
 public:
-	SoundManager(Audio::Mixer *mixer, bool &soundFlag);
+	SoundManager(Audio::Mixer *mixer, bool &soundFlag,
+			bool supportsGeneralMidi = false);
 	virtual ~SoundManager();
 
 	/**
