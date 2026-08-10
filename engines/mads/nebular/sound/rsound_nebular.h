@@ -28,6 +28,30 @@ namespace MADS {
 namespace RexNebular {
 namespace Sound {
 
+/** Shared mechanics of the two distinct Rex demo Roland overlays. */
+class RSoundDemo : public RSound {
+private:
+	int _firstEffectChannel;
+
+protected:
+	RSoundDemo(Audio::Mixer *mixer, const Common::Path &filename,
+			int dataOffset, int dataSize, int sysExOffset,
+			int firstEffectChannel);
+
+	void startVoice(int channelIndex, int sequenceOffset);
+	int startVoiceInRange(int sequenceOffset, int firstChannel,
+			int lastChannel);
+	int startAnyVoice(int sequenceOffset);
+	int startEffectVoice(int sequenceOffset);
+	void requestStopRange(int firstChannel, int channelCount);
+	void requestStopAll();
+	void stopAndResetRange(int firstChannel, int channelCount);
+	void setVoiceVolume(int channelIndex, byte volume);
+	bool isSequenceActive(int sequenceOffset);
+	byte *sequenceData(int sequenceOffset) { return loadData(sequenceOffset); }
+	Channel &voice(int channelIndex) { return _channels[channelIndex]; }
+};
+
 class RSound1 : public RSound {
 private:
 	typedef int (RSound1:: *CommandPtr)();
@@ -82,6 +106,20 @@ private:
 public:
 	RSound1(Audio::Mixer *mixer);
 
+	int command(int commandId, int param) override;
+};
+
+/** Demo RSOUND.001: `RLND AGAdemo 6-11-92`; 41 commands. */
+class RSoundDemo1 : public RSoundDemo {
+private:
+	bool _command23Toggle;
+
+	byte adjustedCommandParam() const;
+	void startCommand111213();
+	int executeDemoCommonCommand(int commandId);
+
+public:
+	explicit RSoundDemo1(Audio::Mixer *mixer);
 	int command(int commandId, int param) override;
 };
 
@@ -624,6 +662,16 @@ private:
 public:
 	RSound9(Audio::Mixer *mixer);
 
+	int command(int commandId, int param) override;
+};
+
+/** Demo RSOUND.009: `RLND AGAdemo 6-25-92`; 40 commands. */
+class RSoundDemo9 : public RSoundDemo {
+private:
+	int executeDemoCommonCommand(int commandId);
+
+public:
+	explicit RSoundDemo9(Audio::Mixer *mixer);
 	int command(int commandId, int param) override;
 };
 

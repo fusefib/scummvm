@@ -164,13 +164,6 @@ private:
 	 * Zeroes _activeCount and the three fade-step fields for channels in
 	 * [first, last).
 	 */
-	void resetChannelRange(int first, int last);
-
-	/**
-	 * Resets the per-MIDI-channel held-note tracking table to empty.
-	 */
-	void resetHeldNotes();
-
 	/**
 	 * Resets all 9 channels and the held-notes table.
 	 */
@@ -192,6 +185,15 @@ private:
 
 protected:
 	int _commandParam;
+
+	/** Clear the active and fade state for channel indices in [first, last). */
+	void resetChannelRange(int first, int last);
+
+	/** Reset the per-MIDI-channel held-note tracking table to empty. */
+	void resetHeldNotes();
+
+	/** Reset held-note slots for the inclusive MIDI-channel range. */
+	void resetHeldNotesRange(int firstChannel, int lastChannel);
 
 	byte *loadData(int offset) {
 		return &_soundData[offset];
@@ -304,7 +306,7 @@ public:
 	int _resultFlag;
 
 public:
-	static void validate();
+	static void validate(bool isDemo);
 
 public:
 	/**

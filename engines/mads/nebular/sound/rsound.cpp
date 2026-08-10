@@ -120,7 +120,7 @@ RSound::~RSound() {
 	}
 }
 
-void RSound::validate() {
+void RSound::validate(bool isDemo) {
 	Common::File f;
 	static const char *const MD5[] = {
 		"6b2f2f24b54ba0177938dde17baa6231",
@@ -133,15 +133,24 @@ void RSound::validate() {
 		"40a2a8bd0d49f1acbb0569f1b22ec9b2",
 		"2ae093b2ce06f739f200ca3e9ff2af85"
 	};
+	static const char *const MD5_DEMO[] = {
+		"ad14e2a1c900287737b9f43f1d8c3fb2",
+		nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+		"e2fafe292239be4afa2bf789bf4f496d"
+	};
+	const char *const *expectedMD5 = isDemo ? MD5_DEMO : MD5;
 
 	for (int i = 1; i <= 9; ++i) {
+		if (!expectedMD5[i - 1])
+			continue;
+
 		Common::Path filename(Common::String::format("RSOUND.00%d", i));
 		if (!f.open(filename))
 			error("Could not process - %s", filename.toString().c_str());
 		Common::String md5str = Common::computeStreamMD5AsString(f, 8192);
 		f.close();
 
-		if (md5str != MD5[i - 1])
+		if (md5str != expectedMD5[i - 1])
 			error("Invalid sound file - %s", filename.toString().c_str());
 	}
 }
@@ -660,6 +669,14 @@ void RSound::resetHeldNotes() {
 	for (int i = 0; i < RSOUND_CHANNEL_COUNT + 1; ++i)
 		for (int j = 0; j < 4; ++j)
 			_heldNotes[i][j] = 0xFF;
+}
+
+void RSound::resetHeldNotesRange(int firstChannel, int lastChannel) {
+	assert(firstChannel >= 1 && lastChannel <= RSOUND_CHANNEL_COUNT &&
+			firstChannel <= lastChannel);
+	for (int channel = firstChannel; channel <= lastChannel; ++channel)
+		for (int slot = 0; slot < 4; ++slot)
+			_heldNotes[channel][slot] = 0xFF;
 }
 
 /**
