@@ -577,40 +577,45 @@ void PSound::updateChannel(uint channelIndex) {
 		updateChannelLevels(channelIndex);
 }
 
+bool PSound::isOpcodeDataValid(uint16 position, uint32 length) const {
+	return isDataRangeValid(position, length);
+}
+
+byte PSound::readOpcodeByte(uint16 position, uint16 delta) const {
+	return readDataByte((uint16)(position + delta));
+}
+
+uint16 PSound::readOpcodeWord(uint16 position, uint16 delta) const {
+	return readDataUint16((uint16)(position + delta));
+}
+
+bool PSound::isScriptVariableValid(byte index) const {
+	return index < kScriptVarCount;
+}
+
+bool PSound::transferOpcode(Channel &channel, uint16 position, bool take) {
+	if (!isOpcodeDataValid(position, 5))
+		return false;
+	if (take) {
+		const uint16 target = readOpcodeWord(position, 3);
+		if (!isDataRangeValid(target, 1))
+			return false;
+		channel.branchReturn = position + 5;
+		channel.position = target;
+	} else {
+		channel.position = position + 5;
+	}
+	return true;
+}
+
 bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 	Channel &channel = _channels[channelIndex];
 	const uint16 position = channel.position;
-	auto valid = [&](uint32 length) {
-		return isDataRangeValid(position, length);
-	};
-	auto byteAt = [&](uint16 delta) {
-		return readDataByte((uint16)(position + delta));
-	};
-	auto wordAt = [&](uint16 delta) {
-		return readDataUint16((uint16)(position + delta));
-	};
-	auto validVar = [&](byte index) {
-		return index < kScriptVarCount;
-	};
-	auto branch = [&](bool take) {
-		if (!valid(5))
-			return false;
-		if (take) {
-			const uint16 target = wordAt(3);
-			if (!isDataRangeValid(target, 1))
-				return false;
-			channel.branchReturn = position + 5;
-			channel.position = target;
-		} else {
-			channel.position = position + 5;
-		}
-		return true;
-	};
 
 	switch (opcode) {
 	case 0xff: {
-		if (!valid(2)) return false;
-		const byte count = byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		const byte count = readOpcodeByte(position, 1);
 		if (!channel.innerLoopCount) {
 			if (!count) {
 				channel.position = position + 2;
@@ -628,8 +633,8 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 		break;
 	}
 	case 0xfe: {
-		if (!valid(2)) return false;
-		const byte count = byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		const byte count = readOpcodeByte(position, 1);
 		if (!channel.outerLoopCount) {
 			if (!count) {
 				channel.position = position + 2;
@@ -669,23 +674,23 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 		channel.noteOffset = 0;
 		break;
 	case 0xfc: {
-		if (!valid(3)) return false;
-		const uint16 target = wordAt(1);
+		if (!isOpcodeDataValid(position, 3)) return false;
+		const uint16 target = readOpcodeWord(position, 1);
 		if (!isDataRangeValid(target, 1)) return false;
 		channel.loopStart = channel.position = channel.innerLoopStart =
 				channel.outerLoopStart = channel.originalSequence = target;
 		break;
 	}
 	case 0xfb: {
-		if (!valid(3)) return false;
-		const uint16 target = wordAt(1);
+		if (!isOpcodeDataValid(position, 3)) return false;
+		const uint16 target = readOpcodeWord(position, 1);
 		if (!isDataRangeValid(target, 1)) return false;
 		channel.position = target;
 		break;
 	}
 	case 0xfa: {
-		if (!valid(3)) return false;
-		const uint16 target = wordAt(1);
+		if (!isOpcodeDataValid(position, 3)) return false;
+		const uint16 target = readOpcodeWord(position, 1);
 		if (!isDataRangeValid(target, 1)) return false;
 		channel.branchReturn = position + 3;
 		channel.position = target;
@@ -700,51 +705,52 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 		}
 		break;
 	case 0xf8:
-		if (!valid(2)) return false;
-		channel.patch = byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		channel.patch = readOpcodeByte(position, 1);
 		channel.position = position + 2;
 		loadPatch(channelIndex, channel.patch);
 		break;
 	case 0xf7:
-		if (!valid(2)) return false;
-		channel.noteOffset = byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		channel.noteOffset = readOpcodeByte(position, 1);
 		channel.durationOverride = 0;
 		channel.position = position + 2;
 		break;
 	case 0xf6:
-		if (!valid(2)) return false;
-		channel.durationOverride = byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		channel.durationOverride = readOpcodeByte(position, 1);
 		channel.noteOffset = 0;
 		channel.position = position + 2;
 		break;
 	case 0xf5:
-		if (!valid(2)) return false;
-		channel.pitchBend = (int8)byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		channel.pitchBend = (int8)readOpcodeByte(position, 1);
 		channel.position = position + 2;
 		break;
 	case 0xf4:
-		if (!valid(2)) return false;
-		channel.volume = (byte)((int8)byteAt(1) >> 1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		channel.volume = (byte)((int8)readOpcodeByte(position, 1) >> 1);
 		channel.position = position + 2;
 		levelsDirty = true;
 		break;
 	case 0xf3:
-		if (!valid(3)) return false;
+		if (!isOpcodeDataValid(position, 3)) return false;
 		if (!channel.pendingStop) {
-			channel.volumeFadeReload = byteAt(1);
-			channel.volumeFadeStep = (int8)byteAt(2);
+			channel.volumeFadeReload = readOpcodeByte(position, 1);
+			channel.volumeFadeStep = (int8)readOpcodeByte(position, 2);
 			channel.volumeFadeCounter = 1;
 		}
 		channel.position = position + 3;
 		break;
 	case 0xf2:
-		if (!valid(2)) return false;
-		channel.transpose = (int8)byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		channel.transpose = (int8)readOpcodeByte(position, 1);
 		channel.position = position + 2;
 		break;
 	case 0xf1: {
-		if (!valid(2)) return false;
-		const int8 value = (int8)(((int8)byteAt(1) >> 1) - 50);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		const int8 value =
+			(int8)(((int8)readOpcodeByte(position, 1) >> 1) - 50);
 		if (!channel.pendingStop || value < channel.volumeOffset) {
 			channel.volumeOffset = value;
 			levelsDirty = true;
@@ -753,32 +759,34 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 		break;
 	}
 	case 0xf0:
-		if (!valid(2)) return false;
-		channel.panning = byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		channel.panning = readOpcodeByte(position, 1);
 		channel.position = position + 2;
 		updatePanning(channelIndex);
 		levelsDirty = true;
 		break;
 	case 0xef:
-		if (!valid(3)) return false;
-		channel.panningFadeReload = byteAt(1);
-		channel.panningFadeStep = (int8)byteAt(2);
+		if (!isOpcodeDataValid(position, 3)) return false;
+		channel.panningFadeReload = readOpcodeByte(position, 1);
+		channel.panningFadeStep = (int8)readOpcodeByte(position, 2);
 		channel.panningFadeCounter = 1;
 		channel.position = position + 3;
 		break;
 	case 0xee:
-		if (!valid(2)) return false;
-		channel.noteTranspose = (int8)byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		channel.noteTranspose = (int8)readOpcodeByte(position, 1);
 		channel.position = position + 2;
 		break;
 	case 0xed:
-		if (!valid(2)) return false;
-		channel.position = (uint16)(position + (int8)byteAt(1) + 3);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		channel.position = (uint16)(position +
+			(int8)readOpcodeByte(position, 1) + 3);
 		break;
 	case 0xec: {
-		if (!valid(2)) return false;
-		const byte count = byteAt(1);
-		if (!count || !valid((uint32)count + 3)) return false;
+		if (!isOpcodeDataValid(position, 2)) return false;
+		const byte count = readOpcodeByte(position, 1);
+		if (!count || !isOpcodeDataValid(position, (uint32)count + 3))
+			return false;
 		const uint16 base = position + 2;
 		const byte selected = readDataByte(base + (nextRandom() & 0x7fff) % count);
 		const byte target = readDataByte(base + count);
@@ -788,12 +796,12 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 		break;
 	}
 	case 0xeb: {
-		if (!valid(4)) return false;
-		const int low = (int8)byteAt(1);
-		const int high = (int8)byteAt(2);
+		if (!isOpcodeDataValid(position, 4)) return false;
+		const int low = (int8)readOpcodeByte(position, 1);
+		const int high = (int8)readOpcodeByte(position, 2);
 		const int range = high - low + 1;
 		if (range <= 0) return false;
-		const byte target = byteAt(3);
+		const byte target = readOpcodeByte(position, 3);
 		if (!isDataRangeValid(position + 4 + target, 1)) return false;
 		writeDataByte(position + 4 + target,
 				(byte)(low + (nextRandom() & 0x7fff) % range));
@@ -801,10 +809,11 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 		break;
 	}
 	case 0xea: {
-		if (!valid(3)) return false;
-		const byte variable = byteAt(1);
-		const byte count = byteAt(2);
-		if (!validVar(variable) || !valid((uint32)count + 4)) return false;
+		if (!isOpcodeDataValid(position, 3)) return false;
+		const byte variable = readOpcodeByte(position, 1);
+		const byte count = readOpcodeByte(position, 2);
+		if (!isScriptVariableValid(variable) ||
+				!isOpcodeDataValid(position, (uint32)count + 4)) return false;
 		const uint16 base = position + 3;
 		const byte target = readDataByte(base + count);
 		if (!isDataRangeValid(base + _scriptVars[variable], 1) ||
@@ -821,21 +830,21 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 	case 0xe0: case 0xdf: case 0xde: case 0xdd:
 	case 0xdc: case 0xdb: case 0xda: case 0xd9:
 	case 0xd8: case 0xd7: case 0xd6: case 0xd5: {
-		if (!valid(3)) return false;
-		const byte first = byteAt(1);
-		const byte second = byteAt(2);
-		if (!validVar(first)) return false;
+		if (!isOpcodeDataValid(position, 3)) return false;
+		const byte first = readOpcodeByte(position, 1);
+		const byte second = readOpcodeByte(position, 2);
+		if (!isScriptVariableValid(first)) return false;
 		if (opcode == 0xe9) {
 			_scriptVars[first] = second;
 		} else if (opcode == 0xe8) {
-			if (!validVar(second)) return false;
+			if (!isScriptVariableValid(second)) return false;
 			_scriptVars[first] = _scriptVars[second];
 		} else if (opcode == 0xe7) {
 			if (!isDataRangeValid(position + 3 + second, 1)) return false;
 			writeDataByte(position + 3 + second, _scriptVars[first]);
 		} else {
 			const bool usesVariable = (opcode & 1) != 0;
-			if (usesVariable && !validVar(second)) return false;
+			if (usesVariable && !isScriptVariableValid(second)) return false;
 			const byte operand = usesVariable ? _scriptVars[second] : second;
 			byte &destination = _scriptVars[first];
 			switch (opcode) {
@@ -865,9 +874,9 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 	}
 	case 0xe6:
 	case 0xe5: {
-		if (!valid(2)) return false;
-		const byte variable = byteAt(1);
-		if (!validVar(variable)) return false;
+		if (!isOpcodeDataValid(position, 2)) return false;
+		const byte variable = readOpcodeByte(position, 1);
+		if (!isScriptVariableValid(variable)) return false;
 		_scriptVars[variable] += opcode == 0xe6 ? 1 : (byte)-1;
 		channel.position = position + 2;
 		break;
@@ -876,13 +885,13 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 	case 0xd0: case 0xcf: case 0xce: case 0xcd:
 	case 0xcc: case 0xcb: case 0xca: case 0xc9:
 	case 0xc8: case 0xc7: case 0xc6: case 0xc5: {
-		if (!valid(5)) return false;
-		const byte first = byteAt(1);
-		const byte second = byteAt(2);
-		if (!validVar(first)) return false;
+		if (!isOpcodeDataValid(position, 5)) return false;
+		const byte first = readOpcodeByte(position, 1);
+		const byte second = readOpcodeByte(position, 2);
+		if (!isScriptVariableValid(first)) return false;
 		const bool variablePair =
 				(opcode <= 0xd0 && opcode >= 0xcd) || opcode <= 0xc8;
-		if (variablePair && !validVar(second)) return false;
+		if (variablePair && !isScriptVariableValid(second)) return false;
 		bool take = false;
 		switch (opcode) {
 		case 0xd4: case 0xcc: take = second == _scriptVars[first]; break;
@@ -900,36 +909,37 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 			take = _scriptVars[first] < _scriptVars[second]; break;
 		default: break;
 		}
-		if (!branch(take)) return false;
+		if (!transferOpcode(channel, position, take)) return false;
 		break;
 	}
 	case 0xc4:
-		if (!valid(3) || !callFunction(wordAt(1), channel)) return false;
+		if (!isOpcodeDataValid(position, 3) ||
+				!callFunction(readOpcodeWord(position, 1), channel)) return false;
 		channel.position = position + 3;
 		break;
 	case 0xc3:
-		if (!valid(2)) return false;
+		if (!isOpcodeDataValid(position, 2)) return false;
 		channel.position = position + 2;
 		break;
 	case 0xc2:
-		if (!valid(4)) return false;
+		if (!isOpcodeDataValid(position, 4)) return false;
 		channel.position = position + 4;
 		break;
 	case 0xc1:
-		if (!valid(2)) return false;
-		_tempoScale = byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		_tempoScale = readOpcodeByte(position, 1);
 		channel.position = position + 2;
 		break;
 	case 0xc0:
-		if (!valid(2)) return false;
-		_tempoReload = byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		_tempoReload = readOpcodeByte(position, 1);
 		channel.position = position + 2;
 		if (!_frameNumber2)
 			_tempoCurrent = _tempoReload;
 		break;
 	case 0xbf:
-		if (!valid(3)) return false;
-		_tempoTarget = wordAt(1);
+		if (!isOpcodeDataValid(position, 3)) return false;
+		_tempoTarget = readOpcodeWord(position, 1);
 		channel.position = position + 3;
 		if (!_frameNumber2)
 			_tempoBase = _tempoTarget;
@@ -937,8 +947,8 @@ bool PSound::executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty) {
 		_tickCounter = 1;
 		break;
 	case 0xbe:
-		if (!valid(2)) return false;
-		_tempoShift = (int8)byteAt(1);
+		if (!isOpcodeDataValid(position, 2)) return false;
+		_tempoShift = (int8)readOpcodeByte(position, 1);
 		channel.position = position + 2;
 		break;
 	default:
