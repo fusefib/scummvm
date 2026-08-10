@@ -30,6 +30,9 @@ namespace RexNebular {
 namespace Sound {
 
 constexpr int CHAN_COMMAND_COUNT = 15;
+constexpr int HOST_CALLBACK_RATE =
+	NativeSoundTimer::kPitClockHz /
+	NativeSoundTimer::kHostTimerDivisor;
 
 bool AdlibChannel::_channelsEnabled;
 
@@ -128,6 +131,7 @@ ASound::ASound(Audio::Mixer *mixer, const Common::Path &filename, int dataOffset
 	_frameCounter = 0;
 	_isDisabled = false;
 	_masterVolume = 255;
+	_noiseEnabled = false;
 	_noiseTicks1 = 0;
 	_noiseTicks2 = 0;
 	_activeChannelNumber = 0;
@@ -163,7 +167,8 @@ ASound::ASound(Audio::Mixer *mixer, const Common::Path &filename, int dataOffset
 	// Initialize the OPL instance
 	_opl = OPL::Config::create();
 	_opl->init();
-	_opl->start(new Common::Functor0Mem<void, ASound>(this, &ASound::onTimer), CALLBACKS_PER_SECOND);
+	_opl->start(new Common::Functor0Mem<void, ASound>(this, &ASound::onTimer),
+		HOST_CALLBACK_RATE);
 
 	// Initialize the Adlib
 	adlibInit();
@@ -593,7 +598,19 @@ void ASound::updateFNumber() {
 }
 
 void ASound::onTimer() {
-	poll();
+	uint32 serviceTicks = _hostTimer.advance(1, HOST_CALLBACK_RATE);
+	while (serviceTicks--) {
+		// The original host calls export 4 before export 3. A poll result
+		// consequently changes noise service beginning with the next tick.
+		if (_noiseEnabled)
+			noise();
+
+		if (_hostTimer.pollDue()) {
+			const int result = poll();
+			if (result)
+				_noiseEnabled = result > 0;
+		}
+	}
 }
 
 void ASound::setVolume(int volume) {

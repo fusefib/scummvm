@@ -24,6 +24,7 @@
 
 #include "audio/fmopl.h"
 #include "mads/core/sound_manager.h"
+#include "mads/core/native_sound_timer.h"
 
 namespace MADS {
 namespace RexNebular {
@@ -138,6 +139,8 @@ private:
 	OPL::OPL *_opl;
 	uint16 _randomSeed;
 	int _masterVolume;
+	NativeSoundTimer _hostTimer;
+	bool _noiseEnabled;
 
 	/**
 	 * Does the initial Adlib initialisation
