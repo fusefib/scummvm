@@ -113,8 +113,11 @@ void DragonSoundManager::validate() {
 			return;
 		_driverType = SOUND_ADLIB;
 		ASound::validate(_isDemo);
-	} else if (_driverType == SOUND_MT32 && !_isDemo) {
-		RSound::validate();
+	} else if (_driverType == SOUND_MT32) {
+		if (_isDemo)
+			RSoundDemo::validate();
+		else
+			RSound::validate();
 	} else {
 		ASound::validate(_isDemo);
 	}
@@ -132,8 +135,23 @@ void DragonSoundManager::loadDriver(int sectionNumber) {
 			_driverType = SOUND_ADLIB;
 			loadDriver(sectionNumber);
 		}
-	} else if (_driverType == SOUND_MT32 && !_isDemo) {
+	} else if (_driverType == SOUND_MT32) {
 		// Roland MT32 drivers
+		if (_isDemo) {
+			switch (sectionNumber) {
+			case 1:
+				_driver = new RSoundDemo1(_mixer);
+				break;
+			case 9:
+				_driver = new RSoundDemo9(_mixer);
+				break;
+			default:
+				_driver = nullptr;
+				break;
+			}
+			return;
+		}
+
 		switch (sectionNumber) {
 		case 1:
 			_driver = new RSound1(_mixer);

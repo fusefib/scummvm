@@ -834,6 +834,100 @@ public:
 	int command(int commandId, int param) override;
 };
 
+/**
+ * Shared support for the Dragonsphere demo RSOUND overlays.
+ *
+ * The demos use the retail game's bytecode interpreter and host cadence, but
+ * have their own overlay layouts, dispatch tables and embedded sequence roots.
+ */
+class RSoundDemo : public RSound {
+protected:
+	RSoundDemo(Audio::Mixer *mixer, const Common::Path &filename,
+			int dataOffset, int dataSize, int sysExOffset);
+
+	int executeDemoCommonCommand(int commandId);
+	int queueDemoMusic(CallbackFunction callback, uint16 counter,
+			uint16 period);
+	Channel *playDemoSoundAny(int offset);
+
+public:
+	static void validate();
+};
+
+/** Demo RSOUND.DR1: `RLND DragonS07/21/93`. */
+class RSoundDemo1 : public RSoundDemo {
+private:
+	int command16();
+	void loadCommand16();
+	int command32();
+	void loadCommand32();
+	int command33();
+	void loadCommand33();
+	int command34();
+	void loadCommand34();
+	int command35();
+	void loadCommand35();
+	int command36();
+	void loadCommand36();
+	int command37();
+	void loadCommand37();
+	int command38();
+	void loadCommand38();
+	int command39();
+	void loadCommand39();
+	int command40();
+	void loadCommand40();
+	int command41();
+	void loadCommand41();
+	int command42();
+	void loadCommand42();
+	int command43();
+	void loadCommand43();
+	int command44();
+	void loadCommand44();
+	int command45();
+	void loadCommand45();
+	int command92();
+	void loadCommand92();
+	bool callFunction(uint16 targetOffset, Channel &channel) override;
+
+public:
+	explicit RSoundDemo1(Audio::Mixer *mixer);
+	int command(int commandId, int param) override;
+};
+
+/** Demo RSOUND.DR9: `RLND DragonS07/30/93`. */
+class RSoundDemo9 : public RSoundDemo {
+private:
+	int command32();
+	int command33Or47();
+	void loadCommand33Or47();
+	int command34();
+	void loadCommand34();
+	int command35();
+	void loadCommand35();
+	int command36();
+	void loadCommand36();
+	int command37();
+	void loadCommand37();
+	int command38();
+	void loadCommand38();
+	int command39();
+	void loadCommand39();
+	int command40();
+	void loadCommand40();
+	int command41();
+	void loadCommand41();
+	int command42();
+	void loadCommand42();
+	int command43();
+	int command44();
+
+public:
+	explicit RSoundDemo9(Audio::Mixer *mixer);
+	int command(int commandId, int param) override;
+};
+
 } // namespace Sound
 } // namespace Dragonsphere
 } // namespace MADS
