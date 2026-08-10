@@ -58,6 +58,7 @@ private:
 
 	int command16();
 	void loadCommand16();
+	void loadCallback2478();
 
 	int command17();
 
@@ -149,6 +150,7 @@ private:
 	int command99();
 	int command100();
 	int command101();
+	bool callFunction(uint16 targetOffset, Channel &channel) override;
 
 public:
 	RSound1(Audio::Mixer *mixer);
@@ -310,6 +312,7 @@ private:
 	int command71();
 	int command72();
 	int command73();
+	bool callFunction(uint16 targetOffset, Channel &channel) override;
 
 public:
 	RSound3(Audio::Mixer *mixer);
@@ -421,6 +424,7 @@ private:
 	int command76();
 	int command77();
 	int command78();
+	bool callFunction(uint16 targetOffset, Channel &channel) override;
 
 public:
 	RSound4(Audio::Mixer *mixer);
@@ -466,6 +470,7 @@ private:
 	int command16();
 	void loadCommand16A();
 	void loadCommand16B();
+	void dispatchCommand16B();
 
 	int command17();
 	int command18();
@@ -520,6 +525,7 @@ private:
 	/** Uses _commandParam: if 0, conditionally redirects channel 8's inner loop pointer; otherwise writes a clamped 7-bit value into the sound data at offset 0x20D6 (11 bytes into the block about to be played) and gate-loads channel 8. */
 	int command77();
 	int command78();
+	bool callFunction(uint16 targetOffset, Channel &channel) override;
 
 public:
 	RSound5(Audio::Mixer *mixer);
@@ -820,6 +826,7 @@ private:
 
 	typedef int (RSound9:: *CommandPtr)();
 	static const CommandPtr _commandList[96];
+	bool callFunction(uint16 targetOffset, Channel &channel) override;
 
 public:
 	RSound9(Audio::Mixer *mixer);

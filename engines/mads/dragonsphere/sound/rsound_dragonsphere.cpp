@@ -31,6 +31,36 @@ namespace Sound {
 RSound1::RSound1(Audio::Mixer *mixer) : RSound(mixer, "rsound.dr1", 0x2C00, 0x3840, 0x9C) {
 }
 
+bool RSound1::callFunction(uint16 targetOffset, Channel &channel) {
+	(void)channel;
+	switch (targetOffset) {
+	case 0x0886:
+		command1();
+		return true;
+	case 0x23A6:
+		command16();
+		return true;
+	case 0x23EE:
+		command32();
+		return true;
+	case 0x2478:
+		if (isSoundActive(loadData(0xC96)))
+			return true;
+		if (isMusicChannelsActive())
+			scheduleCallback(MAKE_CALLBACK(RSound1, loadCallback2478));
+		else {
+			resetCallbackTimer(0x50);
+			loadCallback2478();
+		}
+		return true;
+	case 0x262C:
+		command40();
+		return true;
+	default:
+		return false;
+	}
+}
+
 const RSound1::CommandPtr RSound1::_commandList[102] = {
 	&RSound1::command0, &RSound1::command1, &RSound1::command2, &RSound1::command3,
 	&RSound1::command4, &RSound1::command5, &RSound1::command6, &RSound1::command7,
@@ -92,6 +122,13 @@ void RSound1::loadCommand16() {
 	_channels[1].load(loadData(0x8C3));
 	_channels[2].load(loadData(0x939));
 	_channels[3].load(loadData(0x9AF));
+}
+
+void RSound1::loadCallback2478() {
+	command3();
+	_channels[0].load(loadData(0xC96));
+	_channels[1].load(loadData(0xCD2));
+	_channels[2].load(loadData(0xD41));
 }
 
 int RSound1::command17() {
@@ -1007,6 +1044,25 @@ int RSound2::command(int commandId, int param) {
 RSound3::RSound3(Audio::Mixer *mixer) : RSound(mixer, "rsound.dr3", 0x2750, 0x1780, 0xAC) {
 }
 
+bool RSound3::callFunction(uint16 targetOffset, Channel &channel) {
+	(void)channel;
+	if (targetOffset != 0x2523)
+		return false;
+
+	Channel *source = &_channels[0];
+	if (source->_innerLoopCount) {
+		source = &_channels[3];
+		if (source->_innerLoopCount)
+			source = &_channels[4];
+	}
+
+	byte note = source->_note;
+	while (note < 0x58)
+		note += 12;
+	*loadData(0x1496) = note;
+	return true;
+}
+
 int RSound3::command1() {
 	// Must call THIS driver's own command3() (not virtual in the base -
 	// see class comment).
@@ -1255,6 +1311,18 @@ int RSound3::command(int commandId, int param) {
 /*-----------------------------------------------------------------------*/
 
 RSound4::RSound4(Audio::Mixer *mixer) : RSound(mixer, "rsound.dr4", 0x2930, 0x2370, 0xAC) {
+}
+
+bool RSound4::callFunction(uint16 targetOffset, Channel &channel) {
+	(void)channel;
+	if (targetOffset != 0x270E)
+		return false;
+
+	byte note = _channels[0]._note;
+	while (note > 0x2B)
+		note -= 12;
+	*loadData(0x2158) = note;
+	return true;
 }
 
 int RSound4::command1() {
@@ -1700,6 +1768,14 @@ int RSound4::command78() {
 RSound5::RSound5(Audio::Mixer *mixer) : RSound(mixer, "rsound.dr5", 0x2910, 0x2530, 0x9C) {
 }
 
+bool RSound5::callFunction(uint16 targetOffset, Channel &channel) {
+	(void)channel;
+	if (targetOffset != 0x23AD)
+		return false;
+	dispatchCommand16B();
+	return true;
+}
+
 int RSound5::command1() {
 	// Must call THIS driver's own command5() (not virtual in the base -
 	// see class comment).
@@ -1798,6 +1874,18 @@ void RSound5::loadCommand16B() {
 	_channels[3].load(loadData(0xA8B));
 	_channels[4].load(loadData(0xB08));
 	_channels[8].load(loadData(0xD1B));
+}
+
+void RSound5::dispatchCommand16B() {
+	if (isSoundActive(loadData(0x7E9)) ||
+			isSoundActive(loadData(0x7DC)))
+		return;
+	if (isMusicChannelsActive())
+		scheduleCallback(MAKE_CALLBACK(RSound5, loadCommand16B));
+	else {
+		resetCallbackTimer(0xC0);
+		loadCommand16B();
+	}
 }
 
 int RSound5::command17() {
@@ -2756,6 +2844,14 @@ int RSound6::command98() {
 /*-----------------------------------------------------------------------*/
 
 RSound9::RSound9(Audio::Mixer *mixer) : RSound(mixer, "rsound.dr9", 0x2BC0, 0x52D0, 0x9A) {
+}
+
+bool RSound9::callFunction(uint16 targetOffset, Channel &channel) {
+	(void)channel;
+	if (targetOffset != 0x23A0)
+		return false;
+	command32();
+	return true;
 }
 
 int RSound9::command1() {

@@ -22,6 +22,8 @@
 #ifndef MADS_DRAGONSPHERE_SOUND_RSOUND_H
 #define MADS_DRAGONSPHERE_SOUND_RSOUND_H
 
+#include "audio/mt32gm.h"
+#include "mads/core/native_sound_timer.h"
 #include "mads/core/sound_manager.h"
 
 namespace MADS {
@@ -163,10 +165,6 @@ public:
  *    silence stream (2 bytes here, unlike Phantom's 3 - confirmed
  *    directly from this disassembly).
  *
- * NOTE: The actual MIDI transmission (sendMidiByte()) currently just logs
- * via warning() - it isn't hooked up to a real ScummVM MIDI/MT-32 output
- * yet, matching every other RSound/ASound driver in this codebase.
- *
  * NOTE: DOS-specific driver ceremony from the original (timer IRQ hooking,
  * MPU-401 hardware detection/reset, PIT-based SysEx delay calibration, the
  * system-clock save/restore around it) has no ScummVM equivalent and is
@@ -174,6 +172,8 @@ public:
  */
 class RSound : public SoundDriver {
 	friend class Channel;
+private:
+	int _masterVolume = 255;
 public:
 	/**
 	 * Member-function pointer type for deferred sound-loader callbacks.
@@ -183,11 +183,12 @@ public:
 	 */
 	typedef void (RSound::*CallbackFunction)();
 
-private:
+	private:
 	uint16 _randomSeed;
-	byte _lastMidiStatus;         // running-status cache, avoids resending an unchanged status byte
-	byte _sysexChecksum;
 	int _stateChangedFlag;        // latches _pollResult=0xFFFF once per state change
+	MidiDriver_MT32GM *_midiDriver;
+	uint32 _driverCallbackDelta;
+	NativeSoundTimer _hostTimer;
 
 	/**
 	 * Per-MIDI-channel held-note slots (index 0 unused; channels are
@@ -439,9 +440,12 @@ protected:
 
 	int getRandomNumber();
 
+	/** Resolve native near callbacks embedded in section-specific streams. */
+	virtual bool callFunction(uint16, Channel &) {
+		return false;
+	}
+
 	// ---- Low-level MIDI send helpers -------------------------------
-	void sendMidiByte(byte value);
-	void sendStatus(int midiChannel, byte statusNibble);
 	void sendNoteOn(int midiChannel, int note, int velocity);
 	void sendProgramChange(int midiChannel, int program);
 
@@ -514,6 +518,8 @@ protected:
 	 * Dragonsphere.
 	 */
 	void sendReverbSysEx(int mode, int time, int level);
+	void onTimer();
+	static void timerCallback(void *data);
 
 	int command0();
 	int command1();
@@ -554,8 +560,7 @@ public:
 	RSound(Audio::Mixer *mixer, const Common::Path &filename,
 		int dataOffset, int dataSize, int sysExOffset);
 
-	~RSound() override {
-	}
+	~RSound() override;
 
 	int stop() override;
 	int poll() override;
