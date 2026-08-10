@@ -74,6 +74,16 @@ public:
 	int command(int commandId, int param) override;
 };
 
+/** Demo control layer: its exported dispatcher has no saved music command. */
+class DragonspherePSoundDemo : public DragonspherePSound {
+protected:
+	DragonspherePSoundDemo(Audio::Mixer *mixer,
+			const PSoundDriverData &driverData, bool resetClearsCallback);
+
+public:
+	int command(int commandId, int param) override;
+};
+
 #define DECLARE_DRAGONSPHERE_PSOUND(_section, _count) \
 	class PSound##_section final : public DragonspherePSound { \
 	private: \
@@ -101,7 +111,25 @@ public:
 	explicit PSound5(Audio::Mixer *mixer);
 };
 
-/** Validate one exact retail section overlay. */
+class PSoundDemo1 final : public DragonspherePSoundDemo {
+private:
+	static const uint16 _commandList[89];
+	int executeCommand(int commandId, bool loadOnly) override;
+	bool callFunction(uint16 targetOffset, Channel &channel) override;
+public:
+	explicit PSoundDemo1(Audio::Mixer *mixer);
+};
+
+class PSoundDemo9 final : public DragonspherePSoundDemo {
+private:
+	static const uint16 _commandList[51];
+	int executeCommand(int commandId, bool loadOnly) override;
+	bool callFunction(uint16 targetOffset, Channel &channel) override;
+public:
+	explicit PSoundDemo9(Audio::Mixer *mixer);
+};
+
+/** Validate one exact retail section overlay or separately built demo file. */
 bool validateDragonspherePSoundFile(int section, bool isDemo,
 		Common::String *reason = nullptr);
 

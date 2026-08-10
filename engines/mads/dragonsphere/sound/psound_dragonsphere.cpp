@@ -55,6 +55,16 @@ const PSoundDriverData kPSound9Data = {
 	0x016a, 52, { 0x0096, 0x0116, 0x0132, 0x013c, 0x0146 }
 };
 
+const PSoundDriverData kPSoundDemo1Data = {
+	"PSOUND.DR1", 0x3110, 0x4933, 0x4d30, 0x0970, 0x06da,
+	0x0d62, 128, { 0x0058, 0x00d8, 0x00f4, 0x00fe, 0x0108 }
+};
+
+const PSoundDriverData kPSoundDemo9Data = {
+	"PSOUND.DR9", 0x3170, 0x5f47, 0x6340, 0x0a44, 0x09d4,
+	0x0b64, 128, { 0x0a90, 0x0b10, 0x0b2c, 0x0b36, 0x0b40 }
+};
+
 struct ValidationEntry {
 	const PSoundDriverData *driverData;
 	const char *first8192Md5;
@@ -70,6 +80,11 @@ const ValidationEntry kRetailValidation[] = {
 	{ &kPSound9Data, "0f946874841f337fb2c267a70aff119a" }
 };
 
+const ValidationEntry kDemoValidation[] = {
+	{ &kPSoundDemo1Data, "baa780e3793975905516ad95ffa07383" },
+	{ &kPSoundDemo9Data, "cf13056c76a459a5739d5f2fa21dc4ff" }
+};
+
 const ValidationEntry *retailValidationForSection(int section) {
 	switch (section) {
 	case 1: return &kRetailValidation[0];
@@ -83,13 +98,22 @@ const ValidationEntry *retailValidationForSection(int section) {
 	}
 }
 
+const ValidationEntry *demoValidationForSection(int section) {
+	switch (section) {
+	case 1: return &kDemoValidation[0];
+	case 9: return &kDemoValidation[1];
+	default: return nullptr;
+	}
+}
+
 const int kPSound5AlternateMusic = 0x100;
 
 } // namespace
 
 bool validateDragonspherePSoundFile(int section, bool isDemo,
 		Common::String *reason) {
-	const ValidationEntry *entry = isDemo ? nullptr :
+	const ValidationEntry *entry = isDemo ?
+			demoValidationForSection(section) :
 			retailValidationForSection(section);
 	if (!entry) {
 		if (reason)
@@ -108,6 +132,20 @@ DragonspherePSound::DragonspherePSound(Audio::Mixer *mixer,
 		_pendingCommand(-1), _pendingLoadOnly(false), _musicIndex(-1),
 		_maxMusicCommand(maxMusicCommand),
 		_resetClearsCallback(resetClearsCallback) {
+}
+
+DragonspherePSoundDemo::DragonspherePSoundDemo(Audio::Mixer *mixer,
+		const PSoundDriverData &driverData, bool resetClearsCallback) :
+		DragonspherePSound(mixer, driverData, 0, resetClearsCallback) {
+}
+
+int DragonspherePSoundDemo::command(int commandId, int param) {
+	Common::StackLock lock(_driverMutex);
+	_commandParam = param;
+	_frameCounter = 0;
+	// The demo dispatchers call their group-32 handlers directly and never
+	// maintain the retail driver's saved music-command word.
+	return executeCommand(commandId, false);
 }
 
 int DragonspherePSound::dispatchBaseCommand(int commandId) {
@@ -1774,6 +1812,400 @@ int PSound9::executeCommand(int commandId, bool loadOnly) {
 	case 63:
 		loadChannel(6, 0x5b39);
 		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+const uint16 PSoundDemo1::_commandList[89] = {
+	0x23f6,0x287d,0x2746,0x2884,0x276e,0x28ac,0x2784,0x27f0,0x2955,
+	0,0,0,0,0,0,0,
+	0x21ea,
+	0,0,0,0,0,0,0,
+	0x22a0,0x22ae,0x22bc,0x22c3,0x22ca,0x22cb,
+	0,0,
+	0x2218,0x226a,0x22d4,0x2e20,0x2bfe,0x2c4a,0x2c8e,0x2d2c,
+	0x2d6a,0x2ce0,0x2b8e,0x2e6c,0x2ebe,0x2dd4,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+	0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,
+	0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,
+	0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,0x22d3,
+	0x22d3
+};
+
+PSoundDemo1::PSoundDemo1(Audio::Mixer *mixer) :
+		DragonspherePSoundDemo(mixer, kPSoundDemo1Data, true) {
+}
+
+bool PSoundDemo1::callFunction(uint16 targetOffset, Channel &channel) {
+	(void)channel;
+	if (targetOffset != 0x2dbc)
+		return false;
+	_callbackCounter = 0xc0;
+	_callbackPeriod = 0x60;
+	deferCommand(16, false);
+	return true;
+}
+
+int PSoundDemo1::executeCommand(int commandId, bool loadOnly) {
+	if (commandId < 0 || commandId >= ARRAYSIZE(_commandList) ||
+			!_commandList[commandId])
+		return 0;
+	if (commandId <= 8)
+		return dispatchBaseCommand(commandId);
+	if (commandId >= 64)
+		return 0;
+	if (commandId >= 24 && commandId <= 29) {
+		static const uint16 effects[][2] = {
+			{ 0x06dc, 0x06e8 }, { 0x06f6, 0x0702 }, { 0x0710, 0 },
+			{ 0x0718, 0 }, { 0, 0 }, { 0x0724, 0 }
+		};
+		const uint index = commandId - 24;
+		if (effects[index][0])
+			playSound(effects[index][0]);
+		if (effects[index][1])
+			playSound(effects[index][1]);
+		return 0;
+	}
+
+	switch (commandId) {
+	case 16: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x012c }, { 1, 0x01d5 }, { 2, 0x0278 },
+			{ 3, 0x0352 }, { 4, 0x03a7 }, { 5, 0x03b4 }
+		};
+		const MusicLoad load = { kStopAll, -1, -1, -1, false,
+			channels, ARRAYSIZE(channels) };
+		applyMusicLoad(load);
+		break;
+	}
+	case 32: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x03d1 }, { 6, 0x0417 }, { 2, 0x0490 },
+			{ 3, 0x0487 }, { 4, 0x04b9 }, { 5, 0x03c4 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0xb0, 0xb0, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 33: {
+		static const ChannelLoad channels[] = {
+			{ 6, 0x04e4 }, { 1, 0x05c8 }, { 2, 0x062d },
+			{ 3, 0x0661 }, { 4, 0x065a }, { 5, 0x05bb }, { 0, 0x0569 }
+		};
+		const MusicLoad load = { kStopAll, -1, -1, -1, false,
+			channels, ARRAYSIZE(channels) };
+		applyMusicLoad(load);
+		break;
+	}
+	case 34: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x074c }, { 1, 0x07c1 }, { 2, 0x0834 },
+			{ 3, 0x08c7 }, { 4, 0x093c }, { 5, 0x078d }
+		};
+		const MusicLoad load = { kStopAll, -1, -1, -1, false,
+			channels, ARRAYSIZE(channels) };
+		applyMusicLoad(load);
+		break;
+	}
+	case 35: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x443c }, { 1, 0x44d3 }, { 2, 0x455c },
+			{ 3, 0x45b2 }, { 4, 0x45a9 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x60, 0x60, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 36: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x09b4 }, { 1, 0x0a87 }, { 2, 0x0b7e },
+			{ 3, 0x0c13 }, { 4, 0x0a7a }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x80, 0x80, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 37: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x0c8a }, { 1, 0x0cf9 }, { 2, 0x0cec }, { 3, 0x0ce1 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0xc0, 0xc0, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 38: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x2d62 }, { 1, 0x2e24 }, { 2, 0x2f1a },
+			{ 3, 0x3013 }, { 4, 0x2d70 }, { 5, 0x2f23 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x60, 0x60, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 39: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x336e }, { 1, 0x33c2 }, { 2, 0x3423 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0xb0, 0xb0, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 40: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x34c0 }, { 1, 0x36a0 }, { 2, 0x37f1 },
+			{ 3, 0x3a88 }, { 4, 0x3c81 }, { 5, 0x37ea }
+		};
+		const MusicLoad load = { kStopAll, -1, 0xa8, 0xa8, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 41: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x3104 }, { 1, 0x3178 }, { 2, 0x31ef },
+			{ 3, 0x3246 }, { 4, 0x331f }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x90, 0x90, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 42:
+		break;
+	case 43: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x45de }, { 1, 0x4665 }, { 2, 0x467e },
+			{ 3, 0x4699 }, { 4, 0x46b6 }, { 5, 0x4624 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x50, 0x50, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 44: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x46d6 }, { 1, 0x4728 }, { 2, 0x4767 },
+			{ 3, 0x478f }, { 4, 0x47f5 }, { 5, 0x48bf }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x60, 0xe0, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 45: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x3f1a }, { 1, 0x4048 }, { 2, 0x40f6 },
+			{ 3, 0x41d7 }, { 4, 0x4297 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x60, 0x60, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	default:
+		break;
+	}
+	return 0;
+}
+
+const uint16 PSoundDemo9::_commandList[51] = {
+	0x0266,0x06ed,0x05b6,0x06f4,0x05de,0x071c,0x05f4,0x0660,0x07e3,
+	0,0,0,0,0,0,0,
+	0x0a46,
+	0,0,0,0,0,0,0,
+	0x0132,0x0140,0x014e,0x0155,0x0171,0x0171,
+	0,0,
+	0x0048,0x2cce,0x2d22,0x2d76,0x2dca,0x0096,0x00e4,0x2e1e,
+	0x2e72,0x2be0,0x2c7a,0x2f2c,0x2f00,0x2ec6,0x2ee3,0x2cce,
+	0x015c,0x0163,0x016a
+};
+
+PSoundDemo9::PSoundDemo9(Audio::Mixer *mixer) :
+		DragonspherePSoundDemo(mixer, kPSoundDemo9Data, false) {
+}
+
+bool PSoundDemo9::callFunction(uint16 targetOffset, Channel &channel) {
+	(void)targetOffset;
+	(void)channel;
+	return false;
+}
+
+int PSoundDemo9::executeCommand(int commandId, bool loadOnly) {
+	if (commandId < 0 || commandId >= ARRAYSIZE(_commandList) ||
+			!_commandList[commandId])
+		return 0;
+	if (commandId <= 8)
+		return dispatchBaseCommand(commandId);
+	if (commandId >= 24 && commandId <= 29) {
+		static const uint16 effects[][2] = {
+			{ 0x09d6, 0x09e2 }, { 0x09f0, 0x09fc }, { 0x0a0a, 0 },
+			{ 0x0a12, 0 }, { 0, 0 }, { 0, 0 }
+		};
+		const uint index = commandId - 24;
+		if (effects[index][0])
+			playSound(effects[index][0]);
+		if (effects[index][1])
+			playSound(effects[index][1]);
+		return 0;
+	}
+	switch (commandId) {
+	case 45: {
+		static const uint16 sounds[] = { 0x5981, 0x59f2, 0x5974, 0x59e5 };
+		playSounds(sounds, ARRAYSIZE(sounds), true);
+		return 0;
+	}
+	case 46: {
+		static const uint16 sounds[] = { 0x5a4e, 0x5ab4, 0x5a41, 0x5aa7 };
+		playSounds(sounds, ARRAYSIZE(sounds), true);
+		return 0;
+	}
+	case 48: playSound(0x0a20); return 0;
+	case 49: playSound(0x0a2a); return 0;
+	case 50: playSound(0x0a32); return 0;
+	default: break;
+	}
+
+	switch (commandId) {
+	case 16:
+		break;
+	case 32: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x0050 }, { 1, 0x007c }, { 2, 0x0136 },
+			{ 3, 0x016e }, { 4, 0x02a4 }, { 5, 0x0398 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x62, 0x54, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 33:
+	case 47: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x37f2 }, { 1, 0x385a }, { 2, 0x38c2 },
+			{ 3, 0x397e }, { 4, 0x39dc }, { 5, 0x3a36 }, { 6, 0x3b98 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x62, 0x54, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 34: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x3c74 }, { 1, 0x3e6e }, { 2, 0x4075 },
+			{ 3, 0x4278 }, { 4, 0x43e1 }, { 5, 0x44e6 }, { 6, 0x453d }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x38, 0x38, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 35: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x45c6 }, { 1, 0x4627 }, { 2, 0x467f },
+			{ 3, 0x4745 }, { 4, 0x47b5 }, { 5, 0x4811 }, { 6, 0x48dd }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x50, 0x50, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 36: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x4a44 }, { 1, 0x4ab8 }, { 2, 0x4b32 },
+			{ 3, 0x4b66 }, { 4, 0x4e27 }, { 5, 0x4e91 }, { 6, 0x4eef }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x28, 0x28, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 37: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x0422 }, { 1, 0x04a4 }, { 2, 0x052a },
+			{ 3, 0x056e }, { 4, 0x0640 }, { 5, 0x06a5 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x50, 0x50, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 38: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x07de }, { 1, 0x0858 }, { 2, 0x08d8 },
+			{ 3, 0x090a }, { 4, 0x0910 }, { 5, 0x0972 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x28, 0x28, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 39: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x4f28 }, { 1, 0x4fb0 }, { 2, 0x5040 },
+			{ 3, 0x5132 }, { 4, 0x55b4 }, { 5, 0x562a }, { 6, 0x565c }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x28, 0x28, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 40: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x3c74 }, { 1, 0x3e6e }, { 2, 0x4075 },
+			{ 3, 0x5756 }, { 4, 0x5848 }, { 5, 0x58e4 }, { 6, 0x5938 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x38, 0x38, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 41: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x2b64 }, { 1, 0x3091 }, { 2, 0x320c },
+			{ 3, 0x32a1 }, { 4, 0x3366 }, { 5, 0x35ef }
+		};
+		const MusicLoad load = { kStopAll, -1, 0x54, 0x54, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 42: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x2ba8 }, { 6, 0x2bee }, { 2, 0x3108 },
+			{ 3, 0x324a }, { 4, 0x32d8 }, { 5, 0x3449 }, { 1, 0x368c }
+		};
+		const MusicLoad load = { kStopAll, -1, 0xa8, 0x50, true,
+			channels, ARRAYSIZE(channels) };
+		startOrDeferMusicWhenActive(commandId, 0, load, loadOnly);
+		break;
+	}
+	case 43: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x5bce }, { 1, 0x5c36 }, { 2, 0x5c98 },
+			{ 3, 0x5e9d }, { 4, 0x5ebb }, { 5, 0x5edb }, { 6, 0x5f13 }
+		};
+		const MusicLoad load = { kKeepPlayback, -1, 0x60, 0x60, true,
+			channels, ARRAYSIZE(channels) };
+		applyMusicLoad(load);
+		break;
+	}
+	case 44: {
+		static const ChannelLoad channels[] = {
+			{ 0, 0x5b0e }, { 1, 0x5b5a }, { 2, 0x5b88 }
+		};
+		const MusicLoad load = { kStopAll, -1, 0xc0, 0xc0, true,
+			channels, ARRAYSIZE(channels) };
+		applyMusicLoad(load);
+		break;
+	}
 	default:
 		break;
 	}

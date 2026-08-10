@@ -34,7 +34,19 @@ namespace {
 
 const int kRetailSections[] = { 1, 2, 3, 4, 5, 6, 9 };
 
-SoundDriver *createPSound(Audio::Mixer *mixer, int sectionNumber) {
+SoundDriver *createPSound(Audio::Mixer *mixer, int sectionNumber,
+		bool isDemo) {
+	if (isDemo) {
+		switch (sectionNumber) {
+		case 1:
+			return new PSoundDemo1(mixer);
+		case 9:
+			return new PSoundDemo9(mixer);
+		default:
+			return nullptr;
+		}
+	}
+
 	switch (sectionNumber) {
 	case 1:
 		return new PSound1(mixer);
@@ -60,7 +72,7 @@ SoundDriver *createPSound(Audio::Mixer *mixer, int sectionNumber) {
 DragonSoundManager::DragonSoundManager(Audio::Mixer *mixer,
 		bool &soundFlag, bool usePas, bool isDemo) :
 		SoundManager(mixer, soundFlag), _isDemo(isDemo) {
-	if (usePas && !_isDemo && _driverType == SOUND_ADLIB) {
+	if (usePas && _driverType == SOUND_ADLIB) {
 		if (OPL::Config::detect(OPL::Config::kOpl3) >= 0) {
 			_driverType = SOUND_PAS;
 		} else {
@@ -73,14 +85,28 @@ DragonSoundManager::DragonSoundManager(Audio::Mixer *mixer,
 void DragonSoundManager::validate() {
 	if (_driverType == SOUND_PAS) {
 		bool valid = true;
-		for (uint index = 0; index < ARRAYSIZE(kRetailSections); ++index) {
-			Common::String reason;
-			if (!validateDragonspherePSoundFile(kRetailSections[index], false,
-					&reason)) {
-				warning("Cannot use Dragonsphere PSOUND section %d: %s; "
-						"using AdLib", kRetailSections[index],
-						reason.c_str());
-				valid = false;
+		if (_isDemo) {
+			const int demoSections[] = { 1, 9 };
+			for (uint index = 0; index < ARRAYSIZE(demoSections); ++index) {
+				Common::String reason;
+				if (!validateDragonspherePSoundFile(demoSections[index], true,
+						&reason)) {
+					warning("Cannot use Dragonsphere demo PSOUND section %d: "
+							"%s; using AdLib", demoSections[index],
+							reason.c_str());
+					valid = false;
+				}
+			}
+		} else {
+			for (uint index = 0; index < ARRAYSIZE(kRetailSections); ++index) {
+				Common::String reason;
+				if (!validateDragonspherePSoundFile(kRetailSections[index], false,
+						&reason)) {
+					warning("Cannot use Dragonsphere PSOUND section %d: %s; "
+							"using AdLib", kRetailSections[index],
+							reason.c_str());
+					valid = false;
+				}
 			}
 		}
 		if (valid)
@@ -98,7 +124,7 @@ void DragonSoundManager::loadDriver(int sectionNumber) {
 	removeDriver();
 
 	if (_driverType == SOUND_PAS) {
-		_driver = createPSound(_mixer, sectionNumber);
+		_driver = createPSound(_mixer, sectionNumber, _isDemo);
 		if (_driver && !static_cast<PSound *>(_driver)->isReady()) {
 			warning("Could not initialize Pro Audio Spectrum 16 OPL3 output; "
 					"falling back to AdLib");
