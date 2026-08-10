@@ -26,6 +26,7 @@
 #include "common/mutex.h"
 #include "common/queue.h"
 #include "common/util.h"
+#include "mads/core/native_sound_timer.h"
 #include "mads/core/sound_manager.h"
 
 namespace MADS {
@@ -195,6 +196,8 @@ protected:
 
 private:
 	OPL::OPL *_opl;
+	NativeSoundTimer _hostTimer;
+	bool _noiseEnabled = false;
 
 	// ---- callback / tick state ------------------------------------------
 	uint16 _callbackCounter = 0;  // per-tick countdown
@@ -219,6 +222,7 @@ private:
 
 	// ---- driver-wide flags ----------------------------------------------
 	uint16 _isDisabled = 0; // non-zero while the engine is paused (command6)
+	int _masterVolume = 255;
 	uint8  _findChannelMode = 0; // 0=full search, 1=ch0-5 only, 2=ch6-8 then pending
 
 	// ---- per-channel sweep shadows (for channel 5 special-casing) -------
@@ -285,6 +289,7 @@ private:
 	 * so command7 can restore levels without a full recalculation.
 	 */
 	void writeVolume();
+	void refreshVolumes();
 
 	/**
 	 * Derives the OPL F-number and block (octave) from _note, _octaveTranspose,
@@ -642,9 +647,7 @@ public:
 	 */
 	void playSound(int offset);
 
-	void setVolume(int volume) override {
-		// TODO: implement if needed
-	}
+	void setVolume(int volume) override;
 };
 
 } // namespace Sound
