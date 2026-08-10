@@ -115,13 +115,14 @@ protected:
 	static bool readOverlayLayout(const Common::Path &filename,
 		OverlayLayout &layout, Common::String *reason = nullptr);
 
-	ISound(Audio::Mixer *mixer, const Common::Path &filename,
-		const OverlaySpec &spec, const OverlayLayout &layout);
-
 	bool readByte(uint16 offset, byte &value);
 	bool readWord(uint16 offset, uint16 &value);
 	bool writeByte(uint16 offset, byte value);
 	void invalidateStream(const char *reason, uint16 offset);
+	bool readControlByte(uint16 delta, byte &value);
+	bool readControlWord(uint16 delta, uint16 &value);
+	bool isScriptVariableValid(byte index);
+	bool transferControl(bool take, bool saveReturn);
 
 	void resetDriver();
 	void initializeDriver();

@@ -179,6 +179,12 @@ protected:
 	void serviceNoise();
 	void update();
 	void updateChannel(uint channelIndex);
+	bool isOpcodeDataValid(uint16 position, uint32 length) const;
+	byte readOpcodeByte(uint16 position, uint16 delta) const;
+	uint16 readOpcodeWord(uint16 position, uint16 delta) const;
+	bool isScriptVariableValid(byte index) const;
+	bool transferOpcode(Channel &channel, uint16 position, bool take,
+		bool isCall);
 	bool executeOpcode(uint channelIndex, byte opcode, bool &levelsDirty);
 	void finishChannel(uint channelIndex);
 	void checkPendingStops();

@@ -110,20 +110,7 @@ bool ISound::isOverlaySupported(const Common::Path &filename,
 
 ISound::ISound(Audio::Mixer *mixer, const Common::Path &filename,
 		const OverlaySpec &spec) :
-	ISound(mixer, filename, spec, [&]() {
-		OverlayLayout layout;
-		Common::String reason;
-		if (!readOverlayLayout(filename, layout, &reason))
-			error("Unsupported Phantom ISOUND overlay %s: %s",
-				filename.toString().c_str(), reason.c_str());
-		return layout;
-	}()) {
-}
-
-ISound::ISound(Audio::Mixer *mixer, const Common::Path &filename,
-		const OverlaySpec &spec, const OverlayLayout &layout) :
-		SoundDriver(mixer, filename, (int)layout.dataOffset,
-			(int)layout.initializedDataSize),
+		SoundDriver(mixer),
 	_spec(spec),
 	_noiseEnabled(false),
 	_updatesEnabled(false),
@@ -169,7 +156,18 @@ ISound::ISound(Audio::Mixer *mixer, const Common::Path &filename,
 	_tempoTarget(0),
 	_tempoReload(0),
 	_tempoScale(0) {
+	OverlayLayout layout;
+	Common::String reason;
+	if (!readOverlayLayout(filename, layout, &reason))
+		error("Unsupported Phantom ISOUND overlay %s: %s",
+			filename.toString().c_str(), reason.c_str());
+
+	Common::File soundFile;
+	if (!soundFile.open(filename))
+		error("Could not open file - %s", filename.toString().c_str());
 	_soundData.resize(layout.dataSegmentSize);
+	soundFile.seek(layout.dataOffset);
+	soundFile.read(&_soundData[0], layout.initializedDataSize);
 	if (layout.dataSegmentSize > layout.initializedDataSize) {
 		memset(&_soundData[layout.initializedDataSize], 0,
 			layout.dataSegmentSize - layout.initializedDataSize);
@@ -408,6 +406,35 @@ void ISound::stopSpeaker() {
 	_sweepInitialized = false;
 }
 
+bool ISound::readControlByte(uint16 delta, byte &value) {
+	return readByte((uint16)(_position + delta), value);
+}
+
+bool ISound::readControlWord(uint16 delta, uint16 &value) {
+	return readWord((uint16)(_position + delta), value);
+}
+
+bool ISound::isScriptVariableValid(byte index) {
+	if (index < kScriptVariableCount)
+		return true;
+	invalidateStream("script variable index is out of range", _position);
+	return false;
+}
+
+bool ISound::transferControl(bool take, bool saveReturn) {
+	uint16 target;
+	if (!readControlWord(3, target))
+		return false;
+	if (take) {
+		if (saveReturn)
+			_branchReturn = (uint16)(_position + 5);
+		_position = target;
+	} else {
+		_position = (uint16)(_position + 5);
+	}
+	return true;
+}
+
 void ISound::processOrdinaryEvent() {
 	if (!readByte(_position, _note) ||
 		!readByte((uint16)(_position + 1), _activeTicks))
@@ -433,26 +460,6 @@ void ISound::processOrdinaryEvent() {
 bool ISound::processControl(byte opcode) {
 	byte a = 0, b = 0;
 	uint16 w = 0;
-	auto read1 = [&]() { return readByte((uint16)(_position + 1), a); };
-	auto read2 = [&]() { return readByte((uint16)(_position + 2), b); };
-	auto readw = [&]() { return readWord((uint16)(_position + 1), w); };
-	auto validVar = [&](byte index) {
-		if (index < kScriptVariableCount)
-			return true;
-		invalidateStream("script variable index is out of range", _position);
-		return false;
-	};
-	auto branch = [&](bool take, bool saveReturn) {
-		if (!readWord((uint16)(_position + 3), w))
-			return;
-		if (take) {
-			if (saveReturn)
-				_branchReturn = (uint16)(_position + 5);
-			_position = w;
-		} else {
-			_position = (uint16)(_position + 5);
-		}
-	};
 
 	switch (opcode) {
 	case 0xff:
@@ -477,16 +484,16 @@ bool ISound::processControl(byte opcode) {
 		}
 		break;
 	case 0xfc:
-		if (!readw()) return false;
+		if (!readControlWord(1, w)) return false;
 		_sequenceStart = _position = _innerLoopStart = _outerLoopStart =
 			_restartOverride = w;
 		break;
 	case 0xfb:
-		if (!readw()) return false;
+		if (!readControlWord(1, w)) return false;
 		_position = w;
 		break;
 	case 0xfa:
-		if (!readw()) return false;
+		if (!readControlWord(1, w)) return false;
 		_branchReturn = (uint16)(_position + 3);
 		_position = w;
 		break;
@@ -499,25 +506,25 @@ bool ISound::processControl(byte opcode) {
 		}
 		break;
 	case 0xf8:
-		if (!readw()) return false;
+		if (!readControlWord(1, w)) return false;
 		_noiseMask = w;
 		setResultState(_noiseMask ? 1 : -1);
 		_position = (uint16)(_position + 3);
 		break;
 	case 0xf7:
-		if (!read1()) return false;
+		if (!readControlByte(1, a)) return false;
 		_gateOffset = a;
 		_releaseOverride = 0;
 		_position = (uint16)(_position + 2);
 		break;
 	case 0xf6:
-		if (!read1()) return false;
+		if (!readControlByte(1, a)) return false;
 		_releaseOverride = a;
 		_gateOffset = 0;
 		_position = (uint16)(_position + 2);
 		break;
 	case 0xf5:
-		if (!readw()) return false;
+		if (!readControlWord(1, w)) return false;
 		_pitchStep = w;
 		_position = (uint16)(_position + 3);
 		break;
@@ -531,21 +538,21 @@ bool ISound::processControl(byte opcode) {
 		_position = (uint16)(_position + 3);
 		break;
 	case 0xf2:
-		if (!read1()) return false;
+		if (!readControlByte(1, a)) return false;
 		_fineOffset = (int8)a;
 		_position = (uint16)(_position + 2);
 		break;
 	case 0xee:
-		if (!read1()) return false;
+		if (!readControlByte(1, a)) return false;
 		_transpose = a;
 		_position = (uint16)(_position + 2);
 		break;
 	case 0xed:
-		if (!read1()) return false;
+		if (!readControlByte(1, a)) return false;
 		_position = (uint16)((int8)a + 3);
 		break;
 	case 0xec: {
-		if (!read1() || !a) {
+		if (!readControlByte(1, a) || !a) {
 			invalidateStream("random table has a zero size", _position);
 			return false;
 		}
@@ -561,7 +568,7 @@ bool ISound::processControl(byte opcode) {
 		break;
 	}
 	case 0xeb: {
-		if (!read1() || !read2()) return false;
+		if (!readControlByte(1, a) || !readControlByte(2, b)) return false;
 		const int16 range = (int8)b - (int8)a + 1;
 		byte target;
 		if (range <= 0 || !readByte((uint16)(_position + 3), target)) {
@@ -574,7 +581,8 @@ bool ISound::processControl(byte opcode) {
 		break;
 	}
 	case 0xea: {
-		if (!read1() || !read2() || !validVar(a)) return false;
+		if (!readControlByte(1, a) || !readControlByte(2, b) ||
+				!isScriptVariableValid(a)) return false;
 		const uint16 base = (uint16)(_position + 3);
 		byte selected, target;
 		if (!readByte((uint16)(base + _scriptVariables[a]), selected) ||
@@ -584,23 +592,27 @@ bool ISound::processControl(byte opcode) {
 		break;
 	}
 	case 0xe9:
-		if (!read1() || !read2() || !validVar(a)) return false;
+		if (!readControlByte(1, a) || !readControlByte(2, b) ||
+				!isScriptVariableValid(a)) return false;
 		_scriptVariables[a] = b;
 		_position = (uint16)(_position + 3);
 		break;
 	case 0xe8:
-		if (!read1() || !read2() || !validVar(a) || !validVar(b)) return false;
+		if (!readControlByte(1, a) || !readControlByte(2, b) ||
+				!isScriptVariableValid(a) || !isScriptVariableValid(b))
+			return false;
 		_scriptVariables[a] = _scriptVariables[b];
 		_position = (uint16)(_position + 3);
 		break;
 	case 0xe7:
-		if (!read1() || !read2() || !validVar(a) ||
+		if (!readControlByte(1, a) || !readControlByte(2, b) ||
+			!isScriptVariableValid(a) ||
 			!writeByte((uint16)(_position + 3 + b), _scriptVariables[a])) return false;
 		_position = (uint16)(_position + 3);
 		break;
 	case 0xe6:
 	case 0xe5:
-		if (!read1() || !validVar(a)) return false;
+		if (!readControlByte(1, a) || !isScriptVariableValid(a)) return false;
 		_scriptVariables[a] += opcode == 0xe6 ? 1 : (byte)-1;
 		_position = (uint16)(_position + 2);
 		break;
@@ -608,9 +620,10 @@ bool ISound::processControl(byte opcode) {
 	case 0xe0: case 0xdf: case 0xde: case 0xdd:
 	case 0xdc: case 0xdb: case 0xda: case 0xd9:
 	case 0xd8: case 0xd7: case 0xd6: case 0xd5: {
-		if (!read1() || !read2() || !validVar(a)) return false;
+		if (!readControlByte(1, a) || !readControlByte(2, b) ||
+				!isScriptVariableValid(a)) return false;
 		const bool usesVariable = (opcode & 1) != 0;
-		if (usesVariable && !validVar(b)) return false;
+		if (usesVariable && !isScriptVariableValid(b)) return false;
 		const byte operand = usesVariable ? _scriptVariables[b] : b;
 		byte &destination = _scriptVariables[a];
 		switch (opcode) {
@@ -645,10 +658,11 @@ bool ISound::processControl(byte opcode) {
 	case 0xd0: case 0xcf: case 0xce: case 0xcd:
 	case 0xcc: case 0xcb: case 0xca: case 0xc9:
 	case 0xc8: case 0xc7: case 0xc6: case 0xc5: {
-		if (!read1() || !read2() || !validVar(a)) return false;
+		if (!readControlByte(1, a) || !readControlByte(2, b) ||
+				!isScriptVariableValid(a)) return false;
 		const bool variablePair =
 			(opcode <= 0xd0 && opcode >= 0xcd) || opcode <= 0xc8;
-		if (variablePair && !validVar(b)) return false;
+		if (variablePair && !isScriptVariableValid(b)) return false;
 		const byte left = variablePair ? _scriptVariables[b] : _scriptVariables[a];
 		const byte right = variablePair ? _scriptVariables[a] : b;
 		bool take = false;
@@ -661,11 +675,11 @@ bool ISound::processControl(byte opcode) {
 		case 0xcd: case 0xc5: take = left < right; break;
 		default: break;
 		}
-		branch(take, opcode <= 0xcc);
+		if (!transferControl(take, opcode <= 0xcc)) return false;
 		break;
 	}
 	case 0xc4:
-		if (!readw()) return false;
+		if (!readControlWord(1, w)) return false;
 		warning("Phantom ISOUND ignored native callback 0x%04x", w);
 		_position = (uint16)(_position + 3);
 		break;
@@ -676,27 +690,27 @@ bool ISound::processControl(byte opcode) {
 		_position = (uint16)(_position + 4);
 		break;
 	case 0xc1:
-		if (!readw()) return false;
+		if (!readControlWord(1, w)) return false;
 		_tempoScale = w;
 		_position = (uint16)(_position + 2);
 		break;
 	case 0xc0:
-		if (!read1()) return false;
+		if (!readControlByte(1, a)) return false;
 		_tempoReload = a;
 		_position = (uint16)(_position + 2);
 		break;
 	case 0xbf:
-		if (!readw()) return false;
+		if (!readControlWord(1, w)) return false;
 		_tempoTarget = w;
 		_position = (uint16)(_position + 3);
 		break;
 	case 0xbe:
-		if (!read1()) return false;
+		if (!readControlByte(1, a)) return false;
 		_tempoShift = a;
 		_position = (uint16)(_position + 2);
 		break;
 	case 0xbd:
-		if (!read1() || !read2()) return false;
+		if (!readControlByte(1, a) || !readControlByte(2, b)) return false;
 		_alternationReload = a;
 		_alternationCounter = a;
 		_alternationToggle = false;
@@ -704,7 +718,7 @@ bool ISound::processControl(byte opcode) {
 		_position = (uint16)(_position + 3);
 		break;
 	case 0xbc:
-		if (!readw()) return false;
+		if (!readControlWord(1, w)) return false;
 		_directDivisor = w;
 		_position = (uint16)(_position + 3);
 		break;
