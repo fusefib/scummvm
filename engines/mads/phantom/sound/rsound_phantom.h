@@ -450,6 +450,32 @@ public:
 	int command(int commandId, int param) override;
 };
 
+/** Shared control-command behavior of the Phantom demo RSOUND overlay. */
+class RSoundDemo : public RSound {
+protected:
+	RSoundDemo(Audio::Mixer *mixer, const Common::Path &filename,
+			   int dataOffset, int dataSize, int sysExOffset);
+
+	int dispatchCommonCommand(int commandId);
+	int command4() override;
+	int command5() override;
+};
+
+/** Controller for the exact RSOUND.PHA overlay shipped with the demo. */
+class RSoundDemoPHA final : public RSoundDemo {
+private:
+	bool callFunction(uint16 targetOffset) override;
+	void writeRandomizedPair(uint16 firstLowOffset, uint16 secondLowOffset,
+							 uint16 firstHighOffset, uint16 secondHighOffset,
+							 byte firstLow, byte secondLow, byte firstHigh, byte secondHigh);
+
+public:
+	explicit RSoundDemoPHA(Audio::Mixer *mixer);
+
+	int command(int commandId, int param) override;
+	static bool validate(Common::String *reason = nullptr);
+};
+
 } // namespace Sound
 } // namespace Phantom
 } // namespace MADS

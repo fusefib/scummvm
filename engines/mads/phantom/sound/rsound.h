@@ -295,6 +295,16 @@ protected:
 	void resultCheck();
 
 	/**
+	 * Handles a native C4 callback target embedded in a sequence. The retail
+	 * controllers currently have no translated targets, so their default
+	 * remains the same fatal rejection used before this hook existed.
+	 */
+	virtual bool callFunction(uint16 targetOffset) {
+		(void)targetOffset;
+		return false;
+	}
+
+	/**
 	 * Plays the specified sound, using any free channel from 6 to 8.
 	 * Matches the disassembly's playSound exactly (rsound_channel6-8).
 	 */

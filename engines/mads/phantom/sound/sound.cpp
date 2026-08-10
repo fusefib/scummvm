@@ -136,9 +136,14 @@ void PhantomSoundManager::validate() {
 			return;
 		_driverType = SOUND_ADLIB;
 		ASound::validate(_isDemo);
-	} else if (_driverType == SOUND_MT32 && !_isDemo) {
-		// MT32
-		RSound::validate();
+	} else if (_driverType == SOUND_MT32) {
+		if (_isDemo) {
+			Common::String reason;
+			if (!RSoundDemoPHA::validate(&reason))
+				error("Cannot use Phantom demo RSOUND.PHA: %s", reason.c_str());
+		} else {
+			RSound::validate();
+		}
 	} else if (_driverType == SOUND_PCSPEAKER && !_isDemo) {
 		bool needsAdlibFallback = false;
 		for (uint index = 0; index < ARRAYSIZE(kRetailSections); ++index) {
@@ -173,34 +178,36 @@ void PhantomSoundManager::loadDriver(int sectionNumber) {
 			_driverType = SOUND_ADLIB;
 			loadDriver(sectionNumber);
 		}
+	} else if (_driverType == SOUND_MT32) {
+		if (_isDemo) {
+			_driver = new RSoundDemoPHA(_mixer);
+		} else {
+			switch (sectionNumber) {
+			case 1:
+				_driver = new RSound1(_mixer);
+				break;
+			case 2:
+				_driver = new RSound2(_mixer);
+				break;
+			case 3:
+				_driver = new RSound3(_mixer);
+				break;
+			case 4:
+				_driver = new RSound4(_mixer);
+				break;
+			case 5:
+				_driver = new RSound5(_mixer);
+				break;
+			case 9:
+				_driver = new RSound9(_mixer);
+				break;
+			default:
+				_driver = nullptr;
+				break;
+			}
+		}
 	} else if (_isDemo) {
 		_driver = new ASoundDemo(_mixer);
-
-	} else if (_driverType == SOUND_MT32) {
-		// MT32
-		switch (sectionNumber) {
-		case 1:
-			_driver = new RSound1(_mixer);
-			break;
-		case 2:
-			_driver = new RSound2(_mixer);
-			break;
-		case 3:
-			_driver = new RSound3(_mixer);
-			break;
-		case 4:
-			_driver = new RSound4(_mixer);
-			break;
-		case 5:
-			_driver = new RSound5(_mixer);
-			break;
-		case 9:
-			_driver = new RSound9(_mixer);
-			break;
-		default:
-			_driver = nullptr;
-			break;
-		}
 	} else if (_driverType == SOUND_PCSPEAKER) {
 		const Common::Path filename = getISoundFilename(sectionNumber);
 		Common::String reason;

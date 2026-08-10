@@ -727,15 +727,10 @@ dispatch:
 			goto dispatch;
 		}
 		case 0xC4: {
-			// TODO: NOT PORTABLE AS-IS - the disassembly calls the word
-			// operand as a raw code-address function pointer
-			// ("mov bx,ax; call bx"). There's no equivalent in a C++
-			// port without knowing what specific handful of sub_
-			// routines this is meant to invoke. error() (not warning())
-			// so this is impossible to miss if real game data ever
-			// actually triggers it, rather than silently no-opping.
-			readScriptWord(pSrc);
-			error("RSound::pollActiveChannel: opcode 0xC4 (function-pointer call) not portable as-is");
+			const uint16 targetOffset = readScriptWord(pSrc);
+			if (!callFunction(targetOffset))
+				error("RSound::pollActiveChannel: unsupported opcode 0xC4 target 0x%04x",
+						targetOffset);
 			ch->_pSrc += 3;
 			goto dispatch;
 		}
