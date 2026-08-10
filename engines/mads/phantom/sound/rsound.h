@@ -22,6 +22,8 @@
 #ifndef MADS_PHANTOM_SOUND_RSOUND_H
 #define MADS_PHANTOM_SOUND_RSOUND_H
 
+#include "audio/mt32gm.h"
+#include "mads/core/native_sound_timer.h"
 #include "mads/core/sound_manager.h"
 
 namespace MADS {
@@ -118,11 +120,6 @@ public:
  * conditional branches, and a call/return pair, in addition to the shared
  * note/fade/loop mechanics.
  *
- * NOTE: The actual MIDI transmission (sendMidiByte()) currently just logs
- * via warning() - it isn't hooked up to a real ScummVM MIDI/MT-32 output
- * yet, matching the Rex Nebular RSound family. Every other MIDI-sending
- * helper funnels through sendMidiByte().
- *
  * NOTE: DOS-specific driver ceremony from the original (timer IRQ hooking,
  * MPU-401 hardware detection/reset, PIT-based SysEx delay calibration, the
  * system-clock save/restore around it) has no ScummVM equivalent and is not
@@ -133,9 +130,11 @@ class RSound : public SoundDriver {
 	friend class Channel;
 private:
 	uint16 _randomSeed;
-	byte _lastMidiStatus;         // running-status cache, avoids resending an unchanged status byte
-	byte _sysexChecksum;
+	int _masterVolume = 255;
 	int _stateChangedFlag;        // latches _pollResult=0xFFFF once per state change
+	MidiDriver_MT32GM *_midiDriver;
+	uint32 _driverCallbackDelta;
+	NativeSoundTimer _hostTimer;
 
 	/**
 	 * Per-MIDI-channel held-note slots (index 0 unused; channels are
@@ -350,10 +349,6 @@ protected:
 	int getRandomNumber();
 
 	// ---- Low-level MIDI send helpers -------------------------------
-	// All funnel through sendMidiByte(), the single hook point for
-	// wiring up real MT-32/MIDI output.
-	void sendMidiByte(byte value);
-	void sendStatus(int midiChannel, byte statusNibble);
 	void sendNoteOn(int midiChannel, int note, int velocity);
 	void sendProgramChange(int midiChannel, int program);
 	void sendVolume(int midiChannel, int volume);
@@ -416,6 +411,8 @@ protected:
 	 * hardware protocol address, not driver-specific sound data.
 	 */
 	void sendReverbSysEx(int mode, int time, int level);
+	void onTimer();
+	static void timerCallback(void *data);
 
 	/**
 	 * A confirmed no-op (reads one operand, does
@@ -488,8 +485,7 @@ public:
 	RSound(Audio::Mixer *mixer, const Common::Path &filename,
 		int dataOffset, int dataSize, int sysExOffset);
 
-	~RSound() override {
-	}
+	~RSound() override;
 
 	int stop() override;
 	int poll() override;

@@ -89,8 +89,6 @@ RSound::RSound(Audio::Mixer *mixer, const Common::Path &filename,
 	_frameCounter = 0;
 	_isDisabled = false;
 	_randomSeed = 1234;
-	_lastMidiStatus = 0;
-	_sysexChecksum = 0;
 	_stateChangedFlag = 0;
 	_pollResult = 0;
 	_sysExOffset = sysExOffset;
@@ -120,32 +118,53 @@ RSound::RSound(Audio::Mixer *mixer, const Common::Path &filename,
 	for (int i = 0; i < ARRAYSIZE(_scriptVariables); ++i)
 		_scriptVariables[i] = 0;
 
+	_midiDriver = new MidiDriver_MT32GM(MusicType::MT_MT32);
+	const int returnCode = _midiDriver->open();
+	if (returnCode != 0)
+		error("RSound - Failed to open MIDI music driver - error code %d.", returnCode);
+
+	_driverCallbackDelta = _midiDriver->getBaseTempo();
+
 	// Matches initDeviceOnce: command0() then sendSysExSequence(). The
 	// disassembly's _deviceInitialized guard flag is omitted - this
 	// constructor only ever runs once per driver instance, so there's
 	// nothing to guard against.
 	command0();
 	sendSysExSequence();
+
+	_midiDriver->setTimerCallback(this, &timerCallback);
+}
+
+RSound::~RSound() {
+	_isDisabled = true;
+	if (_midiDriver) {
+		_midiDriver->setTimerCallback(nullptr, nullptr);
+		_midiDriver->close();
+
+		Common::StackLock lock(_driverMutex);
+		delete _midiDriver;
+		_midiDriver = nullptr;
+	}
 }
 
 void RSound::validate() {
 	Common::File f;
 	static const char *const MD5[] = {
-		"8edcb79a8c3514eac0835496326a72ae",
-		"4b81a46440f8404d9eda1ce5ae2c5579",
-		"11d8d441e47ad1ccd8faafd6572a17d0",
-		"4cd5c4d45126e60ca701690489ab8afa",
-		"588357d711bbcdabdf7d7e5d96013ce5",
+		"d6a64de63e58d9aceadc4a0ad6bedff7",
+		"8a89af7bc6086a99c84455305e8659b3",
+		"8f68ee5787d21764d6c565f79eca2505",
+		"95de8817e92edc61dbb40a16adc0baa2",
+		"9cf8f6e744eaa43a1e1d4855da77e7c1",
 		nullptr,
 		nullptr,
 		nullptr,
-		"3d4843074c1dcbfd7919179c58aec9bc"
+		"97a4e9b701d8de4322b9ef3687497b17"
 	};
 
 	for (int i = 1; i <= 9; ++i) {
 		if (i >= 6 && i <= 8)
 			continue;
-		Common::Path filename(Common::String::format("asound.ph%d", i));
+		Common::Path filename(Common::String::format("rsound.ph%d", i));
 		if (!f.open(filename))
 			error("Could not process - %s", filename.toString().c_str());
 		Common::String md5str = Common::computeStreamMD5AsString(f, 8192);
@@ -170,8 +189,25 @@ int RSound::poll() {
 	return result;
 }
 
+void RSound::onTimer() {
+	Common::StackLock lock(_driverMutex);
+
+	uint32 serviceTicks = _hostTimer.advance(_driverCallbackDelta, 1000000);
+	while (serviceTicks--) {
+		// Export 4 is a return stub in every audited Phantom RSOUND overlay.
+		if (_hostTimer.pollDue())
+			poll();
+	}
+}
+
+void RSound::timerCallback(void *data) {
+	static_cast<RSound *>(data)->onTimer();
+}
+
 void RSound::setVolume(int volume) {
-	// TODO: no confirmed handler for this in the disassembly seen so far.
+	_masterVolume = CLIP(volume, 0, 255);
+	for (int i = 0; i < RSOUND_CHANNEL_COUNT; ++i)
+		sendVolumeCC(i + 1, _isDisabled ? 0 : _channels[i]._volume);
 }
 
 void RSound::resultCheck() {
@@ -247,54 +283,34 @@ bool RSound::isSoundActive(byte *pData) {
 }
 
 /*-----------------------------------------------------------------------*/
-// Low-level MIDI transmission. sendMidiByte() is the single point that
-// needs to change once the real MT-32/MIDI output interface is wired up;
-// everything else funnels through it.
-
-void RSound::sendMidiByte(byte value) {
-	warning("RSound: MIDI byte %02X", value);
-}
-
-void RSound::sendStatus(int midiChannel, byte statusNibble) {
-	byte status = statusNibble | midiChannel;
-	if (_lastMidiStatus != status) {
-		_lastMidiStatus = status;
-		sendMidiByte(status);
-	}
-}
 
 void RSound::sendNoteOn(int midiChannel, int note, int velocity) {
-	sendStatus(midiChannel, 0x90);
-	sendMidiByte(note);
-	sendMidiByte(velocity);
+	_midiDriver->send(MidiDriver::MIDI_COMMAND_NOTE_ON | midiChannel,
+		note, velocity);
 }
 
 void RSound::sendProgramChange(int midiChannel, int program) {
-	sendStatus(midiChannel, 0xC0);
-	sendMidiByte(program);
+	_midiDriver->send(MidiDriver::MIDI_COMMAND_PROGRAM_CHANGE | midiChannel,
+		program, 0);
 }
 
 void RSound::sendVolume(int midiChannel, int volume) {
-	sendStatus(midiChannel, 0xB0);
-	sendMidiByte(7);
-	sendMidiByte(volume);
+	const int scaledVolume = CLIP(volume, 0, 127) * _masterVolume / 255;
+	_midiDriver->send(MidiDriver::MIDI_COMMAND_CONTROL_CHANGE | midiChannel,
+		MidiDriver::MIDI_CONTROLLER_VOLUME, scaledVolume);
 }
 
 void RSound::sendVolumeCC(int midiChannel, int volume) {
-	// Unlike sendVolume()/sendStatus(), this sends the
-	// status byte UNCONDITIONALLY (no _lastMidiStatus dedup check) -
-	// used by command7 when restoring all 9 channels' volumes in a row.
-	byte status = 0xB0 | midiChannel;
-	_lastMidiStatus = status;
-	sendMidiByte(status);
-	sendMidiByte(7);
-	sendMidiByte(volume);
+	// The original emits an unconditional status byte here. Structured MIDI
+	// messages do not retain running status, so this is equivalent to the
+	// ordinary volume helper.
+	sendVolume(midiChannel, volume);
 }
 
 void RSound::sendPitchBend(int midiChannel, int value) {
-	sendStatus(midiChannel, 0xE0);
-	sendMidiByte(0); // LSB always 0 - only coarse (MSB) control is used
-	sendMidiByte(value);
+	// The original only uses the coarse (MSB) component.
+	_midiDriver->send(MidiDriver::MIDI_COMMAND_PITCH_BEND | midiChannel,
+		0, value);
 }
 
 void RSound::resetPitchBend(int midiChannel) {
@@ -302,18 +318,12 @@ void RSound::resetPitchBend(int midiChannel) {
 }
 
 void RSound::sendPan(int midiChannel, int value) {
-	sendStatus(midiChannel, 0xB0);
-	sendMidiByte(0x0A); // CC#10: Pan
-	sendMidiByte(value);
+	_midiDriver->send(MidiDriver::MIDI_COMMAND_CONTROL_CHANGE | midiChannel,
+		MidiDriver::MIDI_CONTROLLER_PANNING, value);
 }
 
 void RSound::muteChannel(int midiChannel) {
-	// Matches muteChannel: unconditional status send, like sendVolumeCC().
-	byte status = 0xB0 | midiChannel;
-	_lastMidiStatus = status;
-	sendMidiByte(status);
-	sendMidiByte(7);
-	sendMidiByte(0);
+	sendVolume(midiChannel, 0);
 }
 
 void RSound::sendGmReset(int count) {
@@ -322,36 +332,22 @@ void RSound::sendGmReset(int count) {
 	for (int midiChannel = count; midiChannel >= 1; --midiChannel) {
 		_fadeCheckPeriod = 0; // reset at the top of every iteration
 
-		byte status = 0xB0 | midiChannel;
-		_lastMidiStatus = status;
-		sendMidiByte(status);
-		sendMidiByte(0x7B); // All Notes Off
-		sendMidiByte(0);
-		sendMidiByte(0x79); // Reset All Controllers
-		sendMidiByte(0);
-		sendMidiByte(7);    // Channel Volume
-		sendMidiByte(100);
-		sendMidiByte(0x0A); // Pan
-		sendMidiByte(0x40);
+		_midiDriver->send(MidiDriver::MIDI_COMMAND_CONTROL_CHANGE | midiChannel,
+			MidiDriver::MIDI_CONTROLLER_ALL_NOTES_OFF, 0);
+		_midiDriver->send(MidiDriver::MIDI_COMMAND_CONTROL_CHANGE | midiChannel,
+			MidiDriver::MIDI_CONTROLLER_RESET_ALL_CONTROLLERS, 0);
+		sendVolume(midiChannel, 100);
+		sendPan(midiChannel, 0x40);
 	}
 }
 
 const byte *RSound::sendSysExData(const byte *pData) {
-	static const byte header[] = { 0xF0, 0x41, 0x10, 0x16, 0x12 };
-	for (int i = 0; i < ARRAYSIZE(header); ++i)
-		sendMidiByte(header[i]);
+	uint16 length = 0;
+	while (pData[length] != 0xFF)
+		++length;
 
-	_sysexChecksum = 0;
-	int i = 0;
-	for (; pData[i] != 0xFF; ++i) {
-		sendMidiByte(pData[i]);
-		_sysexChecksum += pData[i];
-	}
-
-	sendMidiByte((~_sysexChecksum + 1) & 0x7F);
-	sendMidiByte(0xF7);
-
-	return &pData[i];
+	_midiDriver->sysExMT32(pData, length);
+	return &pData[length];
 }
 
 const byte *RSound::sendSysEx(int offset) {
@@ -375,32 +371,21 @@ void RSound::sendPatchInitSequence() {
 	// and accumulates across outer iterations.
 	byte base = 0;
 	for (int outer = 0; outer < 4; ++outer) {
-		byte *header = loadData(0xA3);
-		for (int i = 0; header[i] != 0xFF; ++i)
-			sendMidiByte(header[i]);
-
-		_sysexChecksum = 0;
-		byte b1 = 5;
-		_sysexChecksum += b1; sendMidiByte(b1);
-		byte b2 = (byte)(outer << 1);
-		_sysexChecksum += b2; sendMidiByte(b2);
-		byte b3 = 0;
-		_sysexChecksum += b3; sendMidiByte(b3);
+		byte message[3 + 32 * 8];
+		uint16 length = 0;
+		message[length++] = 5;
+		message[length++] = (byte)(outer << 1);
+		message[length++] = 0;
 
 		for (int inner = 0; inner < 0x20; ++inner) {
-			byte v1 = (byte)(outer >> 1);
-			_sysexChecksum += v1; sendMidiByte(v1);
-			byte v2 = (byte)(inner + base);
-			_sysexChecksum += v2; sendMidiByte(v2);
+			message[length++] = (byte)(outer >> 1);
+			message[length++] = (byte)(inner + base);
 			static const byte tail[] = { 0x18, 0x32, 0x0C, 0, 1, 0 };
-			for (int t = 0; t < ARRAYSIZE(tail); ++t) {
-				_sysexChecksum += tail[t];
-				sendMidiByte(tail[t]);
-			}
+			for (int t = 0; t < ARRAYSIZE(tail); ++t)
+				message[length++] = tail[t];
 		}
 
-		sendMidiByte((~_sysexChecksum + 1) & 0x7F);
-		sendMidiByte(0xF7);
+		_midiDriver->sysExMT32(message, length);
 
 		base = (byte)((base + 0x20) & 0x3F);
 	}
@@ -424,9 +409,7 @@ void RSound::Channel_flushHeldNotes(Channel *channel) {
 	byte *slots = _heldNotes[channel->_midiChannel];
 	for (int i = 0; i < 4; ++i) {
 		if (slots[i] != 0xFF) {
-			sendStatus(channel->_midiChannel, 0x90);
-			sendMidiByte(slots[i]);
-			sendMidiByte(0); // velocity 0 = note off
+			sendNoteOn(channel->_midiChannel, slots[i], 0);
 			slots[i] = 0xFF;
 		}
 	}

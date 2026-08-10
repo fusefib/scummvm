@@ -53,6 +53,7 @@ int RSound1::command(int commandId, int param) {
 	case 34: return command34();
 	case 35: return command35();
 	case 36: return command36();
+	case 37: return command37();
 	case 38: return command38();
 	case 39: return command39();
 	case 64: return command64();
@@ -69,8 +70,7 @@ int RSound1::command(int commandId, int param) {
 	case 75: return command75();
 	case 76: return command76();
 	default:
-		// TODO: command 37 not yet implemented - disassembly not yet
-		// provided. There is no command 17 (see the class comment).
+		// There is no command 17 (see the class comment).
 		return 0;
 	}
 }
