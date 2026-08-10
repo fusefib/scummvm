@@ -66,8 +66,6 @@ void Channel::load(byte *pData) {
 
 /*-----------------------------------------------------------------------*/
 
-const uint32 RSound::UPDATE_DELTA = 1000000 / 60;
-
 RSound::RSound(Audio::Mixer *mixer, const Common::Path &filename,
 		int dataOffset, int dataSize, int sysExOffset) : SoundDriver(mixer, filename, dataOffset, dataSize) {
 	_commandParam = 0;
@@ -80,7 +78,6 @@ RSound::RSound(Audio::Mixer *mixer, const Common::Path &filename,
 	_pollResult = 0;
 	_resultFlag = 0;
 	_sysExOffset = sysExOffset;
-	_updateDeltaRemainder = 0;
 
 	for (int i = 0; i < RSOUND_CHANNEL_COUNT; ++i) {
 		_channels[i]._owner = this;
@@ -220,13 +217,11 @@ int RSound::getRandomNumber() {
 void RSound::onTimer() {
 	Common::StackLock slock(_driverMutex);
 
-	// The frequency of the callbacks is dependent on the underlying driver
-	// implementation and might not be 60Hz. Adjust to make sure poll() is called
-	// with the correct frequency.
-	_updateDeltaRemainder += _driverCallbackDelta;
-	while (_updateDeltaRemainder >= UPDATE_DELTA) {
-		poll();
-		_updateDeltaRemainder -= UPDATE_DELTA;
+	uint32 serviceTicks = _hostTimer.advance(_driverCallbackDelta, 1000000);
+	while (serviceTicks--) {
+		// RSOUND export 4 is a return stub in every audited overlay.
+		if (_hostTimer.pollDue())
+			poll();
 	}
 }
 
@@ -236,9 +231,9 @@ void RSound::timerCallback(void* data) {
 }
 
 void RSound::setVolume(int volume) {
-	_masterVolume = volume;
-	if (!volume)
-		command0();
+	_masterVolume = CLIP(volume, 0, 255);
+	for (int i = 0; i < RSOUND_CHANNEL_COUNT; ++i)
+		sendVolume(i + 1, _isDisabled ? 0 : _channels[i]._volume);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -269,7 +264,9 @@ void RSound::sendProgramChange(int midiChannel, int program) {
 }
 
 void RSound::sendVolume(int midiChannel, int volume) {
-	_midiDriver->send(MidiDriver::MIDI_COMMAND_CONTROL_CHANGE | midiChannel, MidiDriver::MIDI_CONTROLLER_VOLUME, volume);
+	const int scaledVolume = CLIP(volume, 0, 127) * _masterVolume / 255;
+	_midiDriver->send(MidiDriver::MIDI_COMMAND_CONTROL_CHANGE | midiChannel,
+			MidiDriver::MIDI_CONTROLLER_VOLUME, scaledVolume);
 }
 
 void RSound::sendPitchBend(int midiChannel, int value) {

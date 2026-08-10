@@ -23,6 +23,7 @@
 #define MADS_NEBULAR_SOUND_RSOUND_H
 
 #include "mads/core/sound_manager.h"
+#include "mads/core/native_sound_timer.h"
 
 #include "audio/mt32gm.h"
 
@@ -133,9 +134,6 @@ public:
 class RSound : public SoundDriver {
 	friend class Channel;
 private:
-	// Number of microseconds between driver updates (60 Hz frequency)
-	static const uint32 UPDATE_DELTA;
-
 	uint16 _randomSeed;
 	int _masterVolume;
 	byte _lastMidiStatus;             // running-status cache, avoids resending an unchanged status byte
@@ -156,7 +154,7 @@ private:
 
 	MidiDriver_MT32GM *_midiDriver;
 	uint32 _driverCallbackDelta;
-	uint32 _updateDeltaRemainder;
+	NativeSoundTimer _hostTimer;
 
 	void update();
 	void pollAllChannels();
