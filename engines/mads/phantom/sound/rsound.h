@@ -295,9 +295,9 @@ protected:
 	void resultCheck();
 
 	/**
-	 * Handles a native C4 callback target embedded in a sequence. The retail
-	 * controllers currently have no translated targets, so their default
-	 * remains the same fatal rejection used before this hook existed.
+	 * Handles a native C4 callback target embedded in a sequence. Controllers
+	 * override this only for statically identified native targets; the default
+	 * remains a fatal rejection in the bytecode interpreter.
 	 */
 	virtual bool callFunction(uint16 targetOffset) {
 		(void)targetOffset;

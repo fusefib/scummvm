@@ -275,6 +275,7 @@ class RSound4 : public RSound {
 private:
 	typedef int (RSound4:: *CommandPtr)();
 	static const CommandPtr _commandList[72];
+	bool callFunction(uint16 targetOffset) override;
 
 	int command4() override;
 	int command5() override;

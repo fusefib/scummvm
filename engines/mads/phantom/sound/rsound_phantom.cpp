@@ -877,6 +877,18 @@ const RSound4::CommandPtr RSound4::_commandList[72] = {
 RSound4::RSound4(Audio::Mixer *mixer) : RSound(mixer, "rsound.ph4", 0x2A40, 0xE00, 0xEC) {
 }
 
+bool RSound4::callFunction(uint16 targetOffset) {
+	if (targetOffset != 0x229c)
+		return false;
+
+	const uint tableOffset = 0x0984 + (getRandomNumber() & 0x0f) * 2;
+	const byte *source = loadData(tableOffset);
+	byte *destination = loadData(0x0666);
+	destination[0] = source[0];
+	destination[1] = source[1];
+	return true;
+}
+
 int RSound4::command(int commandId, int param) {
 	if (commandId < 0 || commandId >= ARRAYSIZE(_commandList))
 		return 0;
