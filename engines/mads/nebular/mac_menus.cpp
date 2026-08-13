@@ -56,11 +56,13 @@ enum {
 	kSaveDialog = 3001,
 	kOpenDialog = 3010,
 
+	kAppleMenu = 0,
 	kFileMenu = 1,
 	kEditMenu = 2,
 	kOptionsMenu = 3,
 	kWindowMenu = 4,
 
+	kAppleAbout = (1000 << 16),
 	kFileOpen = (1001 << 16) | 2,
 	kFileSave = (1001 << 16) | 4,
 	kFileSaveAs = (1001 << 16) | 5,
@@ -298,6 +300,9 @@ void MacNebularMenu::updateState() {
 				itemIndex < _menu->numberOfMenuItems(topLevel); ++itemIndex)
 			setItemState(_menu->getSubMenuItem(topLevel, itemIndex), false, false);
 	}
+	// Keep the Apple menu available, but leave its unfinished About item
+	// visibly disabled until its native room-990 presentation is restored.
+	setItemState(getMenuItem(kAppleMenu, 0), false, false);
 	if (_activeDialog) {
 		setItemState(getMenuItem(kEditMenu, 0),
 			_activeDialog->isEditCommandEnabled(kMacDialogUndo), false);
@@ -359,6 +364,8 @@ void MacNebularMenu::updateState() {
 
 void MacNebularMenu::dispatchCommand(int commandId) {
 	switch (commandId) {
+	case kAppleAbout:
+		break;
 	case kFileOpen:
 		if (_engine.canLoadGameStateCurrently(nullptr))
 			runOpenDialog();
