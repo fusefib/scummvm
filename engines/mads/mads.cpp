@@ -374,6 +374,8 @@ void MADSEngine::checkForTimerFunction() {
 			_nextTimerTime = time + (1000 / 60);
 		}
 	}
+
+	serviceMacintoshSound();
 }
 
 bool MADSEngine::hasPendingKey() {
