@@ -45,6 +45,7 @@ class PCSoundDriver {
 public:
 	typedef void (*UpdateCallback)(void *);
 
+	PCSoundDriver();
 	virtual ~PCSoundDriver() {}
 
 	virtual MusicType musicType() const = 0;
@@ -57,14 +58,20 @@ public:
 	virtual const char *getInstrumentExtension() const { return ""; }
 	virtual void notifyInstrumentLoad(const byte *data, int size, int channel) {}
 
-	virtual void setUpdateCallback(UpdateCallback upCb, void *ref) = 0;
+	virtual void setUpdateCallback(UpdateCallback upCb, void *ref);
 	void resetChannel(int channel);
 	void findNote(int freq, int *note, int *oct) const;
 
 protected:
+	void invokeUpdateCallback();
 
 	static const int _noteTable[];
 	static const int _noteTableCount;
+
+private:
+	UpdateCallback _upCb;
+	void *_upRef;
+	Common::Mutex _callbackMutex;
 };
 
 // 8 octaves, 12 notes per octave
@@ -80,6 +87,22 @@ const int PCSoundDriver::_noteTable[] = {
 };
 
 const int PCSoundDriver::_noteTableCount = ARRAYSIZE(_noteTable);
+
+PCSoundDriver::PCSoundDriver()
+	: _upCb(nullptr), _upRef(nullptr), _callbackMutex() {
+}
+
+void PCSoundDriver::setUpdateCallback(UpdateCallback upCb, void *ref) {
+	Common::StackLock lock(_callbackMutex);
+	_upCb = upCb;
+	_upRef = ref;
+}
+
+void PCSoundDriver::invokeUpdateCallback() {
+	Common::StackLock lock(_callbackMutex);
+	if (_upCb)
+		(*_upCb)(_upRef);
+}
 
 struct AdLibRegisterSoundInstrument {
 	uint8 vibrato;
@@ -108,7 +131,6 @@ public:
 
 	MusicType musicType() const override { return MT_ADLIB; }
 	// PCSoundDriver interface
-	void setUpdateCallback(UpdateCallback upCb, void *ref) override;
 	void setupChannel(int channel, const byte *data, int instrument, int volume) override;
 	void stopAll() override;
 
@@ -124,9 +146,6 @@ public:
 	};
 
 protected:
-	UpdateCallback _upCb;
-	void *_upRef;
-
 	OPL::OPL *_opl;
 	Audio::Mixer *_mixer;
 
@@ -207,8 +226,11 @@ public:
 
 
 private:
+	static void timerCallback(void *ref);
+	void stopChannelUnlocked(int channel);
+
 	MidiDriver *_output;
-	UpdateCallback _callback;
+	bool _timerInstalled;
 	Common::Mutex _mutex;
 
 	void writeInstrument(int offset, const byte *data, int size);
@@ -239,10 +261,11 @@ public:
 
 private:
 
+	void stopInternal();
 	void update();
 	void handleEvents();
 	void handlePattern(int channel, const byte *patternData);
-	void unload();
+	void unloadInternal();
 
 	bool _playing;
 	int _currentPos;
@@ -292,7 +315,7 @@ void PCSoundDriver::resetChannel(int channel) {
 }
 
 AdLibSoundDriver::AdLibSoundDriver(Audio::Mixer *mixer)
-	: _upCb(nullptr), _upRef(nullptr), _mixer(mixer) {
+	: _mixer(mixer) {
 
 	_opl = OPL::Config::create();
 	if (!_opl || !_opl->init())
@@ -307,11 +330,6 @@ AdLibSoundDriver::AdLibSoundDriver(Audio::Mixer *mixer)
 
 AdLibSoundDriver::~AdLibSoundDriver() {
 	delete _opl;
-}
-
-void AdLibSoundDriver::setUpdateCallback(UpdateCallback upCb, void *ref) {
-	_upCb = upCb;
-	_upRef = ref;
 }
 
 void AdLibSoundDriver::setupChannel(int channel, const byte *data, int instrument, int volume) {
@@ -393,9 +411,7 @@ void AdLibSoundDriver::initCard() {
 }
 
 void AdLibSoundDriver::onTimer() {
-	if (_upCb) {
-		(*_upCb)(_upRef);
-	}
+	invokeUpdateCallback();
 }
 
 void AdLibSoundDriver::setupPreloadedInstrument(int channel) {
@@ -658,29 +674,43 @@ void AdLibSoundDriverADL::playSample(const byte *data, int size, int channel, in
 }
 
 MidiSoundDriverH32::MidiSoundDriverH32(MidiDriver *output)
-	: _output(output), _callback(nullptr), _mutex() {
+	: _output(output), _timerInstalled(false), _mutex() {
 }
 
 MidiSoundDriverH32::~MidiSoundDriverH32() {
-	if (_callback)
-		g_system->getTimerManager()->removeTimerProc(_callback);
+	setUpdateCallback(nullptr, nullptr);
 
 	_output->close();
 	delete _output;
 }
 
 void MidiSoundDriverH32::setUpdateCallback(UpdateCallback upCb, void *ref) {
-	Common::StackLock lock(_mutex);
-
 	Common::TimerManager *timer = g_system->getTimerManager();
 	assert(timer);
 
-	if (_callback)
-		timer->removeTimerProc(_callback);
+	if (!upCb) {
+		// Clear and drain the player callback before removing its timer. Never
+		// wait for TimerManager while holding the MIDI state mutex.
+		PCSoundDriver::setUpdateCallback(nullptr, nullptr);
+		if (_timerInstalled) {
+			timer->removeTimerProc(timerCallback);
+			_timerInstalled = false;
+		}
+		return;
+	}
 
-	_callback = upCb;
-	if (_callback) // 10923000 ms / 1193180 ~= 9155 microseconds
-		timer->installTimerProc(_callback, 9155, ref, "MidiSoundDriverH32");
+	PCSoundDriver::setUpdateCallback(upCb, ref);
+	if (_timerInstalled)
+		return;
+
+	// 10923000 ms / 1193180 ~= 9155 microseconds
+	if (!timer->installTimerProc(timerCallback, 9155, this, "MidiSoundDriverH32"))
+		error("Unable to install Cine MT-32 music timer");
+	_timerInstalled = true;
+}
+
+void MidiSoundDriverH32::timerCallback(void *ref) {
+	((MidiSoundDriverH32 *)ref)->invokeUpdateCallback();
 }
 
 void MidiSoundDriverH32::setupChannel(int channel, const byte *data, int instrument, int volume) {
@@ -713,7 +743,10 @@ void MidiSoundDriverH32::setChannelFrequency(int channel, int frequency) {
 
 void MidiSoundDriverH32::stopChannel(int channel) {
 	Common::StackLock lock(_mutex);
+	stopChannelUnlocked(channel);
+}
 
+void MidiSoundDriverH32::stopChannelUnlocked(int channel) {
 	_output->send(0xB1 + channel, 0x7B, 0x00);
 }
 
@@ -727,7 +760,7 @@ void MidiSoundDriverH32::playSample(int mode, int channel, int param3, int param
 			selectInstrument3(channel + 4, 1, param4);
 		}
 
-		stopChannel(channel + 4);
+		stopChannelUnlocked(channel + 4);
 
 		if (param5 >= 0x0C && param5 <= 0x6C) {
 			_output->send(0x91 + channel + 4, param5, 0x7F);
@@ -760,7 +793,7 @@ void MidiSoundDriverH32::playSample(int mode, int channel, int param3, int param
 void MidiSoundDriverH32::playSample(const byte *data, int size, int channel, int volume) {
 	Common::StackLock lock(_mutex);
 
-	stopChannel(channel);
+	stopChannelUnlocked(channel);
 
 	volume = volume * 8 / 5;
 
@@ -1006,24 +1039,27 @@ PCSoundFxPlayer::PCSoundFxPlayer(PCSoundDriver *driver)
 }
 
 PCSoundFxPlayer::~PCSoundFxPlayer() {
-	Common::StackLock lock(_mutex);
-
 	_driver->setUpdateCallback(nullptr, nullptr);
-	stop();
+	Common::StackLock lock(_mutex);
+	stopInternal();
 }
 
 bool PCSoundFxPlayer::load(const char *song) {
 	debug(9, "PCSoundFxPlayer::load('%s')", song);
 
 	/* stop (w/ fade out) the previous song */
-	while (_fadeOutCounter != 0 && _fadeOutCounter < 100) {
+	for (;;) {
+		{
+			Common::StackLock lock(_mutex);
+			if (_fadeOutCounter == 0 || _fadeOutCounter >= 100)
+				break;
+		}
 		g_system->delayMillis(50);
 	}
-	_fadeOutCounter = 0;
 
 	Common::StackLock lock(_mutex);
-
-	stop();
+	_fadeOutCounter = 0;
+	stopInternal();
 
 	_sfxData = readBundleSoundFile(song);
 	if (!_sfxData) {
@@ -1091,6 +1127,10 @@ void PCSoundFxPlayer::play() {
 
 void PCSoundFxPlayer::stop() {
 	Common::StackLock lock(_mutex);
+	stopInternal();
+}
+
+void PCSoundFxPlayer::stopInternal() {
 	if (_playing || _fadeOutCounter != 0) {
 		_fadeOutCounter = 0;
 		_playing = false;
@@ -1100,7 +1140,7 @@ void PCSoundFxPlayer::stop() {
 		}
 		_driver->stopAll();
 	}
-	unload();
+	unloadInternal();
 }
 
 void PCSoundFxPlayer::fadeOut() {
@@ -1167,7 +1207,7 @@ void PCSoundFxPlayer::handlePattern(int channel, const byte *patternData) {
 	}
 }
 
-void PCSoundFxPlayer::unload() {
+void PCSoundFxPlayer::unloadInternal() {
 	for (int i = 0; i < NUM_INSTRUMENTS; ++i) {
 		free(_instrumentsData[i]);
 		_instrumentsData[i] = nullptr;
