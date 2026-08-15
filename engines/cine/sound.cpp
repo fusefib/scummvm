@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/algorithm.h"
 #include "common/endian.h"
 #include "common/file.h"
 #include "common/memstream.h"
@@ -38,6 +39,7 @@
 #include "audio/mididrv.h"
 #include "audio/decoders/raw.h"
 #include "audio/mods/soundfx.h"
+#include "audio/softsynth/pcspk.h"
 
 namespace Cine {
 
@@ -57,6 +59,10 @@ public:
 	virtual void stopAll() = 0;
 	virtual const char *getInstrumentExtension() const { return ""; }
 	virtual void notifyInstrumentLoad(const byte *data, int size, int channel) {}
+	virtual bool usesInstrumentFiles() const { return true; }
+	virtual void loadSong(const char *song, const byte *data) {}
+	virtual void unloadSong() {}
+	virtual void startMusic() {}
 
 	virtual void setUpdateCallback(UpdateCallback upCb, void *ref);
 	void resetChannel(int channel);
@@ -241,6 +247,62 @@ private:
 	void selectInstrument5(int messageNum);
 };
 
+class PCSpeakerSoundDriver : public PCSoundDriver {
+public:
+	PCSpeakerSoundDriver(Audio::Mixer *mixer);
+	~PCSpeakerSoundDriver() override;
+
+	MusicType musicType() const override { return MT_PCSPK; }
+	void setUpdateCallback(UpdateCallback upCb, void *ref) override;
+	void setupChannel(int channel, const byte *data, int instrument, int volume) override;
+	void setChannelFrequency(int channel, int frequency) override;
+	void stopChannel(int channel) override;
+	void playSample(int mode, int channel, int param3, int param4, int param5, int size) override;
+	void playSample(const byte *data, int size, int channel, int volume) override;
+	void stopAll() override;
+	bool usesInstrumentFiles() const override { return false; }
+	void loadSong(const char *song, const byte *data) override;
+	void unloadSong() override;
+	void startMusic() override;
+
+private:
+	struct HPEffectState {
+		bool active;
+		uint16 initialSegmentCount;
+		uint16 segmentsRemaining;
+		uint16 ticksRemaining;
+		uint16 baseDivisor;
+		uint16 divisor;
+		bool repeat;
+		const byte *firstCommand;
+		const byte *nextCommand;
+		const byte *end;
+	};
+
+	static void timerCallback(void *ref);
+	void onTimer();
+	bool updateEffect();
+	bool loadEffectSegment(const byte *command);
+	void outputDivisor(uint16 divisor, bool silenceOne);
+	uint16 periodToDivisor(int frequency, byte mode) const;
+	void resetMusicState();
+	void stopAllUnlocked();
+
+	Audio::Mixer *_mixer;
+	Audio::PCSpeakerStream *_stream;
+	Audio::SoundHandle _handle;
+	bool _timerInstalled;
+	Common::Mutex _mutex;
+	const byte *_songData;
+	byte _ist[15];
+	int _channelInstrument[4];
+	uint16 _channelDivisor[4];
+	byte _muxChannel;
+	byte _timerParity;
+	bool _musicActive;
+	HPEffectState _effect;
+};
+
 class PCSoundFxPlayer {
 public:
 
@@ -251,6 +313,7 @@ public:
 	void play();
 	void stop();
 	void fadeOut();
+	bool isActive();
 
 	static void updateCallback(void *ref);
 
@@ -1030,6 +1093,283 @@ void MidiSoundDriverH32::selectInstrument(int channel, int timbreGroup, int timb
 	_output->sysEx(sysEx, 24);
 }
 
+PCSpeakerSoundDriver::PCSpeakerSoundDriver(Audio::Mixer *mixer)
+	: _mixer(mixer), _stream(nullptr), _timerInstalled(false), _mutex(),
+	  _songData(nullptr), _muxChannel(0), _timerParity(0),
+	  _musicActive(false) {
+	if (!_mixer || !_mixer->isReady())
+		error("PC speaker output requires an initialized mixer");
+
+	Common::fill(_ist, _ist + ARRAYSIZE(_ist), 0);
+	resetMusicState();
+	_effect.active = false;
+	_effect.initialSegmentCount = 0;
+	_effect.segmentsRemaining = 0;
+	_effect.ticksRemaining = 0;
+	_effect.baseDivisor = 0;
+	_effect.divisor = 0;
+	_effect.repeat = false;
+	_effect.firstCommand = nullptr;
+	_effect.nextCommand = nullptr;
+	_effect.end = nullptr;
+
+	_stream = new Audio::PCSpeakerStream(_mixer->getOutputRate());
+	_mixer->playStream(Audio::Mixer::kPlainSoundType, &_handle, _stream, -1,
+			Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
+}
+
+PCSpeakerSoundDriver::~PCSpeakerSoundDriver() {
+	setUpdateCallback(nullptr, nullptr);
+	if (_mixer)
+		_mixer->stopHandle(_handle);
+	delete _stream;
+	_stream = nullptr;
+}
+
+void PCSpeakerSoundDriver::setUpdateCallback(UpdateCallback upCb, void *ref) {
+	Common::TimerManager *timer = g_system->getTimerManager();
+	assert(timer);
+
+	if (!upCb) {
+		PCSoundDriver::setUpdateCallback(nullptr, nullptr);
+		if (_timerInstalled) {
+			timer->removeTimerProc(timerCallback);
+			_timerInstalled = false;
+		}
+		return;
+	}
+
+	PCSoundDriver::setUpdateCallback(upCb, ref);
+	if (_timerInstalled)
+		return;
+
+	if (!timer->installTimerProc(timerCallback, 9155, this, "PCSpeakerSoundDriver"))
+		error("Unable to install Cine PC speaker music timer");
+	_timerInstalled = true;
+}
+
+void PCSpeakerSoundDriver::timerCallback(void *ref) {
+	((PCSpeakerSoundDriver *)ref)->onTimer();
+}
+
+void PCSpeakerSoundDriver::onTimer() {
+	{
+		Common::StackLock lock(_mutex);
+
+		if (updateEffect()) {
+			if (_effect.active)
+				outputDivisor(_effect.divisor, false);
+			else if (_stream)
+				_stream->stop();
+		}
+
+		if (_musicActive) {
+			_timerParity ^= 1;
+			if (_timerParity & 1) {
+				_muxChannel = (_muxChannel + 1) & 3;
+				outputDivisor(_channelDivisor[_muxChannel], true);
+			}
+		}
+	}
+
+	invokeUpdateCallback();
+}
+
+bool PCSpeakerSoundDriver::loadEffectSegment(const byte *command) {
+	if (!command || command + 4 > _effect.end) {
+		warning("Truncated Operation Stealth HP effect command stream");
+		_effect.active = false;
+		return false;
+	}
+
+	_effect.ticksRemaining = READ_LE_UINT16(command);
+	_effect.divisor = (uint16)(_effect.divisor +
+			(int16)READ_LE_UINT16(command + 2));
+	_effect.nextCommand = command + 4;
+	return true;
+}
+
+bool PCSpeakerSoundDriver::updateEffect() {
+	if (!_effect.active)
+		return false;
+
+	--_effect.ticksRemaining;
+	if (_effect.ticksRemaining != 0)
+		return false;
+
+	--_effect.segmentsRemaining;
+	if (_effect.segmentsRemaining != 0)
+		return loadEffectSegment(_effect.nextCommand);
+
+	if (_effect.repeat) {
+		_effect.segmentsRemaining = _effect.initialSegmentCount;
+		_effect.divisor = _effect.baseDivisor;
+		return loadEffectSegment(_effect.firstCommand);
+	}
+
+	_effect.active = false;
+	return true;
+}
+
+void PCSpeakerSoundDriver::outputDivisor(uint16 divisor, bool silenceOne) {
+	if (!_stream)
+		return;
+	if (silenceOne && divisor == 1) {
+		_stream->stop();
+		return;
+	}
+
+	const uint32 effectiveDivisor = divisor ? divisor : 0x10000;
+	const int frequency = 1193180 / effectiveDivisor;
+	if (frequency <= 0) {
+		_stream->stop();
+		return;
+	}
+	_stream->play(Audio::PCSpeaker::kWaveFormSquare, frequency, -1);
+}
+
+uint16 PCSpeakerSoundDriver::periodToDivisor(int frequency, byte mode) const {
+	if (frequency <= 0)
+		return 1;
+
+	if (mode == 0)
+		return (uint16)(250000U / (uint32)frequency);
+
+	if (mode == 1) {
+		int note;
+		int octave;
+		findNote(frequency, &note, &octave);
+		(void)octave;
+		return (uint16)(1193180U / (3U * (note + 16)));
+	}
+
+	return 1;
+}
+
+void PCSpeakerSoundDriver::resetMusicState() {
+	for (int i = 0; i < 4; ++i) {
+		_channelInstrument[i] = -1;
+		_channelDivisor[i] = 1;
+	}
+	_musicActive = false;
+}
+
+void PCSpeakerSoundDriver::setupChannel(int channel, const byte *data,
+		int instrument, int volume) {
+	Common::StackLock lock(_mutex);
+	(void)data;
+	(void)volume;
+	assert(channel >= 0 && channel < 4);
+	_channelInstrument[channel] = instrument;
+	if (_songData && instrument >= 0 && instrument < 15 &&
+			_songData[instrument] < 0x1E)
+		_channelDivisor[channel] = 1;
+}
+
+void PCSpeakerSoundDriver::setChannelFrequency(int channel, int frequency) {
+	Common::StackLock lock(_mutex);
+	assert(channel >= 0 && channel < 4);
+	const int instrument = _channelInstrument[channel];
+	const byte mode = (instrument >= 0 && instrument < 15) ?
+			_ist[instrument] : 0;
+	_channelDivisor[channel] = periodToDivisor(frequency, mode);
+}
+
+void PCSpeakerSoundDriver::stopChannel(int channel) {
+	Common::StackLock lock(_mutex);
+	if (channel >= 0 && channel < 4)
+		_channelDivisor[channel] = 1;
+}
+
+void PCSpeakerSoundDriver::playSample(int mode, int channel, int param3,
+		int param4, int param5, int size) {
+	(void)mode;
+	(void)channel;
+	(void)param3;
+	(void)param4;
+	(void)param5;
+	(void)size;
+}
+
+void PCSpeakerSoundDriver::playSample(const byte *data, int size, int channel,
+		int volume) {
+	Common::StackLock lock(_mutex);
+	(void)channel;
+	(void)volume;
+
+	if (!data || size < 10)
+		return;
+	const uint16 segmentCount = READ_LE_UINT16(data);
+	const uint32 expectedSize = 6 + (uint32)segmentCount * 4;
+	if (segmentCount == 0 || (uint32)size < expectedSize) {
+		warning("Truncated Operation Stealth HP effect (%d bytes, %u segments)",
+				size, segmentCount);
+		return;
+	}
+
+	_effect.active = true;
+	_effect.initialSegmentCount = segmentCount;
+	_effect.segmentsRemaining = segmentCount;
+	_effect.baseDivisor = READ_LE_UINT16(data + 2);
+	_effect.divisor = _effect.baseDivisor;
+	_effect.repeat = READ_LE_UINT16(data + 4) != 0;
+	_effect.firstCommand = data + 6;
+	_effect.nextCommand = data + 6;
+	_effect.end = data + expectedSize;
+	if (loadEffectSegment(_effect.firstCommand))
+		outputDivisor(_effect.divisor, false);
+}
+
+void PCSpeakerSoundDriver::stopAllUnlocked() {
+	resetMusicState();
+	_effect.active = false;
+	if (_stream)
+		_stream->stop();
+}
+
+void PCSpeakerSoundDriver::stopAll() {
+	Common::StackLock lock(_mutex);
+	stopAllUnlocked();
+}
+
+void PCSpeakerSoundDriver::loadSong(const char *song, const byte *data) {
+	char istName[64];
+	Common::strlcpy(istName, song, sizeof(istName));
+	char *dot = strrchr(istName, '.');
+	if (dot)
+		*dot = '\0';
+	Common::strlcat(istName, ".IST", sizeof(istName));
+
+	uint32 istSize = 0;
+	byte *istData = readBundleSoundFile(istName, &istSize);
+
+	Common::StackLock lock(_mutex);
+	stopAllUnlocked();
+	_songData = data;
+	Common::fill(_ist, _ist + ARRAYSIZE(_ist), 0);
+	if (!istData) {
+		warning("Unable to load PC speaker mode table '%s'", istName);
+		return;
+	}
+	const uint32 copySize = MIN<uint32>(istSize, ARRAYSIZE(_ist));
+	Common::copy(istData, istData + copySize, _ist);
+	free(istData);
+	if (istSize < ARRAYSIZE(_ist))
+		warning("PC speaker mode table '%s' is only %u bytes", istName, istSize);
+}
+
+void PCSpeakerSoundDriver::unloadSong() {
+	Common::StackLock lock(_mutex);
+	stopAllUnlocked();
+	_songData = nullptr;
+	Common::fill(_ist, _ist + ARRAYSIZE(_ist), 0);
+}
+
+void PCSpeakerSoundDriver::startMusic() {
+	Common::StackLock lock(_mutex);
+	_musicActive = true;
+}
+
 PCSoundFxPlayer::PCSoundFxPlayer(PCSoundDriver *driver)
 	: _playing(false), _driver(driver), _mutex() {
 	memset(_instrumentsData, 0, sizeof(_instrumentsData));
@@ -1066,6 +1406,9 @@ bool PCSoundFxPlayer::load(const char *song) {
 		warning("Unable to load soundfx module '%s'", song);
 		return 0;
 	}
+	_driver->loadSong(song, _sfxData);
+	if (!_driver->usesInstrumentFiles())
+		return 1;
 
 	for (int i = 0; i < NUM_INSTRUMENTS; ++i) {
 		_instrumentsData[i] = nullptr;
@@ -1121,6 +1464,7 @@ void PCSoundFxPlayer::play() {
 			_eventsDelay = (252 - _sfxData[471]) * 55 * timerIntsPerMusicUpdate / 1060;
 		}
 		_updateTicksCounter = 0;
+		_driver->startMusic();
 		_playing = true;
 	}
 }
@@ -1149,6 +1493,11 @@ void PCSoundFxPlayer::fadeOut() {
 		_fadeOutCounter = 1;
 		_playing = false;
 	}
+}
+
+bool PCSoundFxPlayer::isActive() {
+	Common::StackLock lock(_mutex);
+	return _playing || _fadeOutCounter != 0;
 }
 
 void PCSoundFxPlayer::updateCallback(void *ref) {
@@ -1208,6 +1557,7 @@ void PCSoundFxPlayer::handlePattern(int channel, const byte *patternData) {
 }
 
 void PCSoundFxPlayer::unloadInternal() {
+	_driver->unloadSong();
 	for (int i = 0; i < NUM_INSTRUMENTS; ++i) {
 		free(_instrumentsData[i]);
 		_instrumentsData[i] = nullptr;
@@ -1228,9 +1578,16 @@ PCSound::PCSound(Audio::Mixer *mixer, CineEngine *vm)
 	_currentBgSlot = 0;
 	_musicType = MT_INVALID;
 
-	const MidiDriver::DeviceHandle dev = MidiDriver::detectDevice(MDT_MIDI | MDT_ADLIB);
+	uint32 deviceFlags = MDT_MIDI | MDT_ADLIB;
+	if (_vm->getGameType() == GType_OS &&
+			_vm->getPlatform() == Common::kPlatformDOS)
+		deviceFlags |= MDT_PCSPK;
+	const MidiDriver::DeviceHandle dev = MidiDriver::detectDevice(deviceFlags);
 	const MusicType musicType = MidiDriver::getMusicType(dev);
-	if (musicType == MT_MT32 || musicType == MT_GM) {
+	if (musicType == MT_PCSPK) {
+		_soundDriver = new PCSpeakerSoundDriver(_mixer);
+		_musicType = MT_PCSPK;
+	} else if (musicType == MT_MT32 || musicType == MT_GM) {
 		const bool isMT32 = (musicType == MT_MT32 || ConfMan.getBool("native_mt32"));
 		if (isMT32) {
 			MidiDriver *driver = MidiDriver::createMidi(dev);
