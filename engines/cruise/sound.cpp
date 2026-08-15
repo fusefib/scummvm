@@ -201,6 +201,7 @@ public:
 	void stopChannel(int channel) override;
 	void playSample(const byte *data, int size, int channel, int volume) override;
 	void stopAll() override;
+	void loadSong(const char *songName, const byte *moduleData) override;
 	void prepareInstrument(int instrument, const byte *data) override;
 	const char *getInstrumentExtension() const override { return ".H32"; }
 	const char *getSoundEffectExtension() const override { return ".H32"; }
@@ -792,6 +793,12 @@ void MT32SoundDriverH32::sendPatchTemporary(int channel, int timbreGroup, int ti
 	};
 	// Patch Temporary starts at 03:00:(channel * 10h).
 	sendDT1(0x03, 0x00, channel * 0x10, patch, sizeof(patch));
+}
+
+void MT32SoundDriverH32::loadSong(const char *songName, const byte *moduleData) {
+	(void)songName;
+	(void)moduleData;
+	Common::fill(_customTimbreLoaded, _customTimbreLoaded + ARRAYSIZE(_customTimbreLoaded), false);
 }
 
 void MT32SoundDriverH32::prepareInstrument(int instrument, const byte *data) {
