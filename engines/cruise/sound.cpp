@@ -30,6 +30,7 @@
 #include "cruise/volume.h"
 
 #include "audio/fmopl.h"
+#include "audio/mididrv.h"
 
 namespace Audio {
 class Mixer;
@@ -57,7 +58,12 @@ public:
 	virtual void stopChannel(int channel) = 0;
 	virtual void playSample(const byte *data, int size, int channel, int volume) = 0;
 	virtual void stopAll() = 0;
+	virtual void loadSong(const char *songName, const byte *moduleData) {}
+	virtual void unloadSong() {}
+	virtual void prepareInstrument(int instrument, const byte *data) {}
+	virtual bool usesInstrumentFiles() const { return true; }
 	virtual const char *getInstrumentExtension() const { return ""; }
+	virtual const char *getSoundEffectExtension() const { return getInstrumentExtension(); }
 	virtual void syncSounds();
 
 	void setUpdateCallback(UpdateCallback upCb, void *ref);
@@ -180,6 +186,40 @@ public:
 	void loadInstrument(const byte *data, AdLibSoundInstrument *asi) override;
 	void setChannelFrequency(int channel, int frequency) override;
 	void playSample(const byte *data, int size, int channel, int volume) override;
+};
+
+class MT32SoundDriverH32 : public PCSoundDriver {
+public:
+	MT32SoundDriverH32(MidiDriver::DeviceHandle device);
+	~MT32SoundDriverH32() override;
+
+	void setupChannel(int channel, const byte *data, int instrument, int volume) override;
+	int prepareMusicVolume(int volume, int fadeOut) const override;
+	void setChannelFrequency(int channel, int frequency) override;
+	void stopChannel(int channel) override;
+	void playSample(const byte *data, int size, int channel, int volume) override;
+	void stopAll() override;
+	void prepareInstrument(int instrument, const byte *data) override;
+	const char *getInstrumentExtension() const override { return ".H32"; }
+	const char *getSoundEffectExtension() const override { return ".H32"; }
+	void syncSounds() override;
+
+private:
+	static void timerCallback(void *ref);
+	void onTimer();
+	void sendDT1(byte address0, byte address1, byte address2, const byte *data, uint16 length);
+	void sendPatchTemporary(int channel, int timbreGroup, int timbreNumber, int volume);
+	void uploadCustomTimbre(int slot, const byte *data);
+	int scaleUserVolume(int logicalVolume, bool sfx) const;
+
+	MidiDriver *_midi;
+	uint32 _timerAccumulator;
+	uint32 _timerQuantum;
+	bool _customTimbreLoaded[15];
+	bool _channelValid[5];
+	byte _channelTimbreGroup[5];
+	byte _channelTimbreNumber[5];
+	byte _channelLogicalVolume[5];
 };
 
 class PCSoundFxPlayer {
@@ -613,6 +653,207 @@ void AdLibSoundDriverADL::playSample(const byte *data, int size, int channel, in
 	}
 }
 
+MT32SoundDriverH32::MT32SoundDriverH32(MidiDriver::DeviceHandle device)
+	: _midi(nullptr), _timerAccumulator(0), _timerQuantum(0) {
+	Common::fill(_customTimbreLoaded, _customTimbreLoaded + ARRAYSIZE(_customTimbreLoaded), false);
+	Common::fill(_channelValid, _channelValid + ARRAYSIZE(_channelValid), false);
+	Common::fill(_channelTimbreGroup, _channelTimbreGroup + ARRAYSIZE(_channelTimbreGroup), 0);
+	Common::fill(_channelTimbreNumber, _channelTimbreNumber + ARRAYSIZE(_channelTimbreNumber), 0);
+	Common::fill(_channelLogicalVolume, _channelLogicalVolume + ARRAYSIZE(_channelLogicalVolume), 0);
+
+	_midi = MidiDriver::createMidi(device);
+	if (!_midi)
+		error("Unable to create MT-32 MIDI driver");
+
+	int result = _midi->open();
+	if (result != 0)
+		error("Unable to open MT-32 MIDI driver: %s", MidiDriver::getErrorName(result));
+
+	_midi->sendMT32Reset();
+	_timerQuantum = _midi->getBaseTempo();
+	if (_timerQuantum == 0)
+		_timerQuantum = 1000000 / kCruiseMusicTimerHz;
+	_midi->setTimerCallback(this, timerCallback);
+
+	syncSounds();
+}
+
+MT32SoundDriverH32::~MT32SoundDriverH32() {
+	if (_midi) {
+		_midi->setTimerCallback(nullptr, nullptr);
+		stopAll();
+		_midi->close();
+		delete _midi;
+		_midi = nullptr;
+	}
+}
+
+void MT32SoundDriverH32::timerCallback(void *ref) {
+	static_cast<MT32SoundDriverH32 *>(ref)->onTimer();
+}
+
+void MT32SoundDriverH32::onTimer() {
+	_timerAccumulator += _timerQuantum;
+	const uint32 cruiseTick = 1000000 / kCruiseMusicTimerHz;
+	while (_timerAccumulator >= cruiseTick) {
+		_timerAccumulator -= cruiseTick;
+		if (_upCb)
+			(*_upCb)(_upRef);
+	}
+}
+
+void MT32SoundDriverH32::sendDT1(byte address0, byte address1, byte address2, const byte *data, uint16 length) {
+	byte message[254];
+	assert(length <= (uint16)(sizeof(message) - 8));
+	message[0] = 0x41;
+	message[1] = 0x10;
+	message[2] = 0x16;
+	message[3] = 0x12;
+	message[4] = address0;
+	message[5] = address1;
+	message[6] = address2;
+	Common::copy(data, data + length, message + 7);
+
+	uint32 checksum = address0 + address1 + address2;
+	for (uint16 i = 0; i < length; ++i)
+		checksum += data[i];
+	message[7 + length] = 0x80 - (checksum & 0x7f);
+	_midi->sysEx(message, length + 8);
+}
+
+void MT32SoundDriverH32::uploadCustomTimbre(int slot, const byte *data) {
+	assert(slot >= 0 && slot < 64);
+	// The original uses address 08:(slot * 2):00 and 246 data bytes.
+	sendDT1(0x08, (slot * 2) & 0x7f, 0x00, data, 0xf6);
+}
+
+int MT32SoundDriverH32::scaleUserVolume(int logicalVolume, bool sfx) const {
+	logicalVolume = CLIP(logicalVolume, 0, 100);
+	const int userVolume = sfx ? _sfxVolume : _musicVolume;
+	return (logicalVolume * userVolume + 127) / 255;
+}
+
+void MT32SoundDriverH32::sendPatchTemporary(int channel, int timbreGroup, int timbreNumber, int volume) {
+	assert(channel >= 0 && channel < 5);
+	byte patch[16] = {
+		(byte)timbreGroup, (byte)timbreNumber,
+		0x18, // Key shift
+		0x32, // Fine tune
+		0x0c, // Bender range
+		0x03, // Assign mode
+		0x01, // Reverb switch
+		0x00,
+		(byte)CLIP(volume, 0, 100),
+		0x07, // Pan
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	};
+	// Patch Temporary starts at 03:00:(channel * 10h).
+	sendDT1(0x03, 0x00, channel * 0x10, patch, sizeof(patch));
+}
+
+void MT32SoundDriverH32::prepareInstrument(int instrument, const byte *data) {
+	if (!data || instrument < 0 || instrument >= 15)
+		return;
+
+	const byte selector = data[22];
+	if (selector >= 0x80 && !_customTimbreLoaded[instrument]) {
+		uploadCustomTimbre(instrument, data + 23);
+		_customTimbreLoaded[instrument] = true;
+	}
+}
+
+int MT32SoundDriverH32::prepareMusicVolume(int volume, int fadeOut) const {
+	volume -= fadeOut;
+	return (volume >= 0 && volume <= 100) ? volume : 0;
+}
+
+void MT32SoundDriverH32::setupChannel(int channel, const byte *data, int instrument, int volume) {
+	assert(channel >= 0 && channel < 4);
+	if (!data)
+		return;
+
+	const byte selector = data[22];
+	int group;
+	int number;
+	if (selector < 0x80) {
+		group = selector >> 6;
+		number = selector & 0x3f;
+	} else {
+		prepareInstrument(instrument, data);
+		group = 2;
+		number = instrument;
+	}
+
+	_channelValid[channel] = true;
+	_channelTimbreGroup[channel] = group;
+	_channelTimbreNumber[channel] = number;
+	_channelLogicalVolume[channel] = CLIP(volume, 0, 100);
+	sendPatchTemporary(channel, group, number, scaleUserVolume(volume, false));
+}
+
+void MT32SoundDriverH32::setChannelFrequency(int channel, int frequency) {
+	assert(channel >= 0 && channel < 4);
+	int note;
+	int octave;
+	findNote(frequency, &note, &octave);
+	const int midiNote = CLIP(note + (octave + 1) * 12, 0, 127);
+	// Tracker channels 0..3 map to MIDI channels 1..4.
+	_midi->send(0x91 + channel, midiNote, 0x7f);
+}
+
+void MT32SoundDriverH32::stopChannel(int channel) {
+	assert(channel >= 0 && channel < 5);
+	_midi->send(0xb1 + channel, MidiDriver::MIDI_CONTROLLER_ALL_NOTES_OFF, 0);
+}
+
+void MT32SoundDriverH32::stopAll() {
+	if (_midi)
+		_midi->stopAllNotes(true);
+}
+
+void MT32SoundDriverH32::playSample(const byte *data, int size, int channel, int volume) {
+	assert(channel >= 0 && channel < 5);
+	if (!data || size < 23)
+		return;
+
+	stopChannel(channel);
+
+	const byte selector = data[22];
+	int group;
+	int number;
+	if (selector < 0x80) {
+		group = selector >> 6;
+		number = selector & 0x3f;
+	} else {
+		if (size < 23 + 0xf6) {
+			warning("Truncated custom H32 sound effect (%d bytes)", size);
+			return;
+		}
+		uploadCustomTimbre(channel, data + 23);
+		group = 2;
+		number = channel;
+	}
+
+	const int logicalVolume = CLIP((volume * 8) / 5, 0, 100);
+	_channelValid[channel] = true;
+	_channelTimbreGroup[channel] = group;
+	_channelTimbreNumber[channel] = number;
+	_channelLogicalVolume[channel] = logicalVolume;
+	sendPatchTemporary(channel, group, number, scaleUserVolume(logicalVolume, true));
+	_midi->send(0x91 + channel, 0x0c, 0x7f);
+}
+
+void MT32SoundDriverH32::syncSounds() {
+	PCSoundDriver::syncSounds();
+	for (int channel = 0; channel < 5; ++channel) {
+		if (!_channelValid[channel])
+			continue;
+		const bool sfx = channel == 4;
+		sendPatchTemporary(channel, _channelTimbreGroup[channel], _channelTimbreNumber[channel],
+				scaleUserVolume(_channelLogicalVolume[channel], sfx));
+	}
+}
+
 PCSoundFxPlayer::PCSoundFxPlayer(PCSoundDriver *driver)
 	: _playing(false), _songPlayed(false), _driver(driver) {
 	memset(_instrumentsData, 0, sizeof(_instrumentsData));
@@ -655,8 +896,12 @@ bool PCSoundFxPlayer::load(const char *song) {
 		return 0;
 	}
 
+	_driver->loadSong(song, _sfxData);
+
 	for (int i = 0; i < NUM_INSTRUMENTS; ++i) {
 		_instrumentsData[i] = nullptr;
+		if (!_driver->usesInstrumentFiles())
+			continue;
 
 		char instrument[64];
 		Common::fill(instrument, instrument + ARRAYSIZE(instrument), 0);
@@ -674,6 +919,8 @@ bool PCSoundFxPlayer::load(const char *song) {
 			_instrumentsData[i] = readBundleSoundFile(instrument);
 			if (!_instrumentsData[i]) {
 				warning("Unable to load soundfx instrument '%s'", instrument);
+			} else {
+				_driver->prepareInstrument(i, _instrumentsData[i]);
 			}
 		}
 	}
@@ -773,6 +1020,7 @@ void PCSoundFxPlayer::handlePattern(int channel, const byte *patternData) {
 }
 
 void PCSoundFxPlayer::unload() {
+	_driver->unloadSong();
 	for (int i = 0; i < NUM_INSTRUMENTS; ++i) {
 		MemFree(_instrumentsData[i]);
 		_instrumentsData[i] = nullptr;
