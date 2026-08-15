@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/algorithm.h"
 #include "common/endian.h"
 #include "common/system.h"
 #include "common/textconsole.h"
@@ -48,6 +49,7 @@ public:
 	virtual ~PCSoundDriver() {}
 
 	virtual void setupChannel(int channel, const byte *data, int instrument, int volume) = 0;
+	virtual int prepareMusicVolume(int volume, int fadeOut) const;
 	virtual void setChannelFrequency(int channel, int frequency) = 0;
 	virtual void stopChannel(int channel) = 0;
 	virtual void playSample(const byte *data, int size, int channel, int volume) = 0;
@@ -180,7 +182,22 @@ class PCSoundFxPlayer {
 private:
 	enum {
 		NUM_INSTRUMENTS = 15,
-		NUM_CHANNELS = 4
+		NUM_CHANNELS = 4,
+
+		VOLUME_TABLE_OFFSET = 0,
+		INSTRUMENT_NAME_OFFSET = 20,
+		INSTRUMENT_RECORD_SIZE = 30,
+		INSTRUMENT_NAME_SIZE = 12,
+		NUM_ORDERS_OFFSET = 470,
+		TEMPO_OFFSET = 471,
+		ORDER_TABLE_OFFSET = 472,
+		AUX_DATA_OFFSET = 600,
+		AUX_DATA_SIZE = 1800,
+		PATTERN_DATA_OFFSET = AUX_DATA_OFFSET + AUX_DATA_SIZE,
+		PATTERN_SIZE = 1024,
+		ROW_SIZE = 16,
+		CHANNEL_EVENT_SIZE = 4,
+		EVENT_INSTRUMENT_OFFSET = 2
 	};
 
 	void update();
@@ -218,9 +235,9 @@ public:
 	bool songLoaded() const { return _sfxData != nullptr; }
 	bool songPlayed() const { return _songPlayed; }
 	bool playing() const { return _playing; }
-	uint8 numOrders() const { assert(_sfxData); return _sfxData[470]; }
-	void setNumOrders(uint8 v) { assert(_sfxData); _sfxData[470] = v; }
-	void setPattern(int offset, uint8 value) { assert(_sfxData); _sfxData[472 + offset] = value; }
+	uint8 numOrders() const { assert(_sfxData); return _sfxData[NUM_ORDERS_OFFSET]; }
+	void setNumOrders(uint8 v) { assert(_sfxData); _sfxData[NUM_ORDERS_OFFSET] = v; }
+	void setPattern(int offset, uint8 value) { assert(_sfxData); _sfxData[ORDER_TABLE_OFFSET + offset] = value; }
 	const char *musicName() { return _musicName; }
 
 	// Note: Original game never actually uses looping variable. Songs are hardcoded to loop
@@ -254,6 +271,11 @@ byte *readBundleSoundFile(const char *name) {
 	return data;
 }
 
+
+int PCSoundDriver::prepareMusicVolume(int volume, int fadeOut) const {
+	volume -= fadeOut;
+	return volume > 0 ? volume : 0;
+}
 
 void PCSoundDriver::setUpdateCallback(UpdateCallback upCb, void *ref) {
 	_upCb = upCb;
@@ -621,8 +643,10 @@ bool PCSoundFxPlayer::load(const char *song) {
 		_instrumentsData[i] = nullptr;
 
 		char instrument[64];
-		memset(instrument, 0, 64); // Clear the data first
-		memcpy(instrument, _sfxData + 20 + i * 30, 12);
+		Common::fill(instrument, instrument + ARRAYSIZE(instrument), 0);
+		Common::copy(_sfxData + INSTRUMENT_NAME_OFFSET + i * INSTRUMENT_RECORD_SIZE,
+				_sfxData + INSTRUMENT_NAME_OFFSET + i * INSTRUMENT_RECORD_SIZE + INSTRUMENT_NAME_SIZE,
+				instrument);
 		instrument[63] = '\0';
 
 		if (strlen(instrument) != 0) {
@@ -648,8 +672,8 @@ void PCSoundFxPlayer::play() {
 		}
 		_currentPos = 0;
 		_currentOrder = 0;
-		_numOrders = _sfxData[470];
-		_eventsDelay = (244 - _sfxData[471]) * 100 / 1060;
+		_numOrders = _sfxData[NUM_ORDERS_OFFSET];
+		_eventsDelay = (244 - _sfxData[TEMPO_OFFSET]) * 100 / 1060;
 		_updateTicksCounter = 0;
 		_playing = true;
 	}
@@ -689,14 +713,12 @@ void PCSoundFxPlayer::update() {
 }
 
 void PCSoundFxPlayer::handleEvents() {
-	const byte *patternData = _sfxData + 600 + 1800;
-	const byte *orderTable = _sfxData + 472;
-	uint16 patternNum = orderTable[_currentOrder] * 1024;
+	const byte *patternData = _sfxData + PATTERN_DATA_OFFSET;
+	const byte *orderTable = _sfxData + ORDER_TABLE_OFFSET;
+	uint16 patternNum = orderTable[_currentOrder] * PATTERN_SIZE;
 
-	for (int i = 0; i < 4; ++i) {
-		handlePattern(i, patternData + patternNum + _currentPos);
-		patternData += 4;
-	}
+	for (int i = 0; i < NUM_CHANNELS; ++i)
+		handlePattern(i, patternData + patternNum + _currentPos + i * CHANNEL_EVENT_SIZE);
 
 	if (_fadeOutCounter != 0 && _fadeOutCounter < 100) {
 		_fadeOutCounter += 2;
@@ -706,8 +728,8 @@ void PCSoundFxPlayer::handleEvents() {
 		return;
 	}
 
-	_currentPos += 16;
-	if (_currentPos >= 1024) {
+	_currentPos += ROW_SIZE;
+	if (_currentPos >= PATTERN_SIZE) {
 		_currentPos = 0;
 		++_currentOrder;
 		if (_currentOrder == _numOrders) {
@@ -718,12 +740,12 @@ void PCSoundFxPlayer::handleEvents() {
 }
 
 void PCSoundFxPlayer::handlePattern(int channel, const byte *patternData) {
-	int instrument = patternData[2] >> 4;
+	int instrument = patternData[EVENT_INSTRUMENT_OFFSET] >> 4;
 	if (instrument != 0) {
 		--instrument;
 		if (_instrumentsChannelTable[channel] != instrument || _fadeOutCounter != 0) {
 			_instrumentsChannelTable[channel] = instrument;
-			const int volume = _sfxData[instrument] - _fadeOutCounter;
+			const int volume = _driver->prepareMusicVolume(_sfxData[VOLUME_TABLE_OFFSET + instrument], _fadeOutCounter);
 			_driver->setupChannel(channel, _instrumentsData[instrument], instrument, volume);
 		}
 	}
@@ -756,8 +778,8 @@ void PCSoundFxPlayer::doSync(Common::Serializer &s) {
 			_instrumentsChannelTable[i] = -1;
 		}
 
-		_numOrders = _sfxData[470];
-		_eventsDelay = (244 - _sfxData[471]) * 100 / 1060;
+		_numOrders = _sfxData[NUM_ORDERS_OFFSET];
+		_eventsDelay = (244 - _sfxData[TEMPO_OFFSET]) * 100 / 1060;
 		_updateTicksCounter = 0;
 	}
 
