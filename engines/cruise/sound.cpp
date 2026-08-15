@@ -21,6 +21,7 @@
 
 #include "common/algorithm.h"
 #include "common/endian.h"
+#include "common/mutex.h"
 #include "common/system.h"
 #include "common/textconsole.h"
 #include "common/timer.h"
@@ -69,14 +70,16 @@ public:
 	virtual const char *getSoundEffectExtension() const { return getInstrumentExtension(); }
 	virtual void syncSounds();
 
-	void setUpdateCallback(UpdateCallback upCb, void *ref);
+	virtual void setUpdateCallback(UpdateCallback upCb, void *ref);
 	void resetChannel(int channel);
 	void findNote(int freq, int *note, int *oct) const;
 
-
 protected:
+	void invokeUpdateCallback();
+
 	UpdateCallback _upCb;
 	void *_upRef;
+	Common::Mutex _callbackMutex;
 	uint8 _musicVolume;
 	uint8 _sfxVolume;
 
@@ -150,6 +153,7 @@ public:
 protected:
 	OPL::OPL *_opl;
 	Audio::Mixer *_mixer;
+	Common::Mutex _mutex;
 
 	byte _vibrato;
 	VolumeEntry _channelsVolumeTable[5];
@@ -196,6 +200,7 @@ public:
 	MT32SoundDriverH32(MidiDriver *midi);
 	~MT32SoundDriverH32() override;
 
+	void setUpdateCallback(UpdateCallback upCb, void *ref) override;
 	void setupChannel(int channel, const byte *data, int instrument, int volume) override;
 	int prepareMusicVolume(int volume, int fadeOut) const override;
 	void setChannelFrequency(int channel, int frequency) override;
@@ -210,15 +215,16 @@ public:
 
 private:
 	static void timerCallback(void *ref);
-	void onTimer();
 	void sendDT1(byte address0, byte address1, byte address2, const byte *data, uint16 length);
 	void sendPatchTemporary(int channel, int timbreGroup, int timbreNumber, int volume);
 	void uploadCustomTimbre(int slot, const byte *data);
+	void prepareInstrumentUnlocked(int instrument, const byte *data);
+	void stopChannelUnlocked(int channel);
 	int scaleUserVolume(int logicalVolume, bool sfx) const;
 
 	MidiDriver *_midi;
-	uint32 _timerAccumulator;
-	uint32 _timerQuantum;
+	bool _timerInstalled;
+	Common::Mutex _mutex;
 	bool _customTimbreLoaded[15];
 	bool _channelValid[5];
 	byte _channelTimbreGroup[5];
@@ -264,6 +270,7 @@ private:
 
 	Audio::Mixer *_mixer;
 	Audio::PCSpeakerStream *_stream;
+	Common::Mutex _mutex;
 	Audio::SoundHandle _handle;
 	const byte *_songData;
 	byte _ist[15];
@@ -296,6 +303,9 @@ private:
 		EVENT_INSTRUMENT_OFFSET = 2
 	};
 
+	bool loadInternal(const char *song);
+	void stopInternal();
+	void unloadInternal();
 	void update();
 	void handleEvents();
 	void handlePattern(int channel, const byte *patternData);
@@ -314,6 +324,7 @@ private:
 	byte *_sfxData;
 	byte *_instrumentsData[NUM_INSTRUMENTS];
 	PCSoundDriver *_driver;
+	mutable Common::Mutex _mutex;
 
 public:
 	PCSoundFxPlayer(PCSoundDriver *driver);
@@ -325,20 +336,21 @@ public:
 	void unload();
 	void fadeOut();
 	void doSync(Common::Serializer &s);
+	void syncSounds();
 
 	static void updateCallback(void *ref);
 
-	bool songLoaded() const { return _sfxData != nullptr; }
-	bool songPlayed() const { return _songPlayed; }
-	bool playing() const { return _playing; }
-	uint8 numOrders() const { assert(_sfxData); return _sfxData[NUM_ORDERS_OFFSET]; }
-	void setNumOrders(uint8 v) { assert(_sfxData); _sfxData[NUM_ORDERS_OFFSET] = v; }
-	void setPattern(int offset, uint8 value) { assert(_sfxData); _sfxData[ORDER_TABLE_OFFSET + offset] = value; }
-	const char *musicName() { return _musicName; }
+	bool songLoaded() const;
+	bool songPlayed() const;
+	bool playing() const;
+	uint8 numOrders() const;
+	void setNumOrders(uint8 v);
+	void setPattern(int offset, uint8 value);
+	const char *musicName() const;
 
 	// Note: Original game never actually uses looping variable. Songs are hardcoded to loop
-	bool looping() const { return _looping; }
-	void setLooping(bool v) { _looping = v; }
+	bool looping() const;
+	void setLooping(bool v);
 };
 
 byte *readBundleSoundFile(const char *name) {
@@ -374,8 +386,15 @@ int PCSoundDriver::prepareMusicVolume(int volume, int fadeOut) const {
 }
 
 void PCSoundDriver::setUpdateCallback(UpdateCallback upCb, void *ref) {
+	Common::StackLock lock(_callbackMutex);
 	_upCb = upCb;
 	_upRef = ref;
+}
+
+void PCSoundDriver::invokeUpdateCallback() {
+	Common::StackLock lock(_callbackMutex);
+	if (_upCb)
+		(*_upCb)(_upRef);
 }
 
 void PCSoundDriver::findNote(int freq, int *note, int *oct) const {
@@ -438,6 +457,7 @@ AdLibSoundDriver::~AdLibSoundDriver() {
 }
 
 void AdLibSoundDriver::syncSounds() {
+	Common::StackLock lock(_mutex);
 	PCSoundDriver::syncSounds();
 
 	// Force all instruments to reload on the next playing point
@@ -477,6 +497,7 @@ void AdLibSoundDriver::adjustVolume(int channel, int volume) {
 }
 
 void AdLibSoundDriver::setupChannel(int channel, const byte *data, int instrument, int volume) {
+	Common::StackLock lock(_mutex);
 	assert(channel < 5);
 	if (data) {
 		adjustVolume(channel, volume);
@@ -485,6 +506,7 @@ void AdLibSoundDriver::setupChannel(int channel, const byte *data, int instrumen
 }
 
 void AdLibSoundDriver::stopChannel(int channel) {
+	Common::StackLock lock(_mutex);
 	assert(channel < 5);
 	AdLibSoundInstrument *ins = &_instrumentsTable[channel];
 	if (ins->mode != 0 && ins->channel == 6) {
@@ -500,6 +522,7 @@ void AdLibSoundDriver::stopChannel(int channel) {
 }
 
 void AdLibSoundDriver::stopAll() {
+	Common::StackLock lock(_mutex);
 	for (int i = 0; i < 18; ++i)
 		_opl->writeReg(0x40 | _operatorsTable[i], 63);
 
@@ -534,9 +557,7 @@ void AdLibSoundDriver::initCard() {
 }
 
 void AdLibSoundDriver::onTimer() {
-	if (_upCb) {
-		(*_upCb)(_upRef);
-	}
+	invokeUpdateCallback();
 }
 
 void AdLibSoundDriver::setupInstrument(const byte *data, int channel) {
@@ -633,6 +654,7 @@ void AdLibSoundDriverADL::loadInstrument(const byte *data, AdLibSoundInstrument 
 }
 
 void AdLibSoundDriverADL::setChannelFrequency(int channel, int frequency) {
+	Common::StackLock lock(_mutex);
 	assert(channel < 5);
 	AdLibSoundInstrument *ins = &_instrumentsTable[channel];
 	if (ins->mode != 0) {
@@ -668,6 +690,7 @@ void AdLibSoundDriverADL::setChannelFrequency(int channel, int frequency) {
 }
 
 void AdLibSoundDriverADL::playSample(const byte *data, int size, int channel, int volume) {
+	Common::StackLock lock(_mutex);
 	assert(channel < 5);
 	adjustVolume(channel, 0x7f);
 
@@ -706,7 +729,7 @@ void AdLibSoundDriverADL::playSample(const byte *data, int size, int channel, in
 }
 
 MT32SoundDriverH32::MT32SoundDriverH32(MidiDriver *midi)
-	: _midi(midi), _timerAccumulator(0), _timerQuantum(0) {
+	: _midi(midi), _timerInstalled(false), _mutex() {
 	Common::fill(_customTimbreLoaded, _customTimbreLoaded + ARRAYSIZE(_customTimbreLoaded), false);
 	Common::fill(_channelValid, _channelValid + ARRAYSIZE(_channelValid), false);
 	Common::fill(_channelTimbreGroup, _channelTimbreGroup + ARRAYSIZE(_channelTimbreGroup), 0);
@@ -715,17 +738,12 @@ MT32SoundDriverH32::MT32SoundDriverH32(MidiDriver *midi)
 
 	assert(_midi);
 	_midi->sendMT32Reset();
-	_timerQuantum = _midi->getBaseTempo();
-	if (_timerQuantum == 0)
-		_timerQuantum = 1000000 / kCruiseMusicTimerHz;
-	_midi->setTimerCallback(this, timerCallback);
-
 	syncSounds();
 }
 
 MT32SoundDriverH32::~MT32SoundDriverH32() {
+	setUpdateCallback(nullptr, nullptr);
 	if (_midi) {
-		_midi->setTimerCallback(nullptr, nullptr);
 		stopAll();
 		_midi->close();
 		delete _midi;
@@ -734,17 +752,35 @@ MT32SoundDriverH32::~MT32SoundDriverH32() {
 }
 
 void MT32SoundDriverH32::timerCallback(void *ref) {
-	static_cast<MT32SoundDriverH32 *>(ref)->onTimer();
+	static_cast<MT32SoundDriverH32 *>(ref)->invokeUpdateCallback();
 }
 
-void MT32SoundDriverH32::onTimer() {
-	_timerAccumulator += _timerQuantum;
-	const uint32 cruiseTick = 1000000 / kCruiseMusicTimerHz;
-	while (_timerAccumulator >= cruiseTick) {
-		_timerAccumulator -= cruiseTick;
-		if (_upCb)
-			(*_upCb)(_upRef);
+void MT32SoundDriverH32::setUpdateCallback(UpdateCallback upCb, void *ref) {
+	Common::TimerManager *timer = g_system->getTimerManager();
+	assert(timer);
+
+	// Timer removal can wait for a tracker callback that is inside an H32
+	// operation. Never hold the H32 state mutex while changing timer ownership.
+	if (!upCb) {
+		// Clear and drain the tracker callback before removing its timer.
+		PCSoundDriver::setUpdateCallback(nullptr, nullptr);
+		if (_timerInstalled) {
+			timer->removeTimerProc(timerCallback);
+			_timerInstalled = false;
+		}
+		return;
 	}
+
+	PCSoundDriver::setUpdateCallback(upCb, ref);
+	if (_timerInstalled)
+		return;
+
+	if (!timer->installTimerProc(timerCallback,
+			1000000 / kCruiseMusicTimerHz, this, "cruiseMT32")) {
+		PCSoundDriver::setUpdateCallback(nullptr, nullptr);
+		error("Unable to install Cruise MT-32 music timer");
+	}
+	_timerInstalled = true;
 }
 
 void MT32SoundDriverH32::sendDT1(byte address0, byte address1, byte address2, const byte *data, uint16 length) {
@@ -797,12 +833,18 @@ void MT32SoundDriverH32::sendPatchTemporary(int channel, int timbreGroup, int ti
 }
 
 void MT32SoundDriverH32::loadSong(const char *songName, const byte *moduleData) {
+	Common::StackLock lock(_mutex);
 	(void)songName;
 	(void)moduleData;
 	Common::fill(_customTimbreLoaded, _customTimbreLoaded + ARRAYSIZE(_customTimbreLoaded), false);
 }
 
 void MT32SoundDriverH32::prepareInstrument(int instrument, const byte *data) {
+	Common::StackLock lock(_mutex);
+	prepareInstrumentUnlocked(instrument, data);
+}
+
+void MT32SoundDriverH32::prepareInstrumentUnlocked(int instrument, const byte *data) {
 	if (!data || instrument < 0 || instrument >= 15)
 		return;
 
@@ -819,6 +861,7 @@ int MT32SoundDriverH32::prepareMusicVolume(int volume, int fadeOut) const {
 }
 
 void MT32SoundDriverH32::setupChannel(int channel, const byte *data, int instrument, int volume) {
+	Common::StackLock lock(_mutex);
 	assert(channel >= 0 && channel < 4);
 	if (!data)
 		return;
@@ -830,7 +873,7 @@ void MT32SoundDriverH32::setupChannel(int channel, const byte *data, int instrum
 		group = selector >> 6;
 		number = selector & 0x3f;
 	} else {
-		prepareInstrument(instrument, data);
+		prepareInstrumentUnlocked(instrument, data);
 		group = 2;
 		number = instrument;
 	}
@@ -843,6 +886,7 @@ void MT32SoundDriverH32::setupChannel(int channel, const byte *data, int instrum
 }
 
 void MT32SoundDriverH32::setChannelFrequency(int channel, int frequency) {
+	Common::StackLock lock(_mutex);
 	assert(channel >= 0 && channel < 4);
 	int note;
 	int octave;
@@ -853,21 +897,28 @@ void MT32SoundDriverH32::setChannelFrequency(int channel, int frequency) {
 }
 
 void MT32SoundDriverH32::stopChannel(int channel) {
+	Common::StackLock lock(_mutex);
+	stopChannelUnlocked(channel);
+}
+
+void MT32SoundDriverH32::stopChannelUnlocked(int channel) {
 	assert(channel >= 0 && channel < 5);
 	_midi->send(0xb1 + channel, MidiDriver::MIDI_CONTROLLER_ALL_NOTES_OFF, 0);
 }
 
 void MT32SoundDriverH32::stopAll() {
+	Common::StackLock lock(_mutex);
 	if (_midi)
 		_midi->stopAllNotes(true);
 }
 
 void MT32SoundDriverH32::playSample(const byte *data, int size, int channel, int volume) {
+	Common::StackLock lock(_mutex);
 	assert(channel >= 0 && channel < 5);
 	if (!data || size < 23)
 		return;
 
-	stopChannel(channel);
+	stopChannelUnlocked(channel);
 
 	const byte selector = data[22];
 	int group;
@@ -895,6 +946,7 @@ void MT32SoundDriverH32::playSample(const byte *data, int size, int channel, int
 }
 
 void MT32SoundDriverH32::syncSounds() {
+	Common::StackLock lock(_mutex);
 	PCSoundDriver::syncSounds();
 	for (int channel = 0; channel < 5; ++channel) {
 		if (!_channelValid[channel])
@@ -906,7 +958,7 @@ void MT32SoundDriverH32::syncSounds() {
 }
 
 PCSpeakerSoundDriverHP::PCSpeakerSoundDriverHP(Audio::Mixer *mixer)
-	: _mixer(mixer), _stream(nullptr), _songData(nullptr), _muxChannel(0), _timerParity(0) {
+	: _mixer(mixer), _stream(nullptr), _mutex(), _songData(nullptr), _muxChannel(0), _timerParity(0) {
 	Common::fill(_ist, _ist + ARRAYSIZE(_ist), 0);
 	for (int i = 0; i < 4; ++i) {
 		_channelInstrument[i] = -1;
@@ -917,6 +969,8 @@ PCSpeakerSoundDriverHP::PCSpeakerSoundDriverHP(Audio::Mixer *mixer)
 		error("PC speaker output requires an initialized mixer");
 
 	_stream = new Audio::PCSpeakerStream(_mixer->getOutputRate());
+	// Music and HP effects share one waveform. Keep the mixer channel plain and
+	// apply the independent user volumes when each source drives the speaker.
 	_mixer->playStream(Audio::Mixer::kPlainSoundType, &_handle, _stream, -1,
 			Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
 
@@ -985,27 +1039,32 @@ bool PCSpeakerSoundDriverHP::updateEffect() {
 }
 
 void PCSpeakerSoundDriverHP::onTimer() {
-	// The original IRQ updates HP first and only changes its divisor when a
-	// segment advances or finishes.
-	if (updateEffect()) {
-		if (_effect.active)
-			outputDivisor(_effect.divisor, _sfxVolume);
-		else if (_stream)
-			_stream->stop();
+	{
+		Common::StackLock lock(_mutex);
+
+		// The original IRQ updates HP first and only changes its divisor when a
+		// segment advances or finishes.
+		if (updateEffect()) {
+			if (_effect.active)
+				outputDivisor(_effect.divisor, _sfxVolume);
+			else if (_stream)
+				_stream->stop();
+		}
+
+		// Four music voices are multiplexed on every other 100 Hz interrupt.
+		_timerParity ^= 1;
+		if (_timerParity & 1) {
+			_muxChannel = (_muxChannel + 1) & 3;
+			outputDivisor(_channelDivisor[_muxChannel], _musicVolume);
+		}
 	}
 
-	// Four music voices are multiplexed on every other 100 Hz interrupt.
-	_timerParity ^= 1;
-	if (_timerParity & 1) {
-		_muxChannel = (_muxChannel + 1) & 3;
-		outputDivisor(_channelDivisor[_muxChannel], _musicVolume);
-	}
-
-	if (_upCb)
-		(*_upCb)(_upRef);
+	// The tracker re-enters the driver, so invoke it without the state lock.
+	invokeUpdateCallback();
 }
 
 void PCSpeakerSoundDriverHP::loadSong(const char *songName, const byte *moduleData) {
+	Common::StackLock lock(_mutex);
 	_songData = moduleData;
 	Common::fill(_ist, _ist + ARRAYSIZE(_ist), 0);
 	for (int i = 0; i < 4; ++i) {
@@ -1035,6 +1094,7 @@ void PCSpeakerSoundDriverHP::loadSong(const char *songName, const byte *moduleDa
 }
 
 void PCSpeakerSoundDriverHP::unloadSong() {
+	Common::StackLock lock(_mutex);
 	_songData = nullptr;
 	Common::fill(_ist, _ist + ARRAYSIZE(_ist), 0);
 	for (int i = 0; i < 4; ++i) {
@@ -1044,6 +1104,7 @@ void PCSpeakerSoundDriverHP::unloadSong() {
 }
 
 void PCSpeakerSoundDriverHP::setupChannel(int channel, const byte *data, int instrument, int volume) {
+	Common::StackLock lock(_mutex);
 	(void)data;
 	(void)volume;
 	assert(channel >= 0 && channel < 4);
@@ -1079,6 +1140,7 @@ uint16 PCSpeakerSoundDriverHP::periodToDivisor(int frequency, byte mode) const {
 }
 
 void PCSpeakerSoundDriverHP::setChannelFrequency(int channel, int frequency) {
+	Common::StackLock lock(_mutex);
 	assert(channel >= 0 && channel < 4);
 	const int instrument = _channelInstrument[channel];
 	const byte mode = (instrument >= 0 && instrument < 15) ? _ist[instrument] : 0;
@@ -1086,6 +1148,7 @@ void PCSpeakerSoundDriverHP::setChannelFrequency(int channel, int frequency) {
 }
 
 void PCSpeakerSoundDriverHP::stopChannel(int channel) {
+	Common::StackLock lock(_mutex);
 	if (channel >= 0 && channel < 4)
 		_channelDivisor[channel] = 1;
 	else if (channel == 4)
@@ -1093,6 +1156,7 @@ void PCSpeakerSoundDriverHP::stopChannel(int channel) {
 }
 
 void PCSpeakerSoundDriverHP::playSample(const byte *data, int size, int channel, int volume) {
+	Common::StackLock lock(_mutex);
 	(void)channel;
 	(void)volume;
 	if (!data || size < 10)
@@ -1120,6 +1184,7 @@ void PCSpeakerSoundDriverHP::playSample(const byte *data, int size, int channel,
 }
 
 void PCSpeakerSoundDriverHP::stopAll() {
+	Common::StackLock lock(_mutex);
 	for (int i = 0; i < 4; ++i)
 		_channelDivisor[i] = 1;
 	_effect.active = false;
@@ -1128,11 +1193,12 @@ void PCSpeakerSoundDriverHP::stopAll() {
 }
 
 void PCSpeakerSoundDriverHP::syncSounds() {
+	Common::StackLock lock(_mutex);
 	PCSoundDriver::syncSounds();
 }
 
 PCSoundFxPlayer::PCSoundFxPlayer(PCSoundDriver *driver)
-	: _playing(false), _songPlayed(false), _driver(driver) {
+	: _playing(false), _songPlayed(false), _driver(driver), _mutex() {
 	memset(_instrumentsData, 0, sizeof(_instrumentsData));
 	_sfxData = nullptr;
 	_fadeOutCounter = 0;
@@ -1147,30 +1213,41 @@ PCSoundFxPlayer::PCSoundFxPlayer(PCSoundDriver *driver)
 }
 
 PCSoundFxPlayer::~PCSoundFxPlayer() {
+	// Disconnect first so no callback can retain or reacquire player state.
 	_driver->setUpdateCallback(nullptr, nullptr);
-	stop();
+	Common::StackLock lock(_mutex);
+	stopInternal();
 }
 
 bool PCSoundFxPlayer::load(const char *song) {
 	debug(9, "PCSoundFxPlayer::load('%s')", song);
 
-	/* stop (w/ fade out) the previous song */
-	while (_fadeOutCounter != 0 && _fadeOutCounter < 100) {
+	// Let a timer-driven fade complete without holding the player state lock.
+	for (;;) {
+		{
+			Common::StackLock lock(_mutex);
+			if (_fadeOutCounter == 0 || _fadeOutCounter >= 100)
+				break;
+		}
 		g_system->delayMillis(50);
 	}
+
+	Common::StackLock lock(_mutex);
+	return loadInternal(song);
+}
+
+bool PCSoundFxPlayer::loadInternal(const char *song) {
 	_fadeOutCounter = 0;
+	stopInternal();
 
-	if (_playing) {
-		stop();
-	}
-
-	Common::strlcpy(_musicName, song, sizeof(_musicName));
+	if (song != _musicName)
+		Common::strlcpy(_musicName, song, sizeof(_musicName));
 	_songPlayed = false;
 	_looping = false;
 	_sfxData = readBundleSoundFile(song);
 	if (!_sfxData) {
 		warning("Unable to load soundfx module '%s'", song);
-		return 0;
+		return false;
 	}
 
 	_driver->loadSong(song, _sfxData);
@@ -1187,11 +1264,10 @@ bool PCSoundFxPlayer::load(const char *song) {
 				instrument);
 		instrument[63] = '\0';
 
-		if (strlen(instrument) != 0) {
+		if (instrument[0] != '\0') {
 			char *dot = strrchr(instrument, '.');
-			if (dot) {
+			if (dot)
 				*dot = '\0';
-			}
 			Common::strlcat(instrument, _driver->getInstrumentExtension(), sizeof(instrument));
 			_instrumentsData[i] = readBundleSoundFile(instrument);
 			if (!_instrumentsData[i]) {
@@ -1201,15 +1277,15 @@ bool PCSoundFxPlayer::load(const char *song) {
 			}
 		}
 	}
-	return 1;
+	return true;
 }
 
 void PCSoundFxPlayer::play() {
 	debug(9, "PCSoundFxPlayer::play()");
+	Common::StackLock lock(_mutex);
 	if (_sfxData) {
-		for (int i = 0; i < NUM_CHANNELS; ++i) {
+		for (int i = 0; i < NUM_CHANNELS; ++i)
 			_instrumentsChannelTable[i] = -1;
-		}
 		_currentPos = 0;
 		_currentOrder = 0;
 		_numOrders = _sfxData[NUM_ORDERS_OFFSET];
@@ -1219,19 +1295,24 @@ void PCSoundFxPlayer::play() {
 	}
 }
 
-void PCSoundFxPlayer::stop() {
+void PCSoundFxPlayer::stopInternal() {
 	if (_playing || _fadeOutCounter != 0) {
 		_fadeOutCounter = 0;
 		_playing = false;
-		for (int i = 0; i < NUM_CHANNELS; ++i) {
+		for (int i = 0; i < NUM_CHANNELS; ++i)
 			_driver->stopChannel(i);
-		}
 		_driver->stopAll();
 	}
-	unload();
+	unloadInternal();
+}
+
+void PCSoundFxPlayer::stop() {
+	Common::StackLock lock(_mutex);
+	stopInternal();
 }
 
 void PCSoundFxPlayer::fadeOut() {
+	Common::StackLock lock(_mutex);
 	if (_playing) {
 		_fadeOutCounter = 1;
 		_playing = false;
@@ -1239,10 +1320,11 @@ void PCSoundFxPlayer::fadeOut() {
 }
 
 void PCSoundFxPlayer::updateCallback(void *ref) {
-	((PCSoundFxPlayer *)ref)->update();
+	static_cast<PCSoundFxPlayer *>(ref)->update();
 }
 
 void PCSoundFxPlayer::update() {
+	Common::StackLock lock(_mutex);
 	if (_playing || (_fadeOutCounter != 0 && _fadeOutCounter < 100)) {
 		++_updateTicksCounter;
 		if (_updateTicksCounter > _eventsDelay) {
@@ -1260,11 +1342,10 @@ void PCSoundFxPlayer::handleEvents() {
 	for (int i = 0; i < NUM_CHANNELS; ++i)
 		handlePattern(i, patternData + patternNum + _currentPos + i * CHANNEL_EVENT_SIZE);
 
-	if (_fadeOutCounter != 0 && _fadeOutCounter < 100) {
+	if (_fadeOutCounter != 0 && _fadeOutCounter < 100)
 		_fadeOutCounter += 2;
-	}
 	if (_fadeOutCounter >= 100) {
-		stop();
+		stopInternal();
 		return;
 	}
 
@@ -1272,9 +1353,8 @@ void PCSoundFxPlayer::handleEvents() {
 	if (_currentPos >= PATTERN_SIZE) {
 		_currentPos = 0;
 		++_currentOrder;
-		if (_currentOrder == _numOrders) {
+		if (_currentOrder == _numOrders)
 			_currentOrder = 0;
-		}
 	}
 	debug(7, "_currentOrder=%d/%d _currentPos=%d", _currentOrder, _numOrders, _currentPos);
 }
@@ -1296,7 +1376,10 @@ void PCSoundFxPlayer::handlePattern(int channel, const byte *patternData) {
 	}
 }
 
-void PCSoundFxPlayer::unload() {
+void PCSoundFxPlayer::unloadInternal() {
+	if (!_sfxData)
+		return;
+
 	_driver->unloadSong();
 	for (int i = 0; i < NUM_INSTRUMENTS; ++i) {
 		MemFree(_instrumentsData[i]);
@@ -1307,18 +1390,22 @@ void PCSoundFxPlayer::unload() {
 	_songPlayed = true;
 }
 
+void PCSoundFxPlayer::unload() {
+	Common::StackLock lock(_mutex);
+	unloadInternal();
+}
+
 void PCSoundFxPlayer::doSync(Common::Serializer &s) {
+	Common::StackLock lock(_mutex);
 	s.syncBytes((byte *)_musicName, 33);
-	uint16 v = (uint16)songLoaded();
+	uint16 v = (uint16)(_sfxData != nullptr);
 	s.syncAsSint16LE(v);
 
 	if (s.isLoading() && v) {
-		load(_musicName);
+		loadInternal(_musicName);
 
-		for (int i = 0; i < NUM_CHANNELS; ++i) {
+		for (int i = 0; i < NUM_CHANNELS; ++i)
 			_instrumentsChannelTable[i] = -1;
-		}
-
 		_numOrders = _sfxData[NUM_ORDERS_OFFSET];
 		_eventsDelay = (244 - _sfxData[TEMPO_OFFSET]) * 100 / 1060;
 		_updateTicksCounter = 0;
@@ -1329,6 +1416,59 @@ void PCSoundFxPlayer::doSync(Common::Serializer &s) {
 	s.syncAsSint16LE(_currentPos);
 	s.syncAsSint16LE(_currentOrder);
 	s.syncAsSint16LE(_playing);
+}
+
+void PCSoundFxPlayer::syncSounds() {
+	Common::StackLock lock(_mutex);
+	_driver->syncSounds();
+}
+
+bool PCSoundFxPlayer::songLoaded() const {
+	Common::StackLock lock(_mutex);
+	return _sfxData != nullptr;
+}
+
+bool PCSoundFxPlayer::songPlayed() const {
+	Common::StackLock lock(_mutex);
+	return _songPlayed;
+}
+
+bool PCSoundFxPlayer::playing() const {
+	Common::StackLock lock(_mutex);
+	return _playing;
+}
+
+uint8 PCSoundFxPlayer::numOrders() const {
+	Common::StackLock lock(_mutex);
+	assert(_sfxData);
+	return _sfxData[NUM_ORDERS_OFFSET];
+}
+
+void PCSoundFxPlayer::setNumOrders(uint8 v) {
+	Common::StackLock lock(_mutex);
+	assert(_sfxData);
+	_sfxData[NUM_ORDERS_OFFSET] = v;
+}
+
+void PCSoundFxPlayer::setPattern(int offset, uint8 value) {
+	Common::StackLock lock(_mutex);
+	assert(_sfxData);
+	_sfxData[ORDER_TABLE_OFFSET + offset] = value;
+}
+
+const char *PCSoundFxPlayer::musicName() const {
+	Common::StackLock lock(_mutex);
+	return _musicName;
+}
+
+bool PCSoundFxPlayer::looping() const {
+	Common::StackLock lock(_mutex);
+	return _looping;
+}
+
+void PCSoundFxPlayer::setLooping(bool v) {
+	Common::StackLock lock(_mutex);
+	_looping = v;
 }
 
 PCSound::PCSound(Audio::Mixer *mixer, CruiseEngine *vm) {
@@ -1535,7 +1675,7 @@ const char *PCSound::musicName() {
 }
 
 void PCSound::syncSounds() {
-	_soundDriver->syncSounds();
+	_player->syncSounds();
 }
 
 const char *PCSound::soundEffectExtension() const {
