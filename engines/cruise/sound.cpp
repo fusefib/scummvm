@@ -23,6 +23,7 @@
 #include "common/endian.h"
 #include "common/system.h"
 #include "common/textconsole.h"
+#include "common/timer.h"
 
 #include "cruise/cruise.h"
 #include "cruise/cruise_main.h"
@@ -31,6 +32,7 @@
 
 #include "audio/fmopl.h"
 #include "audio/mididrv.h"
+#include "audio/softsynth/pcspk.h"
 
 namespace Audio {
 class Mixer;
@@ -220,6 +222,54 @@ private:
 	byte _channelTimbreGroup[5];
 	byte _channelTimbreNumber[5];
 	byte _channelLogicalVolume[5];
+};
+
+class PCSpeakerSoundDriverHP : public PCSoundDriver {
+public:
+	PCSpeakerSoundDriverHP(Audio::Mixer *mixer);
+	~PCSpeakerSoundDriverHP() override;
+
+	void setupChannel(int channel, const byte *data, int instrument, int volume) override;
+	void setChannelFrequency(int channel, int frequency) override;
+	void stopChannel(int channel) override;
+	void playSample(const byte *data, int size, int channel, int volume) override;
+	void stopAll() override;
+	void loadSong(const char *songName, const byte *moduleData) override;
+	void unloadSong() override;
+	bool usesInstrumentFiles() const override { return false; }
+	const char *getSoundEffectExtension() const override { return ".HP"; }
+	void syncSounds() override;
+
+private:
+	struct HPEffectState {
+		bool active;
+		uint16 segmentsRemaining;
+		uint16 ticksRemaining;
+		int32 divisor;
+		const byte *nextCommand;
+		const byte *end;
+
+		HPEffectState()
+			: active(false), segmentsRemaining(0), ticksRemaining(0), divisor(1),
+			  nextCommand(nullptr), end(nullptr) {}
+	};
+
+	static void timerCallback(void *ref);
+	void onTimer();
+	bool updateEffect();
+	void outputDivisor(int32 divisor, byte volume);
+	uint16 periodToDivisor(int frequency, byte mode) const;
+
+	Audio::Mixer *_mixer;
+	Audio::PCSpeakerStream *_stream;
+	Audio::SoundHandle _handle;
+	const byte *_songData;
+	byte _ist[15];
+	int _channelInstrument[4];
+	uint16 _channelDivisor[4];
+	byte _muxChannel;
+	byte _timerParity;
+	HPEffectState _effect;
 };
 
 class PCSoundFxPlayer {
@@ -852,6 +902,232 @@ void MT32SoundDriverH32::syncSounds() {
 		sendPatchTemporary(channel, _channelTimbreGroup[channel], _channelTimbreNumber[channel],
 				scaleUserVolume(_channelLogicalVolume[channel], sfx));
 	}
+}
+
+PCSpeakerSoundDriverHP::PCSpeakerSoundDriverHP(Audio::Mixer *mixer)
+	: _mixer(mixer), _stream(nullptr), _songData(nullptr), _muxChannel(0), _timerParity(0) {
+	Common::fill(_ist, _ist + ARRAYSIZE(_ist), 0);
+	for (int i = 0; i < 4; ++i) {
+		_channelInstrument[i] = -1;
+		_channelDivisor[i] = 1;
+	}
+
+	if (!_mixer || !_mixer->isReady())
+		error("PC speaker output requires an initialized mixer");
+
+	_stream = new Audio::PCSpeakerStream(_mixer->getOutputRate());
+	_mixer->playStream(Audio::Mixer::kPlainSoundType, &_handle, _stream, -1,
+			Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
+
+	syncSounds();
+	if (!g_system->getTimerManager()->installTimerProc(timerCallback,
+			1000000 / kCruiseMusicTimerHz, this, "cruisePCSpeaker"))
+		error("Unable to install Cruise PC speaker timer");
+}
+
+PCSpeakerSoundDriverHP::~PCSpeakerSoundDriverHP() {
+	g_system->getTimerManager()->removeTimerProc(timerCallback);
+	if (_mixer)
+		_mixer->stopHandle(_handle);
+	delete _stream;
+	_stream = nullptr;
+}
+
+void PCSpeakerSoundDriverHP::timerCallback(void *ref) {
+	static_cast<PCSpeakerSoundDriverHP *>(ref)->onTimer();
+}
+
+void PCSpeakerSoundDriverHP::outputDivisor(int32 divisor, byte volume) {
+	if (!_stream)
+		return;
+	if (divisor <= 1 || volume == 0) {
+		_stream->stop();
+		return;
+	}
+
+	const int frequency = 1193180 / divisor;
+	if (frequency <= 0) {
+		_stream->stop();
+		return;
+	}
+	_stream->play(Audio::PCSpeaker::kWaveFormSquare, frequency, -1, volume);
+}
+
+bool PCSpeakerSoundDriverHP::updateEffect() {
+	if (!_effect.active)
+		return false;
+
+	if (_effect.ticksRemaining > 0)
+		--_effect.ticksRemaining;
+	if (_effect.ticksRemaining != 0)
+		return false;
+
+	if (_effect.segmentsRemaining > 0)
+		--_effect.segmentsRemaining;
+	if (_effect.segmentsRemaining == 0) {
+		_effect.active = false;
+		return true;
+	}
+
+	if (!_effect.nextCommand || _effect.nextCommand + 4 > _effect.end) {
+		warning("Truncated Cruise HP effect command stream");
+		_effect.active = false;
+		return true;
+	}
+
+	_effect.ticksRemaining = READ_LE_UINT16(_effect.nextCommand);
+	if (_effect.ticksRemaining == 0)
+		_effect.ticksRemaining = 1;
+	_effect.divisor += (int16)READ_LE_UINT16(_effect.nextCommand + 2);
+	_effect.nextCommand += 4;
+	return true;
+}
+
+void PCSpeakerSoundDriverHP::onTimer() {
+	// The original IRQ updates HP first and only changes its divisor when a
+	// segment advances or finishes.
+	if (updateEffect()) {
+		if (_effect.active)
+			outputDivisor(_effect.divisor, _sfxVolume);
+		else if (_stream)
+			_stream->stop();
+	}
+
+	// Four music voices are multiplexed on every other 100 Hz interrupt.
+	_timerParity ^= 1;
+	if (_timerParity & 1) {
+		_muxChannel = (_muxChannel + 1) & 3;
+		outputDivisor(_channelDivisor[_muxChannel], _musicVolume);
+	}
+
+	if (_upCb)
+		(*_upCb)(_upRef);
+}
+
+void PCSpeakerSoundDriverHP::loadSong(const char *songName, const byte *moduleData) {
+	_songData = moduleData;
+	Common::fill(_ist, _ist + ARRAYSIZE(_ist), 0);
+	for (int i = 0; i < 4; ++i) {
+		_channelInstrument[i] = -1;
+		_channelDivisor[i] = 1;
+	}
+
+	char istName[64];
+	Common::strlcpy(istName, songName, sizeof(istName));
+	char *dot = strrchr(istName, '.');
+	if (dot)
+		*dot = '\0';
+	Common::strlcat(istName, ".IST", sizeof(istName));
+
+	const int fileIdx = findFileInDisks(istName);
+	if (fileIdx < 0) {
+		debug(2, "No PC-speaker IST table for song '%s'; using mode 0", songName);
+		return;
+	}
+
+	byte *data = readBundleSoundFile(istName);
+	if (!data)
+		return;
+	const int copySize = MIN(15, (int)volumePtrToFileDescriptor[fileIdx].extSize);
+	Common::copy(data, data + copySize, _ist);
+	MemFree(data);
+}
+
+void PCSpeakerSoundDriverHP::unloadSong() {
+	_songData = nullptr;
+	Common::fill(_ist, _ist + ARRAYSIZE(_ist), 0);
+	for (int i = 0; i < 4; ++i) {
+		_channelInstrument[i] = -1;
+		_channelDivisor[i] = 1;
+	}
+}
+
+void PCSpeakerSoundDriverHP::setupChannel(int channel, const byte *data, int instrument, int volume) {
+	(void)data;
+	(void)volume;
+	assert(channel >= 0 && channel < 4);
+	_channelInstrument[channel] = instrument;
+
+	if (_songData && instrument >= 0 && instrument < 15 && _songData[instrument] < 0x1e)
+		_channelDivisor[channel] = 1;
+}
+
+uint16 PCSpeakerSoundDriverHP::periodToDivisor(int frequency, byte mode) const {
+	if (mode == 0) {
+		int period = frequency;
+		if (period == 0)
+			period = 0x78;
+		if (period < 0)
+			return 1;
+		const uint32 intermediateHz = 249920U / (uint32)period;
+		return intermediateHz ? (uint16)MIN((uint32)0xffff, 1193180U / intermediateHz) : 1;
+	}
+
+	if (mode == 1) {
+		int note;
+		int octave;
+		findNote(frequency, &note, &octave);
+		(void)octave;
+		uint32 intermediateHz = (note + 0x10) * 2;
+		if (intermediateHz == 0)
+			intermediateHz = 0x7d0;
+		return (uint16)MIN((uint32)0xffff, 1193180U / intermediateHz);
+	}
+
+	return 1;
+}
+
+void PCSpeakerSoundDriverHP::setChannelFrequency(int channel, int frequency) {
+	assert(channel >= 0 && channel < 4);
+	const int instrument = _channelInstrument[channel];
+	const byte mode = (instrument >= 0 && instrument < 15) ? _ist[instrument] : 0;
+	_channelDivisor[channel] = periodToDivisor(frequency, mode);
+}
+
+void PCSpeakerSoundDriverHP::stopChannel(int channel) {
+	if (channel >= 0 && channel < 4)
+		_channelDivisor[channel] = 1;
+	else if (channel == 4)
+		_effect.active = false;
+}
+
+void PCSpeakerSoundDriverHP::playSample(const byte *data, int size, int channel, int volume) {
+	(void)channel;
+	(void)volume;
+	if (!data || size < 10)
+		return;
+
+	const uint16 count = READ_LE_UINT16(data);
+	if (count == 0)
+		return;
+	if ((uint32)size < 6 + (uint32)count * 4) {
+		warning("Truncated Cruise HP effect (%d bytes, %u segments)", size, count);
+		return;
+	}
+
+	_effect.active = true;
+	_effect.segmentsRemaining = count;
+	_effect.divisor = READ_LE_UINT16(data + 2);
+	_effect.ticksRemaining = READ_LE_UINT16(data + 6);
+	if (_effect.ticksRemaining == 0)
+		_effect.ticksRemaining = 1;
+	_effect.divisor += (int16)READ_LE_UINT16(data + 8);
+	_effect.nextCommand = data + 10;
+	_effect.end = data + size;
+
+	outputDivisor(_effect.divisor, _sfxVolume);
+}
+
+void PCSpeakerSoundDriverHP::stopAll() {
+	for (int i = 0; i < 4; ++i)
+		_channelDivisor[i] = 1;
+	_effect.active = false;
+	if (_stream)
+		_stream->stop();
+}
+
+void PCSpeakerSoundDriverHP::syncSounds() {
+	PCSoundDriver::syncSounds();
 }
 
 PCSoundFxPlayer::PCSoundFxPlayer(PCSoundDriver *driver)
