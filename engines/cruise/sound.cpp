@@ -192,7 +192,7 @@ public:
 
 class MT32SoundDriverH32 : public PCSoundDriver {
 public:
-	MT32SoundDriverH32(MidiDriver::DeviceHandle device);
+	MT32SoundDriverH32(MidiDriver *midi);
 	~MT32SoundDriverH32() override;
 
 	void setupChannel(int channel, const byte *data, int instrument, int volume) override;
@@ -703,22 +703,15 @@ void AdLibSoundDriverADL::playSample(const byte *data, int size, int channel, in
 	}
 }
 
-MT32SoundDriverH32::MT32SoundDriverH32(MidiDriver::DeviceHandle device)
-	: _midi(nullptr), _timerAccumulator(0), _timerQuantum(0) {
+MT32SoundDriverH32::MT32SoundDriverH32(MidiDriver *midi)
+	: _midi(midi), _timerAccumulator(0), _timerQuantum(0) {
 	Common::fill(_customTimbreLoaded, _customTimbreLoaded + ARRAYSIZE(_customTimbreLoaded), false);
 	Common::fill(_channelValid, _channelValid + ARRAYSIZE(_channelValid), false);
 	Common::fill(_channelTimbreGroup, _channelTimbreGroup + ARRAYSIZE(_channelTimbreGroup), 0);
 	Common::fill(_channelTimbreNumber, _channelTimbreNumber + ARRAYSIZE(_channelTimbreNumber), 0);
 	Common::fill(_channelLogicalVolume, _channelLogicalVolume + ARRAYSIZE(_channelLogicalVolume), 0);
 
-	_midi = MidiDriver::createMidi(device);
-	if (!_midi)
-		error("Unable to create MT-32 MIDI driver");
-
-	int result = _midi->open();
-	if (result != 0)
-		error("Unable to open MT-32 MIDI driver: %s", MidiDriver::getErrorName(result));
-
+	assert(_midi);
 	_midi->sendMT32Reset();
 	_timerQuantum = _midi->getBaseTempo();
 	if (_timerQuantum == 0)
@@ -1333,7 +1326,46 @@ void PCSoundFxPlayer::doSync(Common::Serializer &s) {
 PCSound::PCSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 	_vm = vm;
 	_mixer = mixer;
-	_soundDriver = new AdLibSoundDriverADL(_mixer);
+	_soundDriver = nullptr;
+
+	if (_vm->getPlatform() == Common::kPlatformDOS) {
+		const MidiDriver::DeviceHandle device = MidiDriver::detectDevice(
+				MDT_PCSPK | MDT_ADLIB | MDT_MIDI | MDT_PREFER_MT32);
+		const MusicType musicType = MidiDriver::getMusicType(device);
+
+		switch (musicType) {
+		case MT_PCSPK:
+			debugC(1, kCruiseDebugSound, "Using original Cruise PC speaker backend");
+			_soundDriver = new PCSpeakerSoundDriverHP(_mixer);
+			break;
+		case MT_MT32: {
+			MidiDriver *midi = MidiDriver::createMidi(device);
+			const int result = midi ? midi->open() : MidiDriver::MERR_DEVICE_NOT_AVAILABLE;
+			if (result == 0) {
+				debugC(1, kCruiseDebugSound, "Using original Cruise MT-32/H32 backend");
+				_soundDriver = new MT32SoundDriverH32(midi);
+			} else {
+				warning("Unable to open MT-32 output (%s); falling back to AdLib",
+						MidiDriver::getErrorName(result));
+				delete midi;
+			}
+			break;
+		}
+		case MT_GM:
+		case MT_GS:
+			warning("Cruise H32 data requires MT-32 output; falling back to AdLib");
+			break;
+		case MT_ADLIB:
+		default:
+			break;
+		}
+	}
+
+	if (!_soundDriver) {
+		debugC(1, kCruiseDebugSound, "Using original Cruise AdLib/ADL backend");
+		_soundDriver = new AdLibSoundDriverADL(_mixer);
+	}
+
 	_player = new PCSoundFxPlayer(_soundDriver);
 	_genVolume = 0;
 }
@@ -1436,6 +1468,10 @@ const char *PCSound::musicName() {
 
 void PCSound::syncSounds() {
 	_soundDriver->syncSounds();
+}
+
+const char *PCSound::soundEffectExtension() const {
+	return _soundDriver->getSoundEffectExtension();
 }
 
 } // End of namespace Cruise

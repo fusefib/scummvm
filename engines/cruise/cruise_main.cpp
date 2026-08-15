@@ -346,20 +346,7 @@ int loadFileSub1(uint8 **ptr, const char *name, uint8 *ptr2) {
 
 	if (!strcmp(buffer, ".SPL")) {
 		removeExtension(name, buffer, sizeof(buffer));
-
-		/* if (useH32)
-		 *{
-		 *	Common::strcat_s(buffer,".H32");
-		 *}
-		 * else
-		 * if (useAdLib)
-		 * { */
-		Common::strcat_s(buffer,".ADL");
-		/* }
-		 * else
-		 * {
-		 * strcatuint8(buffer,".HP");
-		 * } */
+		Common::strlcat(buffer, _vm->sound().soundEffectExtension(), sizeof(buffer));
 	} else {
 		Common::strlcpy(buffer, name, sizeof(buffer));
 	}

@@ -66,6 +66,7 @@ public:
 	void musicLoop(bool v);
 	void startNote(int channel, int volume, int freq);
 	void syncSounds();
+	const char *soundEffectExtension() const;
 
 	// Note: Volume variable accessed by these methods is never actually used in original game
 	void setVolume(int volume) { _genVolume = volume; }
