@@ -1727,6 +1727,10 @@ void PCSound::playSound(int mode, int channel, int param3, int param4, int param
 
 void PCSound::playSound(int channel, int frequency, const uint8 *data, int size, int volumeStep, int stepCount, int volume, int repeat) {
 	debugC(5, kCineDebugSound, "PCSound::playSound() channel %d size %d", channel, size);
+	if (_vm->getGameType() == GType_OS &&
+			_vm->getPlatform() == Common::kPlatformDOS &&
+			(_musicType != MT_PCSPK || channel != 0 || _player->isActive()))
+		return;
 	_soundDriver->playSample(data, size, channel, volume);
 }
 

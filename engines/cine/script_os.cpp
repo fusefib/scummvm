@@ -449,10 +449,11 @@ int FWScript::o2_playSampleAlt() {
 	}
 	if (g_cine->_animDataTable[num].data()) {
 		if (g_cine->getPlatform() == Common::kPlatformDOS) {
-			// if speaker output is available, play sound on it
-			// if it's another device, don't play anything
-			// TODO: implement this, it's used in the introduction for example
-			// on each letter displayed
+			if (size != 0) {
+				AnimData &animData = g_cine->_animDataTable[num];
+				g_sound->playSound(channel, frequency, animData.data(),
+						animData.size(), 0, 0, 63, 0);
+			}
 		} else {
 			g_sound->playSound(channel, frequency, g_cine->_animDataTable[num].data(), size, 0, 0, 63, 0);
 		}
