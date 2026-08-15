@@ -29,6 +29,7 @@
 #include "cruise/cruise_main.h"
 #include "cruise/sound.h"
 #include "cruise/volume.h"
+#include "cruise/vars.h"
 
 #include "audio/fmopl.h"
 #include "audio/mididrv.h"
@@ -1412,6 +1413,72 @@ void PCSound::playSound(const uint8 *data, int size, int volume) {
 	_soundDriver->playSample(data, size, 4, volume);
 }
 
+void PCSound::playEffect(int sample, int channel, int period, int volume) {
+	if (channel < 0 || channel >= 4 || sample < 0 || sample >= NUM_FILE_ENTRIES)
+		return;
+	if (!filesDatabase[sample].subData.ptr)
+		return;
+
+	SoundEntry &effect = soundList[channel];
+	effect.frameNum = sample;
+	effect.frequency = period;
+	effect.volume = volume;
+
+	// Cruise retains four logical effect slots but dispatches all of them to
+	// physical backend channel 4.
+	_soundDriver->playSample(filesDatabase[sample].subData.ptr,
+		filesDatabase[sample].width, 4, volume);
+}
+
+void PCSound::updateEffect(int sample, int channel, int period, int volume) {
+	if (channel < 0 || channel >= 4 || sample < 0 || sample >= NUM_FILE_ENTRIES)
+		return;
+	if (!filesDatabase[sample].subData.ptr)
+		return;
+
+	SoundEntry &effect = soundList[channel];
+
+	// The sample is only a validity guard. The existing frameNum is retained.
+	if (volume != -1)
+		effect.volume = volume;
+	if (period != -1)
+		effect.frequency = period;
+
+	// The original handler next calls a bare RETF, so there is no immediate
+	// backend operation. The state is used by save/load reconstruction.
+}
+
+void PCSound::stopEffect(int channel) {
+	if (channel == -1) {
+		for (int i = 0; i < 4; ++i)
+			soundList[i].frameNum = -1;
+		_soundDriver->stopChannel(4);
+		return;
+	}
+
+	if (channel < 0 || channel >= 4)
+		return;
+
+	soundList[channel].frameNum = -1;
+	_soundDriver->stopChannel(4);
+}
+
+void PCSound::restoreEffects() {
+	for (int channel = 0; channel < 4; ++channel) {
+		const SoundEntry &effect = soundList[channel];
+		if (effect.frameNum < 0 || effect.frameNum >= NUM_FILE_ENTRIES)
+			continue;
+		if (!filesDatabase[effect.frameNum].subData.ptr)
+			continue;
+
+		// The original restoration loop replays each logical slot through the
+		// same fixed hardware effect channel. Its backends ignore the saved
+		// frequency; H32 alone consumes the restored volume.
+		_soundDriver->playSample(filesDatabase[effect.frameNum].subData.ptr,
+			filesDatabase[effect.frameNum].width, 4, effect.volume);
+	}
+}
+
 void PCSound::stopSound(int channel) {
 	debugC(5, kCruiseDebugSound, "PCSound::stopSound() channel %d", channel);
 	_soundDriver->resetChannel(channel);
@@ -1456,12 +1523,6 @@ bool PCSound::musicLooping() const {
 
 void PCSound::musicLoop(bool v) {
 	_player->setLooping(v);
-}
-
-void PCSound::startNote(int channel, int volume, int freq) {
-	warning("TODO: startNote");
-//	_soundDriver->setVolume(channel, volume);
-	_soundDriver->setChannelFrequency(channel, freq);
 }
 
 void PCSound::doSync(Common::Serializer &s) {

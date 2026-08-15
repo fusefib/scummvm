@@ -912,6 +912,10 @@ Common::Error loadSavegameData(int saveGameIdx) {
 
 	lastAni[0] = 0;
 
+	// soundList[] is already serialized. Re-dispatch its active effects only
+	// after the files database has been rebuilt, as in the DOS load path.
+	_vm->sound().restoreEffects();
+
 	currentcellHead = cellHead.next;
 
 	while (currentcellHead) {

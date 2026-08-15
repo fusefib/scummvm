@@ -52,6 +52,11 @@ public:
 	virtual void playSound(const uint8 *data, int size, int volume);
 	virtual void stopSound(int channel);
 
+	void playEffect(int sample, int channel, int period, int volume);
+	void updateEffect(int sample, int channel, int period, int volume);
+	void stopEffect(int channel);
+	void restoreEffects();
+
 	void doSync(Common::Serializer &s);
 	const char *musicName();
 	void stopChannel(int channel);
@@ -64,7 +69,6 @@ public:
 	void setPattern(int offset, uint8 value);
 	bool musicLooping() const;
 	void musicLoop(bool v);
-	void startNote(int channel, int volume, int freq);
 	void syncSounds();
 	const char *soundEffectExtension() const;
 

@@ -198,69 +198,39 @@ int16 Op_Random() {
 
 int16 Op_PlayFX() {
 	int volume = popVar();
-
-#if 0
 	int speed = popVar();
 	int channelNum = popVar();
-#else
-	popVar();
-	popVar();
-#endif
-
 	int sampleNum = popVar();
 
-	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && (filesDatabase[sampleNum].subData.ptr)) {
-#if 0
+	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && filesDatabase[sampleNum].subData.ptr) {
 		if (speed == -1)
 			speed = filesDatabase[sampleNum].subData.transparency;
-#endif
-
-		_vm->sound().playSound(filesDatabase[sampleNum].subData.ptr,
-			filesDatabase[sampleNum].width, volume);
+		const int period = Period(speed * 1000);
+		_vm->sound().playEffect(sampleNum, channelNum, period, volume);
 	}
 
-	return (0);
+	return 0;
 }
 
 int16 Op_LoopFX() {
+	// The shipped DOS PC path initializes the same persistent effect state.
 	int volume = popVar();
-
-#if 0
 	int speed = popVar();
 	int channelNum = popVar();
-#else
-	popVar();
-	popVar();
-#endif
-
 	int sampleNum = popVar();
 
-	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && (filesDatabase[sampleNum].subData.ptr)) {
-
-#if 0
+	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && filesDatabase[sampleNum].subData.ptr) {
 		if (speed == -1)
 			speed = filesDatabase[sampleNum].subData.transparency;
-#endif
-
-		_vm->sound().playSound(filesDatabase[sampleNum].subData.ptr,
-			filesDatabase[sampleNum].width, volume);
+		const int period = Period(speed * 1000);
+		_vm->sound().playEffect(sampleNum, channelNum, period, volume);
 	}
 
-	return (0);
+	return 0;
 }
 
 int16 Op_StopFX() {
-	int channelNum = popVar();
-
-	if (channelNum == -1) {
-		_vm->sound().stopChannel(0);
-		_vm->sound().stopChannel(1);
-		_vm->sound().stopChannel(2);
-		_vm->sound().stopChannel(3);
-	} else {
-		_vm->sound().stopChannel(channelNum);
-	}
-
+	_vm->sound().stopEffect(popVar());
 	return 0;
 }
 
@@ -270,13 +240,12 @@ int16 Op_FreqFX() {
 	int channelNum = popVar();
 	int sampleNum = popVar();
 
-	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && (filesDatabase[sampleNum].subData.ptr)) {
-		int freq = Period(freq2 * 1000);
-
-		_vm->sound().startNote(channelNum, volume, freq);
+	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && filesDatabase[sampleNum].subData.ptr) {
+		const int period = freq2 == -1 ? -1 : Period(freq2 * 1000);
+		_vm->sound().updateEffect(sampleNum, channelNum, period, volume);
 	}
 
-	return (0);
+	return 0;
 }
 
 int16 Op_FreeCT() {
