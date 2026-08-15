@@ -132,6 +132,7 @@ public:
 	virtual void loadInstrument(const byte *data, AdLibSoundInstrument *asi) = 0;
 	void syncSounds() override;
 
+	int prepareMusicVolume(int volume, int fadeOut) const override;
 	void adjustVolume(int channel, int volume);
 
 protected:
@@ -352,12 +353,24 @@ void AdLibSoundDriver::syncSounds() {
 	}
 }
 
+int AdLibSoundDriver::prepareMusicVolume(int volume, int fadeOut) const {
+	// The original AdLib driver floors non-zero tracker volume before fading,
+	// then adds 25 percent and clamps to its seven-bit logical range.
+	if (volume != 0 && volume < 0x50)
+		volume = 0x50;
+
+	volume -= fadeOut;
+	if (volume < 0)
+		volume = 0;
+
+	volume += volume / 4;
+	return MIN(volume, 0x7f);
+}
+
 void AdLibSoundDriver::adjustVolume(int channel, int volume) {
 	_channelsVolumeTable[channel].original = volume;
 
-	volume = CLIP(volume, 0, 80);
-	volume += volume / 4;
-	// The higher possible value for volume is 100
+	volume = CLIP(volume, 0, 127);
 
 	int volAdjust = (channel == 4) ? _sfxVolume : _musicVolume;
 	volume = (volume * volAdjust) / 128;
@@ -561,7 +574,7 @@ void AdLibSoundDriverADL::setChannelFrequency(int channel, int frequency) {
 
 void AdLibSoundDriverADL::playSample(const byte *data, int size, int channel, int volume) {
 	assert(channel < 5);
-	adjustVolume(channel, 127);
+	adjustVolume(channel, 100);
 
 	setupInstrument(data, channel);
 	AdLibSoundInstrument *ins = &_instrumentsTable[channel];
