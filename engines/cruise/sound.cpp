@@ -667,7 +667,7 @@ void AdLibSoundDriverADL::setChannelFrequency(int channel, int frequency) {
 
 void AdLibSoundDriverADL::playSample(const byte *data, int size, int channel, int volume) {
 	assert(channel < 5);
-	adjustVolume(channel, 100);
+	adjustVolume(channel, 0x7f);
 
 	setupInstrument(data, channel);
 	AdLibSoundInstrument *ins = &_instrumentsTable[channel];
