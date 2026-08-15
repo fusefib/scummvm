@@ -37,6 +37,9 @@ class Mixer;
 
 namespace Cruise {
 
+// The DOS executable programs PIT divisor 0x2E9C, approximately 100 Hz.
+static const int kCruiseMusicTimerHz = 100;
+
 class PCSoundDriver {
 public:
 	typedef void (*UpdateCallback)(void *);
@@ -335,7 +338,7 @@ AdLibSoundDriver::AdLibSoundDriver(Audio::Mixer *mixer)
 	_musicVolume = ConfMan.getBool("music_mute") ? 0 : MIN(255, ConfMan.getInt("music_volume"));
 	_sfxVolume = ConfMan.getBool("sfx_mute") ? 0 : MIN(255, ConfMan.getInt("sfx_volume"));
 
-	_opl->start(new Common::Functor0Mem<void, AdLibSoundDriver>(this, &AdLibSoundDriver::onTimer), 50);
+	_opl->start(new Common::Functor0Mem<void, AdLibSoundDriver>(this, &AdLibSoundDriver::onTimer), kCruiseMusicTimerHz);
 }
 
 AdLibSoundDriver::~AdLibSoundDriver() {
