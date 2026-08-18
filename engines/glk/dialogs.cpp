@@ -167,15 +167,6 @@ struct FloatOption {
 	double minValue;
 };
 
-struct ColorOption {
-	GUI::PopUpWidget *popup;
-	GUI::EditTextWidget *hexInput;
-	WindowStyle *styles;	  // for t/g/w/b
-	PropFontInfo *propInfo;   // for caret/link/more
-	const char *confKey;
-	bool isProp;			  // true for caret/link/more
-};
-
 struct FontOption {
 	GUI::PopUpWidget *popup;
 	WindowStyle *styles;
@@ -188,8 +179,10 @@ static GUI::StaticTextWidget *createHeading(GUI::GuiObject *boss, const char *id
 	return h;
 }
 
-GlkOptionsWidget::GlkOptionsWidget(GuiObject *boss, const Common::String &name, const Common::String &domain)
-	: GUI::OptionsContainerWidget(boss, name, "GlkOptionsDialog", domain) {
+GlkOptionsWidget::GlkOptionsWidget(GuiObject *boss, const Common::String &name,
+		const Common::String &domain, InterpreterType interpreterType) :
+		GUI::OptionsContainerWidget(boss, name, "GlkOptionsDialog", domain),
+		_interpreterType(interpreterType) {
 
 	static const char *fontLabels[] = {
 		_s("Monospace Regular"),
@@ -490,19 +483,15 @@ static void setFontPopUp(GUI::PopUpWidget *popup, bool hasConf, FACES font, cons
 		popup->setSelectedTag(Screen::getFontId(ConfMan.get(settingName, domain)));
 }
 
-static void setSimpleColorPopUp(GUI::PopUpWidget *popup, GUI::EditTextWidget *hexInput, bool hasConf, const char *confKey, const char *themeKey, const Common::String &domain, bool overrideEnabled, int defaultValue = 7) {
-
-	Common::String targetKey = hasConf ? confKey : themeKey;
-
-	if (hasConf && !overrideEnabled) {
+static void setSimpleColorPopUp(GUI::PopUpWidget *popup, GUI::EditTextWidget *hexInput,
+		uint color, bool overrideEnabled, int defaultValue = 7) {
+	if (!overrideEnabled) {
 		popup->setSelectedTag(defaultValue);
 		hexInput->setEditString(Common::U32String());
 		return;
 	}
 
-	// Grab the color from ConfMan (returns "RRGGBB" or "RRGGBB,RRGGBB")
-	Common::String colorStr = ConfMan.get(targetKey, domain);
-	Common::String hexPart = colorStr.substr(0, 6);
+	Common::String hexPart = g_conf->encodeColor(color);
 
 	if (hexInput) {
 		hexInput->setEditString(Common::U32String(hexPart));
@@ -532,7 +521,7 @@ void GlkOptionsWidget::load() {
 	if (!g_conf) {
 		tempConfCreated = true;
 		// instantiate a global g_conf so the dialog can read values from it
-		new Conf(INTERPRETER_GLULX);
+		new Conf(_interpreterType);
 		g_conf->load();
 	}
 
@@ -557,16 +546,6 @@ void GlkOptionsWidget::load() {
 		{ _baseline, &g_conf->_propInfo._baseLine, "baseline", 0 }
 	};
 
-	ColorOption colorOptions[] = {
-		{ _tcolorPopUps[0], _manualTColorHexInput, g_conf->_tStyles, nullptr, "tcolor_0", false },
-		{ _gcolorPopUps[0], _manualGColorHexInput, g_conf->_gStyles, nullptr, "gcolor_0", false },
-		{ _wcolorPopUps[0], _manualWColorHexInput, nullptr, nullptr, "windowcolor", false },
-		{ _bcolorPopUps[0], _manualBColorHexInput, nullptr, nullptr, "bordercolor", false },
-		{ _ccolorPopUps[0], _manualCColorHexInput, nullptr, &g_conf->_propInfo, "caretcolor", true },
-		{ _lcolorPopUps[0], _manualLColorHexInput, nullptr, &g_conf->_propInfo, "linkcolor", true },
-		{ _mcolorPopUps[0], _manualMColorHexInput, nullptr, &g_conf->_propInfo, "morecolor", true }
-	};
-
 	FontOption fontOptions[] = {
 		{ _tfontPopUps[0], g_conf->_tStyles, "tfont" },
 		{ _gfontPopUps[0], g_conf->_gStyles, "gfont" }
@@ -575,18 +554,20 @@ void GlkOptionsWidget::load() {
 	for (auto &opt : fontOptions)
 		setFontPopUp(opt.popup, true, opt.styles[style_Normal].font, nullptr, _domain);
 
-	for (auto &opt : colorOptions) {
-		if (g_conf) {
-			bool overrideEnabled = true;
-			if (!opt.isProp && strcmp(opt.confKey, "windowcolor") == 0)
-				overrideEnabled = g_conf->_windowColorOverride;
-			if (!opt.isProp && strcmp(opt.confKey, "bordercolor") == 0)
-				overrideEnabled = g_conf->_borderColorOverride;
-			setSimpleColorPopUp(opt.popup, opt.hexInput, true, opt.confKey, opt.confKey, _domain, overrideEnabled);
-		} else {
-			setSimpleColorPopUp(opt.popup, opt.hexInput, false, opt.confKey, opt.confKey, _domain, true);
-		}
-	}
+	setSimpleColorPopUp(_tcolorPopUps[0], _manualTColorHexInput,
+		g_conf->_tStyles[style_Normal].fg, true);
+	setSimpleColorPopUp(_gcolorPopUps[0], _manualGColorHexInput,
+		g_conf->_gStyles[style_Normal].fg, true);
+	setSimpleColorPopUp(_wcolorPopUps[0], _manualWColorHexInput,
+		g_conf->_windowColor, g_conf->_windowColorOverride);
+	setSimpleColorPopUp(_bcolorPopUps[0], _manualBColorHexInput,
+		g_conf->_borderColor, g_conf->_borderColorOverride);
+	setSimpleColorPopUp(_ccolorPopUps[0], _manualCColorHexInput,
+		g_conf->_propInfo._caretColor, ConfMan.hasKey("caretcolor", _domain));
+	setSimpleColorPopUp(_lcolorPopUps[0], _manualLColorHexInput,
+		g_conf->_propInfo._linkColor, ConfMan.hasKey("linkcolor", _domain));
+	setSimpleColorPopUp(_mcolorPopUps[0], _manualMColorHexInput,
+		g_conf->_propInfo._moreColor, ConfMan.hasKey("morecolor", _domain));
 
 	// number fields
 	for (auto &opt : intOptions) {
@@ -893,7 +874,8 @@ static void saveFontPopUp(GUI::PopUpWidget *popup, WindowStyle *styles, const ch
 	}
 }
 
-static void saveColorPopUp(GUI::PopUpWidget *popup, GUI::EditTextWidget *hexInput, WindowStyle *styles, const char *prefix, const Common::String &domain) {
+static void saveStyleColorPopUp(GUI::PopUpWidget *popup, GUI::EditTextWidget *hexInput,
+		WindowStyle *styles, const char *prefix, const Common::String &domain) {
 
 	int idx = popup->getSelectedTag();
 	unsigned int rgb = 0;
@@ -916,27 +898,15 @@ static void saveColorPopUp(GUI::PopUpWidget *popup, GUI::EditTextWidget *hexInpu
 	if (!valid)
 		return;
 
-	byte r = (rgb >> 16) & 0xFF;
-	byte g = (rgb >> 8) & 0xFF;
-	byte b = rgb & 0xFF;
-	Common::String rgbStr = Common::String::format("%02x%02x%02x", r, g, b);
-
-	ConfMan.set(prefix, rgbStr, domain);
-
-	Common::String stylePrefix(prefix);
-	if (!stylePrefix.empty() && stylePrefix[stylePrefix.size()-1] == '0')
-		stylePrefix = stylePrefix.substr(0, stylePrefix.size()-1);
-
 	unsigned int engineColor = g_conf->parseColor(rgb);
 
-		if (styles) {
-			for (int i = 0; i < style_NUMSTYLES; ++i)
-				styles[i].fg = engineColor;
-		}
-
 	for (int i = 0; i < style_NUMSTYLES; ++i) {
-		Common::String key = Common::String::format("%s%d", stylePrefix.c_str(), i);
-		Common::String line = Common::String::format("%s,%s", rgbStr.c_str(), rgbStr.c_str());
+		styles[i].fg = engineColor;
+		Common::String foreground = g_conf->encodeColor(styles[i].fg);
+		Common::String background = g_conf->encodeColor(styles[i].bg);
+		Common::String key = Common::String::format("%s%d", prefix, i);
+		Common::String line = Common::String::format("%s,%s",
+			foreground.c_str(), background.c_str());
 		ConfMan.set(key, line, domain);
 	}
 }
@@ -966,7 +936,13 @@ static void savePropColorPopUp(GUI::PopUpWidget *popup, GUI::EditTextWidget *hex
 			}
 		}
 	} else if (idx == 7) {
-		ConfMan.set(confKey, Common::String(), domain);
+		if (strcmp(confKey, "caretcolor") == 0)
+			propInfo._caretColor = propInfo._caretSave;
+		else if (strcmp(confKey, "linkcolor") == 0)
+			propInfo._linkColor = propInfo._linkSave;
+		else if (strcmp(confKey, "morecolor") == 0)
+			propInfo._moreColor = propInfo._moreSave;
+		ConfMan.removeKey(confKey, domain);
 		return;
 	}
 
@@ -985,8 +961,7 @@ static void savePropColorPopUp(GUI::PopUpWidget *popup, GUI::EditTextWidget *hex
 	byte g = (rgb >> 8) & 0xFF;
 	byte b = rgb & 0xFF;
 	Common::String rgbStr = Common::String::format("%02x%02x%02x", r, g, b);
-	Common::String value = Common::String::format("%s,%s", rgbStr.c_str(), rgbStr.c_str());
-	ConfMan.set(confKey, value, domain);
+	ConfMan.set(confKey, rgbStr, domain);
 }
 
 static void saveIntField(GUI::EditTextWidget *widget, int &outValue, const char *confKey, int minValue, const Common::String &domain) {
@@ -1029,7 +1004,7 @@ bool GlkOptionsWidget::save() {
 	if (!g_conf) {
 		tempConfCreated = true;
 		// instantiate a global g_conf so the dialog can save values into it
-		new Conf(INTERPRETER_GLULX);
+		new Conf(_interpreterType);
 		g_conf->load();
 	}
 
@@ -1054,16 +1029,6 @@ bool GlkOptionsWidget::save() {
 		{ _baseline, &g_conf->_propInfo._baseLine, "baseline", 0 }
 	};
 
-	ColorOption colorOptions[] = {
-		{ _tcolorPopUps[0], _manualTColorHexInput, g_conf->_tStyles, nullptr, "tcolor_0", false },
-		{ _gcolorPopUps[0], _manualGColorHexInput, g_conf->_gStyles, nullptr, "gcolor_0", false },
-		{ _wcolorPopUps[0], _manualWColorHexInput, nullptr, nullptr, "windowcolor", false },
-		{ _bcolorPopUps[0], _manualBColorHexInput, nullptr, nullptr, "bordercolor", false },
-		{ _ccolorPopUps[0], _manualCColorHexInput, nullptr, &g_conf->_propInfo, "caretcolor", true },
-		{ _lcolorPopUps[0], _manualLColorHexInput, nullptr, &g_conf->_propInfo, "linkcolor", true },
-		{ _mcolorPopUps[0], _manualMColorHexInput, nullptr, &g_conf->_propInfo, "morecolor", true }
-	};
-
 	FontOption fontOptions[] = {
 		{ _tfontPopUps[0], g_conf->_tStyles, "tfont" },
 		{ _gfontPopUps[0], g_conf->_gStyles, "gfont" }
@@ -1073,12 +1038,16 @@ bool GlkOptionsWidget::save() {
 	for (auto &opt : fontOptions)
 		saveFontPopUp(opt.popup, opt.styles, opt.confKeyPrefix, _domain);
 
-	for (auto &opt : colorOptions) {
-		if (opt.isProp)
-			savePropColorPopUp(opt.popup, opt.hexInput, *opt.propInfo, opt.confKey, _domain);
-		else
-			saveColorPopUp(opt.popup, opt.hexInput, opt.styles, opt.confKey, _domain);
-	}
+	saveStyleColorPopUp(_tcolorPopUps[0], _manualTColorHexInput,
+		g_conf->_tStyles, "tcolor_", _domain);
+	saveStyleColorPopUp(_gcolorPopUps[0], _manualGColorHexInput,
+		g_conf->_gStyles, "gcolor_", _domain);
+	savePropColorPopUp(_ccolorPopUps[0], _manualCColorHexInput,
+		g_conf->_propInfo, "caretcolor", _domain);
+	savePropColorPopUp(_lcolorPopUps[0], _manualLColorHexInput,
+		g_conf->_propInfo, "linkcolor", _domain);
+	savePropColorPopUp(_mcolorPopUps[0], _manualMColorHexInput,
+		g_conf->_propInfo, "morecolor", _domain);
 
 	for (auto &opt : intOptions)
 		if (opt.widget) saveIntField(opt.widget, *opt.target, opt.confKey, opt.minValue, _domain);

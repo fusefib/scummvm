@@ -77,7 +77,7 @@ Conf::Conf(InterpreterType interpType) : _interpType(interpType), _graphics(true
 		_wBorderX(0), _wBorderY(0), _tMarginX(7), _tMarginY(7), _gamma(1.0),
 		_borderColor(0), _borderSave(0),
 		_windowColor(parseColor(WHITE)), _windowSave(parseColor(WHITE)),
-		_windowColorOverride(false),
+		_windowColorOverride(false), _borderColorOverride(false),
 		_sound(true), _speak(false), _speakInput(false), _styleHint(1),
 		_scrollBg(parseColor(SCROLL_BG)), _scrollFg(parseColor(SCROLL_FG)),
 		_scrollWidth(0), _safeClicks(false) {
@@ -249,9 +249,13 @@ void Conf::synchronize() {
 			if (_isLoading) {
 				if (exists(key)) {
 					Common::String line = ConfMan.get(key);
-					if (line.find(',') == 6) {
-						pStyles[style].fg = parseColor(Common::String(line.c_str(), 6));
-						pStyles[style].bg = parseColor(Common::String(line.c_str() + 7));
+					if (line.size() == 13 && line.find(',') == 6) {
+						const uint fg = parseColor(Common::String(line.c_str(), 6));
+						const uint bg = parseColor(Common::String(line.c_str() + 7));
+						if (fg != bg) {
+							pStyles[style].fg = fg;
+							pStyles[style].bg = bg;
+						}
 					}
 				}
 			} else {
@@ -377,10 +381,13 @@ void Conf::syncAsBool(const Common::String &name, bool &val) {
 }
 
 void Conf::syncAsColor(const Common::String &name, uint &val) {
-	if (_isLoading && exists(name))
-		val = parseColor(ConfMan.get(name));
-	else if (!_isLoading)
+	if (_isLoading && exists(name)) {
+		Common::String color = ConfMan.get(name);
+		if (color.size() == 6)
+			val = parseColor(color);
+	} else if (!_isLoading) {
 		ConfMan.set(name, encodeColor(val));
+	}
 }
 
 void Conf::syncAsFont(const Common::String &name, FACES &val) {

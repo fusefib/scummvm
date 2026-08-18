@@ -141,6 +141,51 @@ template<class META, class ENG>bool create(OSystem *syst,
 	}
 }
 
+template<class META>bool isGame(const char *gameId) {
+	return META::findGame(gameId)._description != nullptr;
+}
+
+static Glk::InterpreterType getInterpreterType(const char *gameId) {
+	if (isGame<Glk::Adrift::AdriftMetaEngine>(gameId))
+		return Glk::INTERPRETER_ADRIFT;
+	if (isGame<Glk::AdvSys::AdvSysMetaEngine>(gameId))
+		return Glk::INTERPRETER_ADVSYS;
+	if (isGame<Glk::AGT::AGTMetaEngine>(gameId))
+		return Glk::INTERPRETER_AGT;
+	if (isGame<Glk::Alan2::Alan2MetaEngine>(gameId))
+		return Glk::INTERPRETER_ALAN2;
+	if (isGame<Glk::Alan3::Alan3MetaEngine>(gameId))
+		return Glk::INTERPRETER_ALAN3;
+	if (isGame<Glk::Archetype::ArchetypeMetaEngine>(gameId))
+		return Glk::INTERPRETER_ARCHETYPE;
+	if (isGame<Glk::Comprehend::ComprehendMetaEngine>(gameId))
+		return Glk::INTERPRETER_SCOTT;
+	if (isGame<Glk::Glulx::GlulxMetaEngine>(gameId))
+		return Glk::INTERPRETER_GLULX;
+	if (isGame<Glk::Hugo::HugoMetaEngine>(gameId))
+		return Glk::INTERPRETER_HUGO;
+	if (isGame<Glk::JACL::JACLMetaEngine>(gameId))
+		return Glk::INTERPRETER_JACL;
+	if (isGame<Glk::Level9::Level9MetaEngine>(gameId))
+		return Glk::INTERPRETER_LEVEL9;
+	if (isGame<Glk::Magnetic::MagneticMetaEngine>(gameId))
+		return Glk::INTERPRETER_MAGNETIC;
+	if (isGame<Glk::Quest::QuestMetaEngine>(gameId))
+		return Glk::INTERPRETER_QUEST;
+	if (isGame<Glk::Scott::ScottMetaEngine>(gameId))
+		return Glk::INTERPRETER_SCOTT;
+	if (isGame<Glk::ZCode::ZCodeMetaEngine>(gameId))
+		return Glk::INTERPRETER_ZCODE;
+#ifndef RELEASE_BUILD
+	Glk::GameDescriptor tadsDesc = Glk::TADS::TADSMetaEngine::findGame(gameId);
+	if (tadsDesc._description)
+		return (tadsDesc._options & Glk::TADS::OPTION_TADS3) ?
+			Glk::INTERPRETER_TADS3 : Glk::INTERPRETER_TADS2;
+#endif
+
+	return Glk::INTERPRETER_GLULX;
+}
+
 Common::Error GlkMetaEngine::createInstance(OSystem *syst, Engine **engine,
 		const DetectedGame &gameDescriptor, const void *metaEngineDescriptor) {
 #ifndef RELEASE_BUILD
@@ -195,7 +240,9 @@ GUI::OptionsContainerWidget *GlkMetaEngine::buildEngineOptionsWidget(GUI::GuiObj
 	if (target.empty())
 		return nullptr;
 
-	return new Glk::GlkOptionsWidget(boss, name, target);
+	const Common::String gameId = ConfMan.get("gameid", target);
+	return new Glk::GlkOptionsWidget(boss, name, target,
+		getInterpreterType(gameId.c_str()));
 }
 
 const ExtraGuiOptions GlkMetaEngine::getExtraGuiOptions(const Common::String &) const {

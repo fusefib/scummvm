@@ -63,7 +63,8 @@ class GlkOptionsWidget : public GUI::OptionsContainerWidget {
 	};
 
 public:
-	GlkOptionsWidget(GuiObject *boss, const Common::String &name, const Common::String &domain);
+	GlkOptionsWidget(GuiObject *boss, const Common::String &name,
+		const Common::String &domain, InterpreterType interpreterType);
 	~GlkOptionsWidget() override;
 
 	// OptionsContainerWidget API
@@ -74,6 +75,8 @@ public:
 	void reflowLayout() override;
 
 private:
+	InterpreterType _interpreterType;
+
 	// OptionsContainerWidget API
 	void defineLayout(GUI::ThemeEval &layouts, const Common::String &layoutName, const Common::String &overlayedLayout) const override;
 	GUI::PopUpWidget *_tfontPopUps[style_NUMSTYLES];
