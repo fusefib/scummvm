@@ -20,6 +20,7 @@
  */
 
 #include "backends/keymapper/keymap.h"
+#include "common/config-manager.h"
 #include "common/scummsys.h"
 #include "common/system.h"
 #include "engines/util.h"
@@ -54,8 +55,11 @@ Video::VideoDecoder *ZVision::loadAnimation(const Common::Path &fileName) {
 		animation = new ZorkAVIDecoder();
 #if defined(USE_MPEG2) && defined(USE_A52)
 	else if (tmpFileName.hasSuffix(".vob")) {
- 		double amplification = getVolumeManager()->getVobAmplification(tmpFileName);
-		animation = new Video::MPEGPSDecoder(amplification);
+		double amplification = getVolumeManager()->getVobAmplification(tmpFileName);
+		Video::MPEGPSDecoder::DeinterlaceMode mode = Video::MPEGPSDecoder::kDeinterlaceNone;
+		if (getGameId() == GID_GRANDINQUISITOR && (getFeatures() & ADGF_DVD) && ConfMan.getBool("mpeg_deinterlace"))
+			mode = Video::MPEGPSDecoder::kDeinterlaceBWDIF;
+		animation = new Video::MPEGPSDecoder(amplification, mode);
 	}
 #endif
 	else
