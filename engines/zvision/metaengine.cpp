@@ -97,6 +97,18 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 	},
 
 	{
+		GAMEOPTION_DEINTERLACE_MPEG,
+		{
+			_s("Deinterlace MPEG video"),
+			_s("Remove interlacing from the DVD movies"),
+			"mpeg_deinterlace",
+			true,
+			0,
+			0
+		}
+	},
+
+	{
 		GAMEOPTION_ENABLE_WIDESCREEN,
 		{
 			_s("Enable widescreen support"),
