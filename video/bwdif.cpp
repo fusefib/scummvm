@@ -80,7 +80,11 @@ void bwdifFilterRowScalar(byte *dst, const BWDIFRow &row, int width) {
 	}
 }
 
-BWDIF::BWDIF(bool useSSE2) : _filterRow(bwdifFilterRowScalar) {
+BWDIF::BWDIF(bool useSSE2, bool useNEON) : _filterRow(bwdifFilterRowScalar) {
+#ifdef SCUMMVM_NEON
+	if (useNEON)
+		_filterRow = bwdifFilterRowNEON;
+#endif
 #ifdef SCUMMVM_SSE2
 	if (useSSE2)
 		_filterRow = bwdifFilterRowSSE2;

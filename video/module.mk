@@ -23,6 +23,9 @@ MODULE_OBJS += bwdif.o
 ifdef SCUMMVM_SSE2
 MODULE_OBJS += bwdif-sse2.o
 endif
+ifdef SCUMMVM_NEON
+MODULE_OBJS += bwdif-neon.o
+endif
 endif
 
 ifdef USE_BINK
