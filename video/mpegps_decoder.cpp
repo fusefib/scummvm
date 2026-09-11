@@ -31,6 +31,7 @@
 #include "common/textconsole.h"
 
 #include "video/mpegps_decoder.h"
+#include "video/bwdif.h"
 #include "image/codecs/mpeg.h"
 
 // The demuxing code is based on libav's demuxing code
@@ -52,8 +53,9 @@ enum {
 	kStartCodePrivateStream2 = 0x1BF
 };
 
-MPEGPSDecoder::MPEGPSDecoder(double decibel) {
+MPEGPSDecoder::MPEGPSDecoder(double decibel, DeinterlaceMode mode) {
 	_decibel = decibel;
+	_deinterlaceMode = mode;
 	_demuxer = new MPEGPSDemuxer();
 }
 
@@ -174,13 +176,35 @@ void MPEGPSDecoder::readNextPacket() {
 	for (;;) {
 		int32 startCode;
 		uint32 pts, dts;
+		if (_deinterlaceMode == kDeinterlaceBWDIF) {
+			// A retained video packet may contain many pictures. Continue
+			// delivering due audio while those pictures are being presented.
+			Common::SeekableReadStream *audio = _demuxer->getNextPacket(getTime(), startCode, pts, dts, true);
+			if (audio) {
+				MPEGStream *stream = getStream(startCode, audio);
+				if (stream) {
+					audio->seek(0);
+					stream->sendPacket(audio, pts, dts);
+				} else {
+					delete audio;
+				}
+				continue;
+			}
+			for (TrackListIterator it = getTrackListBegin(); it != getTrackListEnd(); ++it)
+				if ((*it)->getTrackType() == Track::kTrackTypeVideo && ((MPEGVideoTrack *)*it)->readBufferedPicture())
+					return;
+		}
 		Common::SeekableReadStream *packet = _demuxer->getNextPacket(getTime(), startCode, pts, dts);
 
 		if (!packet) {
 			// End of stream
-			for (TrackListIterator it = getTrackListBegin(); it != getTrackListEnd(); it++)
-				if ((*it)->getTrackType() == Track::kTrackTypeVideo)
-					((MPEGVideoTrack *)*it)->setEndOfTrack();
+			for (TrackListIterator it = getTrackListBegin(); it != getTrackListEnd(); it++) {
+				if ((*it)->getTrackType() == Track::kTrackTypeVideo) {
+					MPEGVideoTrack *track = (MPEGVideoTrack *)*it;
+					track->finishInput();
+					track->readBufferedPicture();
+				}
+			}
 			return;
 		}
 
@@ -210,7 +234,7 @@ bool MPEGPSDecoder::addFirstVideoTrack() {
 	// Video stream
 	// Can be MPEG-1/2 or MPEG-4/h.264. We'll assume the former and
 	// I hope we never need the latter.
-	MPEGVideoTrack *track = new MPEGVideoTrack(packet);
+	MPEGVideoTrack *track = new MPEGVideoTrack(packet, _deinterlaceMode);
 	addTrack(track);
 	_streamMap[startCode] = track;
 
@@ -324,7 +348,7 @@ Common::SeekableReadStream *MPEGPSDecoder::MPEGPSDemuxer::getFirstVideoPacket(in
 	return packet._stream;
 }
 
-Common::SeekableReadStream *MPEGPSDecoder::MPEGPSDemuxer::getNextPacket(uint32 currentTime, int32 &startCode, uint32 &pts, uint32 &dts) {
+Common::SeekableReadStream *MPEGPSDecoder::MPEGPSDemuxer::getNextPacket(uint32 currentTime, int32 &startCode, uint32 &pts, uint32 &dts, bool audioOnly) {
 	queueNextPacket();
 
 	// The idea here is to prioritize the delivery of audio packets,
@@ -366,7 +390,7 @@ Common::SeekableReadStream *MPEGPSDecoder::MPEGPSDemuxer::getNextPacket(uint32 c
 		}
 	}
 
-	if (!_videoQueue.empty()) {
+	if (!audioOnly && !_videoQueue.empty()) {
 		Packet packet = _videoQueue.pop();
 		startCode = packet._startCode;
 
@@ -637,7 +661,21 @@ void MPEGPSDecoder::MPEGPSDemuxer::parseProgramStreamMap(int length) {
 // Video track
 // --------------------------------------------------------------------------
 
-MPEGPSDecoder::MPEGVideoTrack::MPEGVideoTrack(Common::SeekableReadStream *firstPacket) {
+#ifdef USE_MPEG2
+struct MPEGPSDecoder::MPEGVideoTrack::BWDIFState {
+	Image::MPEGFrame frames[3], filtered;
+	Image::MPEGFrame *prev, *cur, *next;
+	BWDIF filter;
+	bool havePrev, haveCur, firstPicture, drained, ready;
+	Audio::Timestamp currentTime;
+
+	BWDIFState() : prev(&frames[0]), cur(&frames[1]), next(&frames[2]),
+			havePrev(false), haveCur(false), firstPicture(true), drained(false), ready(false),
+			currentTime(0, 27000000) {}
+};
+#endif
+
+MPEGPSDecoder::MPEGVideoTrack::MPEGVideoTrack(Common::SeekableReadStream *firstPacket, DeinterlaceMode mode) {
 	_surface = 0;
 	_endOfTrack = false;
 	_curFrame = -1;
@@ -648,12 +686,14 @@ MPEGPSDecoder::MPEGVideoTrack::MPEGVideoTrack(Common::SeekableReadStream *firstP
 
 #ifdef USE_MPEG2
 	_mpegDecoder = new Image::MPEGDecoder();
+	_bwdif = mode == kDeinterlaceBWDIF ? new BWDIFState() : 0;
 #endif
 }
 
 MPEGPSDecoder::MPEGVideoTrack::~MPEGVideoTrack() {
 #ifdef USE_MPEG2
 	delete _mpegDecoder;
+	delete _bwdif;
 #endif
 
 	if (_surface) {
@@ -682,11 +722,118 @@ bool MPEGPSDecoder::MPEGVideoTrack::setOutputPixelFormat(const Graphics::PixelFo
 }
 
 const Graphics::Surface *MPEGPSDecoder::MPEGVideoTrack::decodeNextFrame() {
+#ifdef USE_MPEG2
+	if (_bwdif && !_bwdif->ready)
+		return 0;
+#endif
 	return _surface;
 }
 
+void MPEGPSDecoder::MPEGVideoTrack::finishInput() {
+#ifdef USE_MPEG2
+	if (_bwdif) {
+		_mpegDecoder->finish();
+		return;
+	}
+#endif
+	_endOfTrack = true;
+}
+
+bool MPEGPSDecoder::MPEGVideoTrack::readBufferedPicture() {
+#ifdef USE_MPEG2
+	if (!_bwdif)
+		return false;
+	_bwdif->ready = false;
+	if (_endOfTrack)
+		return true;
+	for (;;) {
+		if (_bwdif->drained) {
+			if (_bwdif->haveCur) {
+				outputBufferedPicture(true);
+				_bwdif->haveCur = false;
+			} else {
+				_endOfTrack = true;
+			}
+			return true;
+		}
+		Image::MPEGFrame &target = *(_bwdif->haveCur ? _bwdif->next : _bwdif->cur);
+		const Image::MPEGDecoder::PictureResult result = _mpegDecoder->decodePicture(target);
+		if (result == Image::MPEGDecoder::kNeedsInput)
+			return false;
+		if (result == Image::MPEGDecoder::kUnsupported) {
+			warning("Unsupported MPEG picture layout or dimensions changed during playback");
+			_endOfTrack = true;
+			return true;
+		}
+		if (result == Image::MPEGDecoder::kDrained) {
+			_bwdif->drained = true;
+			continue;
+		}
+		if (!_bwdif->haveCur) {
+			_bwdif->haveCur = true;
+			continue;
+		}
+		outputBufferedPicture(false);
+		Image::MPEGFrame *spare = _bwdif->prev;
+		_bwdif->prev = _bwdif->cur;
+		_bwdif->cur = _bwdif->next;
+		_bwdif->next = spare;
+		_bwdif->havePrev = true;
+		return true;
+	}
+#else
+	return false;
+#endif
+}
+
+#ifdef USE_MPEG2
+void MPEGPSDecoder::MPEGVideoTrack::outputBufferedPicture(bool last) {
+	const Image::MPEGFrame &cur = *_bwdif->cur;
+	const Image::MPEGFrame &prev = _bwdif->havePrev ? *_bwdif->prev : cur;
+	const Image::MPEGFrame &next = last ? cur : *_bwdif->next;
+	if (!_surface) {
+		_surface = new Graphics::Surface();
+		_surface->create(cur.width, cur.height, _pixelFormat);
+	}
+	const bool bypass = cur.progressive || (prev.progressive && prev.fieldCount > 2) ||
+			(next.progressive && next.fieldCount > 2);
+	if (bypass) {
+		_mpegDecoder->convertFrame(cur, _surface);
+	} else {
+		_bwdif->filtered.create(cur.width, cur.height);
+		for (uint plane = 0; plane < 3; ++plane) {
+			const int width = plane ? cur.width / 2 : cur.width;
+			const int height = plane ? cur.height / 2 : cur.height;
+			_bwdif->filter.filterPlane(&_bwdif->filtered.planes[plane][0],
+					&prev.planes[plane][0], &cur.planes[plane][0], &next.planes[plane][0],
+					width, height, width, cur.topFieldFirst, _bwdif->firstPicture && !last);
+		}
+		_bwdif->firstPicture = false;
+		_mpegDecoder->convertFrame(_bwdif->filtered, _surface);
+	}
+	++_curFrame;
+	_bwdif->ready = true;
+	if (cur.pts != 0xFFFFFFFF) {
+		const Audio::Timestamp pts(cur.pts / 90000, (cur.pts % 90000) * 300, 27000000);
+		if (pts > _bwdif->currentTime)
+			_bwdif->currentTime = pts;
+	}
+	_nextFrameStartTime = _bwdif->currentTime.addFrames(cur.period);
+	if (!last && next.pts != 0xFFFFFFFF) {
+		const Audio::Timestamp pts(next.pts / 90000, (next.pts % 90000) * 300, 27000000);
+		if (pts > _bwdif->currentTime)
+			_nextFrameStartTime = pts;
+	}
+	_bwdif->currentTime = _nextFrameStartTime;
+}
+#endif
+
 bool MPEGPSDecoder::MPEGVideoTrack::sendPacket(Common::SeekableReadStream *packet, uint32 pts, uint32 dts) {
 #ifdef USE_MPEG2
+	if (_bwdif) {
+		_mpegDecoder->queuePacket(packet, pts);
+		return readBufferedPicture();
+	}
 	if (!_surface) {
 		_surface = new Graphics::Surface();
 		_surface->create(_width, _height, _pixelFormat);

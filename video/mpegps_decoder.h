@@ -54,7 +54,8 @@ namespace Video {
  */
 class MPEGPSDecoder : public VideoDecoder {
 public:
-	MPEGPSDecoder(double decibel = 0.0);
+	enum DeinterlaceMode { kDeinterlaceNone, kDeinterlaceBWDIF };
+	MPEGPSDecoder(double decibel = 0.0, DeinterlaceMode mode = kDeinterlaceNone);
 	virtual ~MPEGPSDecoder();
 
 	bool loadStream(Common::SeekableReadStream *stream) override;
@@ -78,7 +79,7 @@ private:
 		void close();
 
 		Common::SeekableReadStream *getFirstVideoPacket(int32 &startCode, uint32 &pts, uint32 &dts);
-		Common::SeekableReadStream *getNextPacket(uint32 currentTime, int32 &startCode, uint32 &pts, uint32 &dts);
+		Common::SeekableReadStream *getNextPacket(uint32 currentTime, int32 &startCode, uint32 &pts, uint32 &dts, bool audioOnly = false);
 
 		void setPrebufferedPackets(int packets) { _prebufferedPackets = packets; }
 
@@ -128,7 +129,7 @@ private:
 	// An MPEG 1/2 video track
 	class MPEGVideoTrack : public VideoTrack, public MPEGStream {
 	public:
-		MPEGVideoTrack(Common::SeekableReadStream *firstPacket);
+		MPEGVideoTrack(Common::SeekableReadStream *firstPacket, DeinterlaceMode mode);
 		~MPEGVideoTrack();
 
 		bool endOfTrack() const override { return _endOfTrack; }
@@ -144,6 +145,8 @@ private:
 		StreamType getStreamType() const override { return kStreamTypeVideo; }
 
 		void setEndOfTrack() { _endOfTrack = true; }
+		bool readBufferedPicture();
+		void finishInput();
 
 	private:
 		bool _endOfTrack;
@@ -160,6 +163,9 @@ private:
 
 #ifdef USE_MPEG2
 		Image::MPEGDecoder *_mpegDecoder;
+		struct BWDIFState;
+		BWDIFState *_bwdif;
+		void outputBufferedPicture(bool last);
 #endif
 	};
 
@@ -249,6 +255,7 @@ private:
 	StreamMap _streamMap;
 
 	double _decibel;
+	DeinterlaceMode _deinterlaceMode;
 };
 
 } // End of namespace Video
