@@ -670,6 +670,7 @@ struct MPEGPSDecoder::MPEGVideoTrack::BWDIFState {
 	Audio::Timestamp currentTime;
 
 	BWDIFState() : prev(&frames[0]), cur(&frames[1]), next(&frames[2]),
+			filter(g_system->hasFeature(OSystem::kFeatureCpuSSE2)),
 			havePrev(false), haveCur(false), firstPicture(true), drained(false), ready(false),
 			currentTime(0, 27000000) {}
 };

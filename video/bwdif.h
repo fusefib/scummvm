@@ -38,10 +38,14 @@ struct BWDIFRow {
 
 typedef void (*BWDIFRowFilter)(byte *dst, const BWDIFRow &row, int width);
 void bwdifFilterRowScalar(byte *dst, const BWDIFRow &row, int width);
+#ifdef SCUMMVM_SSE2
+void bwdifFilterRowSSE2(byte *dst, const BWDIFRow &row, int width);
+#endif
 
 class BWDIF {
 public:
-	BWDIF();
+	// The caller supplies the backend's runtime CPU capability.
+	explicit BWDIF(bool useSSE2 = false);
 
 	// All four planes have the same pitch; no padding is read or written.
 	// Small planes are copied unchanged. Source and destination must not alias.

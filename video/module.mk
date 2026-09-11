@@ -20,6 +20,9 @@ MODULE_OBJS := \
 
 ifdef USE_MPEG2
 MODULE_OBJS += bwdif.o
+ifdef SCUMMVM_SSE2
+MODULE_OBJS += bwdif-sse2.o
+endif
 endif
 
 ifdef USE_BINK
