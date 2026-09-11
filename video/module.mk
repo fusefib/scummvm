@@ -18,6 +18,10 @@ MODULE_OBJS := \
 	subtitles.o \
 	video_decoder.o
 
+ifdef USE_MPEG2
+MODULE_OBJS += bwdif.o
+endif
+
 ifdef USE_BINK
 MODULE_OBJS += \
 	bink_decoder.o
