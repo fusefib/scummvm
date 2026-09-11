@@ -22,6 +22,7 @@
 #ifndef IMAGE_CODECS_MPEG_H
 #define IMAGE_CODECS_MPEG_H
 
+#include "common/array.h"
 #include "image/codecs/codec.h"
 #include "graphics/pixelformat.h"
 
@@ -37,6 +38,27 @@ struct Surface;
 }
 
 namespace Image {
+
+/** An owned, tightly packed YUV420 display picture and its original timing. */
+struct MPEGFrame {
+	MPEGFrame() : width(0), height(0), progressive(false), topFieldFirst(false),
+			fieldCount(0), period(0), pts(0xFFFFFFFF) {}
+
+	void create(uint16 w, uint16 h) {
+		width = w;
+		height = h;
+		planes[0].resize((uint32)w * h);
+		planes[1].resize((uint32)(w / 2) * (h / 2));
+		planes[2].resize((uint32)(w / 2) * (h / 2));
+	}
+
+	Common::Array<byte> planes[3];
+	uint16 width, height;
+	bool progressive, topFieldFirst;
+	uint fieldCount;
+	uint32 period; // Display duration in 27 MHz ticks.
+	uint32 pts;    // Original packet timestamp in 90 kHz ticks, or unknown.
+};
 
 /**
  * MPEG 1/2 video decoder.
@@ -61,6 +83,15 @@ public:
 	// MPEGPSDecoder call
 	bool decodePacket(Common::SeekableReadStream &packet, uint32 &framePeriod, Graphics::Surface *dst = 0);
 
+	// Resumable raw output. Do not mix this interface with decodePacket().
+	enum PictureResult { kPictureReady, kNeedsInput, kDrained, kUnsupported };
+	// Takes ownership; call only after decodePicture() returns kNeedsInput.
+	void queuePacket(Common::SeekableReadStream *packet, uint32 pts);
+	// Signal demuxer EOF. Subsequent decodePicture() calls drain the codec.
+	void finish();
+	PictureResult decodePicture(MPEGFrame &frame);
+	void convertFrame(const MPEGFrame &frame, Graphics::Surface *dst);
+
 private:
 	Graphics::PixelFormat _pixelFormat;
 	Graphics::Surface *_surface;
@@ -72,6 +103,13 @@ private:
 	byte _buffer[BUFFER_SIZE];
 	mpeg2dec_t *_mpegDecoder;
 	const mpeg2_info_t *_mpegInfo;
+
+	Common::SeekableReadStream *_packet;
+	uint32 _packetPts;
+	bool _packetStart;
+	bool _finishing, _drainSent, _sequenceEnded, _rawFailed, _rawHasPicture;
+	uint16 _rawWidth, _rawHeight;
+	bool copyPicture(MPEGFrame &frame);
 };
 
 } // End of namespace Image
