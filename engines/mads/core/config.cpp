@@ -59,6 +59,7 @@ void read_config_file() {
 	ConfMan.registerDefault("show_speech_boxes", true);
 	ConfMan.registerDefault("naughtiness", true);
 	ConfMan.registerDefault("difficulty", -1);
+	ConfMan.registerDefault("animview_boundary_lines", false);
 
 	config_file.music_flag = !ConfMan.getBool("music_mute") && !ConfMan.getBool("mute");
 	config_file.sound_flag = !ConfMan.getBool("sfx_mute") && !ConfMan.getBool("mute");

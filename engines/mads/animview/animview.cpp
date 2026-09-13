@@ -20,6 +20,7 @@
  */
 
 #include "audio/audiostream.h"
+#include "common/config-manager.h"
 #include "common/file.h"
 #include "mads/core/env.h"
 #include "mads/core/kernel.h"
@@ -638,7 +639,10 @@ done:
 void animview_main(const char *resName) {
 	Presentation presentation;
 	presentation.bufferHeight = 0;
-	presentation.drawBoundaryLines = true;
+	// The original DOS viewer draws resource-controlled lines outside the
+	// viewport. Retain them as a hidden compatibility option, but suppress
+	// them by default so they cannot flash during palette transitions.
+	presentation.drawBoundaryLines = ConfMan.getBool("animview_boundary_lines");
 	presentation.serviceFramesInline = false;
 	animview_main(resName, presentation);
 }
