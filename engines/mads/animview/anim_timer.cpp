@@ -40,6 +40,8 @@ static const byte FX_TIMES[16] = {
 
 static const int DOS_FADE_STEP_RATE = 70;
 static const int MACINTOSH_FADE_STEP_RATE = 60;
+static const int DEFAULT_REX_EXTRA_BLACK_TICKS = 15;
+static const int DEFAULT_OTHER_EXTRA_BLACK_TICKS = 30;
 
 constexpr int MESSAGES_COUNT = 8;
 static int messageHandle[MESSAGES_COUNT];
@@ -280,8 +282,12 @@ block2:
 	fade_step_rate = g_engine->hasMacintoshInterface() ?
 		MACINTOSH_FADE_STEP_RATE : DOS_FADE_STEP_RATE;
 	extra_black_ticks = ConfMan.getInt("animview_extra_black_ticks");
-	if (extra_black_ticks < 0)
-		extra_black_ticks = 0;
+	// Negative selects the game-specific presentation default. Explicit zero
+	// retains the unextended timing for native comparisons.
+	if (extra_black_ticks < 0) {
+		extra_black_ticks = g_engine->getGameID() == GType_RexNebular ?
+			DEFAULT_REX_EXTRA_BLACK_TICKS : DEFAULT_OTHER_EXTRA_BLACK_TICKS;
+	}
 	fade_end_time = timer1;
 	fade_end_time_ptr = nullptr;
 	if ((g_engine->getGameID() == GType_RexNebular ||

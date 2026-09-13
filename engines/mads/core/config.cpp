@@ -60,7 +60,7 @@ void read_config_file() {
 	ConfMan.registerDefault("naughtiness", true);
 	ConfMan.registerDefault("difficulty", -1);
 	ConfMan.registerDefault("animview_boundary_lines", false);
-	ConfMan.registerDefault("animview_extra_black_ticks", 0);
+	ConfMan.registerDefault("animview_extra_black_ticks", -1);
 
 	config_file.music_flag = !ConfMan.getBool("music_mute") && !ConfMan.getBool("mute");
 	config_file.sound_flag = !ConfMan.getBool("sfx_mute") && !ConfMan.getBool("mute");
