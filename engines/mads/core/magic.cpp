@@ -92,16 +92,21 @@ void magic_fade_pacer_wait(MagicFadePacer &pacer, int step,
 	}
 }
 
-static void magic_wait_for_fade_start(long fade_end_time, int steps,
-		int fade_step_rate) {
-	if (fade_end_time < 0 || fade_step_rate <= 0)
+void magic_wait_for_fade_start(long *fade_end_time, int steps,
+		int fade_step_rate, int extra_black_ticks) {
+	if (fade_end_time == nullptr || *fade_end_time < 0 ||
+			fade_step_rate <= 0)
 		return;
 
 	const long fade_ticks = (steps * FADE_DEADLINE_RATE +
 		fade_step_rate - 1) /
 		fade_step_rate;
-	const long fade_start_time = fade_end_time - fade_ticks;
+	long fade_start_time = *fade_end_time - fade_ticks;
 	long now = timer_read();
+	if (extra_black_ticks > 0) {
+		fade_start_time = MAX(fade_start_time, now) + extra_black_ticks;
+		*fade_end_time = fade_start_time + fade_ticks;
+	}
 
 	// timer_read() services events while retaining the animation's 60 Hz
 	// clock domain.
@@ -360,7 +365,8 @@ done:
 void magic_fade_from_grey(RGBcolor *pal, Palette target,
 	int base_color, int num_colors,
 	int base_grey, int num_greys,
-	int tick_delay, int steps, int fade_step_rate, long fade_end_time) {
+	int tick_delay, int steps, int fade_step_rate, long *fade_end_time,
+	int extra_black_ticks) {
 	int count;
 	int color;
 	int index;
@@ -421,7 +427,8 @@ void magic_fade_from_grey(RGBcolor *pal, Palette target,
 	}
 
 	if (fade_step_rate > 0) {
-		magic_wait_for_fade_start(fade_end_time, steps, fade_step_rate);
+		magic_wait_for_fade_start(fade_end_time, steps, fade_step_rate,
+			extra_black_ticks);
 		magic_fade_pacer_init(fade_pacer);
 	} else {
 		base_timing = timer_read_600();

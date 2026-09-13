@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "mads/animview/anim_timer.h"
 #include "mads/animview/animview.h"
 #include "mads/animview/functions.h"
@@ -87,6 +88,8 @@ void anim_timer() {
 	bool full_fade_in;
 	int fade_step_rate;
 	long fade_end_time;
+	long *fade_end_time_ptr;
+	int extra_black_ticks;
 
 	if (current_error_code || speechResourceId != -1)
 		goto done;
@@ -276,18 +279,29 @@ block2:
 		g_engine->getGameID() == GType_Phantom;
 	fade_step_rate = g_engine->hasMacintoshInterface() ?
 		MACINTOSH_FADE_STEP_RATE : DOS_FADE_STEP_RATE;
-	fade_end_time = -1;
-	if (g_engine->getGameID() == GType_RexNebular &&
+	extra_black_ticks = ConfMan.getInt("animview_extra_black_ticks");
+	if (extra_black_ticks < 0)
+		extra_black_ticks = 0;
+	fade_end_time = timer1;
+	fade_end_time_ptr = nullptr;
+	if ((g_engine->getGameID() == GType_RexNebular ||
+			extra_black_ticks > 0) &&
 			(runFx == MATTE_FX_FADE_FROM_BLACK ||
 			runFx == MATTE_FX_FADE_THRU_BLACK))
-		fade_end_time = timer1;
+		fade_end_time_ptr = &fade_end_time;
 
 	// Rex and Phantom AnimView use the full 16-step fade-in. The later
 	// Dragonsphere executable uses the quick fade. DOS palette updates are
 	// paced by VGA retrace, while Macintosh fades use the 60 Hz TickCount.
 	// When Rex finishes fade preparation early, keep the remaining transition
-	// time black so the fade-in ends at the existing animation deadline.
-	matte_frame(runFx, 0, full_fade_in, fade_step_rate, fade_end_time);
+	// time black so the fade-in ends at the existing animation deadline. The
+	// optional extra interval is a fast-host presentation policy, not a delay
+	// recovered from the native executables. Updating timer1 with the resulting
+	// deadline keeps subsequent frame and sound scheduling in step with it.
+	matte_frame(runFx, 0, full_fade_in, fade_step_rate, fade_end_time_ptr,
+		extra_black_ticks);
+	if (fade_end_time_ptr != nullptr)
+		timer1 = fade_end_time;
 	mouse_hide();
 
 block3:

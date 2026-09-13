@@ -126,10 +126,11 @@ extern void matte_init(int init_series);
 extern int matte_map_work_screen();
 
 
-// fade_end_time is in timer_read() ticks; -1 leaves reveal timing unchanged.
+// fade_end_time uses timer_read() ticks and is updated when extra black time
+// moves the reveal. nullptr leaves reveal timing unchanged.
 extern void matte_frame(int special_effect, int full_screen,
 	bool full_fade_in = false, int fade_step_rate = 0,
-	long fade_end_time = -1);
+	long *fade_end_time = nullptr, int extra_black_ticks = 0);
 
 extern int matte_load_series(const char *name, int load_flags, int bonus_series_number);
 extern void matte_deallocate_series(int id, int free_memory);
