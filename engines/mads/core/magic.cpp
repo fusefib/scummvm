@@ -42,8 +42,6 @@ namespace MADS {
 
 #define MAX_RADIUS      210
 
-static const int FADE_DEADLINE_RATE = 60;
-
 /*
  * If the "magic_color_flag" for a color gun is set, then the grey
  * intensity ramp for its pixels is used during the fade, shifted
@@ -98,7 +96,7 @@ void magic_wait_for_fade_start(long *fade_end_time, int steps,
 			fade_step_rate <= 0)
 		return;
 
-	const long fade_ticks = (steps * FADE_DEADLINE_RATE +
+	const long fade_ticks = (steps * TIMER_TICKS_PER_SECOND +
 		fade_step_rate - 1) /
 		fade_step_rate;
 	long fade_start_time = *fade_end_time - fade_ticks;
