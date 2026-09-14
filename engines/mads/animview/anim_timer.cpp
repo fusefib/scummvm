@@ -301,7 +301,7 @@ block2:
 	// paced by VGA retrace, while Macintosh fades use the 60 Hz TickCount.
 	// When Rex finishes fade preparation early, keep the remaining transition
 	// time black so the fade-in ends at the existing animation deadline. The
-	// optional extra interval is a fast-host presentation policy, not a delay
+	// optional minimum interval is a fast-host presentation policy, not a delay
 	// recovered from the native executables. Updating timer1 with the resulting
 	// deadline keeps subsequent frame and sound scheduling in step with it.
 	matte_frame(runFx, 0, full_fade_in, fade_step_rate, fade_end_time_ptr,

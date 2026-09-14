@@ -89,8 +89,8 @@ extern void magic_wait_for_fade_start(long *fade_end_time, int steps,
 extern void magic_fade_to_grey(Palette &pal, byte *map_pointer,
 	int base_color, int num_colors, int base_grey, int num_greys,
 	int tick_delay, int steps, int fade_step_rate = 0);
-// fade_end_time uses timer_read() ticks and is updated when extra black time
-// moves the reveal. nullptr leaves reveal timing unchanged.
+// fade_end_time uses timer_read() ticks and is updated when a minimum black
+// interval moves the reveal. nullptr leaves reveal timing unchanged.
 extern void magic_fade_from_grey(RGBcolor *pal, Palette target, int base_color,
 	int num_colors, int base_grey, int num_greys, int tick_delay, int steps,
 	int fade_step_rate = 0, long *fade_end_time = nullptr,

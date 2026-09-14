@@ -102,7 +102,7 @@ void magic_wait_for_fade_start(long *fade_end_time, int steps,
 	long fade_start_time = *fade_end_time - fade_ticks;
 	long now = timer_read();
 	if (extra_black_ticks > 0) {
-		fade_start_time = MAX(fade_start_time, now) + extra_black_ticks;
+		fade_start_time = MAX(fade_start_time, now + extra_black_ticks);
 		*fade_end_time = fade_start_time + fade_ticks;
 	}
 
