@@ -285,7 +285,7 @@ void Control::getPlayerOptions() {
 	} else if (SwordEngine::_systemVars.saveGameFlag == SGF_QUIT) {
 		_sound->fadeMusicDown(1);
 
-		Engine::quitGame();
+		_vm->commitQuit();
 	}
 
 	// Reset again (because it may have been set in fnDeathScreen())
