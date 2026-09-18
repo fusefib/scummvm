@@ -271,10 +271,12 @@ void SwordEngine::checkKeys() {
 		}
 
 		break;
-	case kActionQuit:
-		Engine::quitGame();
-
+	case kActionQuit: {
+		Common::Event event;
+		event.type = Common::EVENT_QUIT;
+		_eventMan->pushEvent(event);
 		break;
+	}
 	case kActionPause:
 		_systemVars.gamePaused = true;
 		break;
