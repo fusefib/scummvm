@@ -211,6 +211,11 @@ void EventDispatcher::dispatchEvent(const Event &event) {
 	}
 }
 
+void EventDispatcher::notifyExit(bool returnToLauncher) {
+	for (auto &observer : _observers)
+		observer.observer->notifyExit(returnToLauncher);
+}
+
 void EventDispatcher::dispatchPoll() {
 	for (auto &observer : _observers) {
 		if (observer.poll)

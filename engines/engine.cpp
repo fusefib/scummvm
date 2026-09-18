@@ -161,6 +161,7 @@ Engine::Engine(OSystem *syst)
 		_hotspotForceRedraw(false),
 		_hotspotPrevCursorVisible(false) {
 
+	_eventMan->beginGame();
 	g_engine = this;
 	_quitRequested = false;
 	Common::setErrorOutputFormatter(defaultOutputFormatter);
@@ -221,9 +222,8 @@ Engine::~Engine() {
 	// Do not expose the torn-down engine to event processing.
 	g_engine = nullptr;
 
-	// Flush any pending remaining events
-	Common::Event evt;
-	while (g_system->getEventManager()->pollEvent(evt)) {}
+	// Retire the game session without reopening interactive game operations.
+	_eventMan->endGame();
 
 	delete _debugger;
 	delete _mainMenuDialog;
@@ -1159,6 +1159,17 @@ void Engine::quitGame() {
 
 	event.type = Common::EVENT_QUIT;
 	g_system->getEventManager()->pushEvent(event);
+	_quitRequested = true;
+}
+
+void Engine::commitQuit() {
+	bool returnToLauncher = _eventMan->shouldReturnToLauncher();
+	if (!_eventMan->shouldQuit() && !returnToLauncher) {
+		returnToLauncher = _system->hasFeature(OSystem::kFeatureNoQuit) ||
+			(ConfMan.getBool("gui_return_to_launcher_at_exit") &&
+			 hasFeature(kSupportsReturnToLauncher));
+	}
+	_eventMan->commitExit(returnToLauncher);
 	_quitRequested = true;
 }
 

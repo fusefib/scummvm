@@ -376,11 +376,13 @@ void OSystem_Atari::engineInit() {
 	//debug("engineInit");
 
 	g_gameEngineActive = true;
+	_mixerManager->resumeAudio();
 }
 
 void OSystem_Atari::engineDone() {
 	//debug("engineDone");
 
+	_mixerManager->suspendAudio();
 	g_gameEngineActive = false;
 }
 

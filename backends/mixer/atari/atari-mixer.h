@@ -41,6 +41,7 @@ public:
 	int resumeAudio() override;
 
 	bool notifyEvent(const Common::Event &event) override;
+	void notifyExit(bool returnToLauncher) override;
 
 private:
 	int _outputRate = 0;

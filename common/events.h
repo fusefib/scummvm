@@ -357,6 +357,16 @@ public:
 	 * Notify the observer of pollEvent() query.
 	 */
 	virtual void notifyPoll() { }
+
+	/**
+	 * An exit has been accepted. This is a notification, not an input event
+	 * or a request for confirmation. It is not consumed by any observer.
+	 *
+	 * Called synchronously, once per committed decision, without polling.
+	 * Implementations must not re-enter event processing or change observer
+	 * registrations. Do not assume that a game engine is still available.
+	 */
+	virtual void notifyExit(bool returnToLauncher) { }
 };
 
 /**
@@ -450,6 +460,9 @@ public:
 	 * This takes the "autoFree" flag passed to registerObserver into account.
 	 */
 	void unregisterObserver(EventObserver *obs);
+
+	/** Notify every observer of an already-accepted exit, without polling. */
+	void notifyExit(bool returnToLauncher);
 private:
 	struct Entry {
 		bool autoFree;
@@ -548,6 +561,25 @@ public:
 	 * Whether to return to the launcher.
 	 */
 	virtual int shouldReturnToLauncher() const = 0;
+
+	/**
+	 * Record an accepted destination immediately, without queuing a request.
+	 * Repeated calls preserve the first committed destination. Notify exit
+	 * observers once, without dispatching input or opening any dialogs.
+	 */
+	virtual void commitExit(bool returnToLauncher) = 0;
+	virtual bool isExitCommitted() const = 0;
+
+	/** Begin a game session. Called before publishing the new engine. */
+	virtual void beginGame() = 0;
+
+	/**
+	 * End a game session with the global engine already withdrawn.
+	 * Collect pending input once, retire session commands noninteractively,
+	 * and preserve any exit decision. False-returning internal events must
+	 * not terminate this cleanup. Do not call an engine or create game UI.
+	 */
+	virtual void endGame() = 0;
 
 	/**
 	 * Reset the "return to launcher" flag (as returned shouldReturnToLauncher()) to false.

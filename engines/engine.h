@@ -583,6 +583,13 @@ public:
 	static void quitGame();
 
 	/**
+	 * Finish an already-confirmed exit or a terminal game operation.
+	 * Unlike quitGame(), do not queue another cancellable request.
+	 * Call while the engine's return-to-launcher capability is available.
+	 */
+	void commitQuit();
+
+	/**
 	 * Return whether the engine should quit.
 	 *
 	 * This can mean either quitting ScummVM altogether, or returning to the launcher.

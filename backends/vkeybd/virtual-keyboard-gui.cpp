@@ -294,7 +294,7 @@ void VirtualKeyboardGUI::screenChanged() {
 void VirtualKeyboardGUI::mainLoop() {
 	Common::EventManager *eventMan = _system->getEventManager();
 
-	while (_displaying) {
+	while (_displaying && !eventMan->isExitCommitted()) {
 		if (_kbd->_keyQueue.hasStringChanged())
 			updateDisplay();
 		animateCaret();
@@ -325,7 +325,15 @@ void VirtualKeyboardGUI::mainLoop() {
 				screenChanged();
 				break;
 			case Common::EVENT_QUIT:
-				_system->quit();
+			case Common::EVENT_RETURN_TO_LAUNCHER:
+				if (!eventMan->isExitCommitted()) {
+					// Let the running engine resolve its own confirmation after
+					// this keyboard closes, rather than ending the process here.
+					eventMan->resetQuit();
+					eventMan->resetReturnToLauncher();
+					eventMan->pushEvent(event);
+				}
+				close();
 				return;
 			default:
 				break;
@@ -334,6 +342,7 @@ void VirtualKeyboardGUI::mainLoop() {
 		// Delay for a moment
 		_system->delayMillis(10);
 	}
+	close();
 }
 
 void VirtualKeyboardGUI::startDrag(int16 x, int16 y) {
