@@ -249,6 +249,8 @@ void VirtualKeyboard::show() {
 		_kbdGUI->checkScreenChanged();
 	}
 
+	// Submission belongs to this invocation, not to the previous keyboard.
+	_submitKeys = false;
 	switchMode(_initialMode);
 
 	{
@@ -257,9 +259,9 @@ void VirtualKeyboard::show() {
 		_kbdGUI->run();
 	}
 
-	if (_submitKeys) {
-		EventManager *eventMan = _system->getEventManager();
-		assert(eventMan);
+	EventManager *eventMan = _system->getEventManager();
+	assert(eventMan);
+	if (_submitKeys && !eventMan->isExitCommitted()) {
 
 		// push keydown & keyup events into the event manager
 		Event evt;

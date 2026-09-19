@@ -333,7 +333,9 @@ void VirtualKeyboardGUI::mainLoop() {
 					eventMan->resetReturnToLauncher();
 					eventMan->pushEvent(event);
 				}
-				close();
+				// Forced closure is never Submit. Do not feed the draft to the
+				// engine-owned confirmation that will handle the requeued exit.
+				_kbd->close(false);
 				return;
 			default:
 				break;
@@ -342,7 +344,12 @@ void VirtualKeyboardGUI::mainLoop() {
 		// Delay for a moment
 		_system->delayMillis(10);
 	}
-	close();
+	// A nested operation can commit without returning an exit event here.
+	// Preserve an ordinary Submit, but discard it if an exit superseded it.
+	if (eventMan->isExitCommitted())
+		_kbd->close(false);
+	else
+		close();
 }
 
 void VirtualKeyboardGUI::startDrag(int16 x, int16 y) {
