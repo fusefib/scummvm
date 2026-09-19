@@ -294,7 +294,7 @@ void VirtualKeyboardGUI::screenChanged() {
 void VirtualKeyboardGUI::mainLoop() {
 	Common::EventManager *eventMan = _system->getEventManager();
 
-	while (_displaying) {
+	while (_displaying && !eventMan->isExitCommitted()) {
 		if (_kbd->_keyQueue.hasStringChanged())
 			updateDisplay();
 		animateCaret();
@@ -325,7 +325,17 @@ void VirtualKeyboardGUI::mainLoop() {
 				screenChanged();
 				break;
 			case Common::EVENT_QUIT:
-				_system->quit();
+			case Common::EVENT_RETURN_TO_LAUNCHER:
+				if (!eventMan->isExitCommitted()) {
+					// Let the running engine resolve its own confirmation after
+					// this keyboard closes, rather than ending the process here.
+					eventMan->resetQuit();
+					eventMan->resetReturnToLauncher();
+					eventMan->pushEvent(event);
+				}
+				// Forced closure is never Submit. Do not feed the draft to the
+				// engine-owned confirmation that will handle the requeued exit.
+				_kbd->close(false);
 				return;
 			default:
 				break;
@@ -334,6 +344,12 @@ void VirtualKeyboardGUI::mainLoop() {
 		// Delay for a moment
 		_system->delayMillis(10);
 	}
+	// A nested operation can commit without returning an exit event here.
+	// Preserve an ordinary Submit, but discard it if an exit superseded it.
+	if (eventMan->isExitCommitted())
+		_kbd->close(false);
+	else
+		close();
 }
 
 void VirtualKeyboardGUI::startDrag(int16 x, int16 y) {

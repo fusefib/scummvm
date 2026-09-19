@@ -48,7 +48,7 @@ EventMapper::~EventMapper() {}
 
 EventManager::~EventManager() {}
 
-EventDispatcher::EventDispatcher() {
+EventDispatcher::EventDispatcher() : _suspended(false) {
 }
 
 EventDispatcher::~EventDispatcher() {
@@ -75,9 +75,13 @@ void EventDispatcher::dispatch() {
 	dispatchPoll();
 
 	for (auto &source : _sources) {
+		if (_suspended)
+			return;
 		if (source.ignore)
 			continue;
-		while (source.source->pollEvent(event)) {
+		while (!_suspended && source.source->pollEvent(event)) {
+			if (_suspended)
+				return;
 			// We only try to process the events via the setup event mapper, when
 			// we have a setup mapper and when the event source allows mapping.
 			if (source.source->allowMapping()) {
@@ -91,6 +95,8 @@ void EventDispatcher::dispatch() {
 				assert(event.type != EVENT_CUSTOM_ENGINE_ACTION_END);
 
 				for (auto &m : _mappers) {
+					if (_suspended)
+						return;
 					if (!mappedEvents.empty())
 						mappedEvents.clear();
 
@@ -98,6 +104,8 @@ void EventDispatcher::dispatch() {
 						continue;
 
 					for (auto &mappedEvent : mappedEvents) {
+						if (_suspended)
+							return;
 						dispatchEvent(mappedEvent);
 					}
 
@@ -117,9 +125,11 @@ void EventDispatcher::clearEvents() {
 	Event event;
 
 	for (auto &source : _sources) {
+		if (_suspended)
+			return;
 		if (source.ignore)
 			continue;
-		while (source.source->pollEvent(event)) {}
+		while (!_suspended && source.source->pollEvent(event)) {}
 	}
 }
 
@@ -206,13 +216,22 @@ void EventDispatcher::unregisterObserver(EventObserver *obs) {
 
 void EventDispatcher::dispatchEvent(const Event &event) {
 	for (auto &observer : _observers) {
+		if (_suspended)
+			return;
 		if (observer.observer->notifyEvent(event))
 			break;
 	}
 }
 
+void EventDispatcher::notifyExit(bool returnToLauncher) {
+	for (auto &observer : _observers)
+		observer.observer->notifyExit(returnToLauncher);
+}
+
 void EventDispatcher::dispatchPoll() {
 	for (auto &observer : _observers) {
+		if (_suspended)
+			return;
 		if (observer.poll)
 			observer.observer->notifyPoll();
 	}

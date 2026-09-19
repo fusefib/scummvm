@@ -26,6 +26,9 @@
 #include "backends/platform/ds/osystem_ds.h"
 
 bool DSEventManager::pollEvent(Common::Event &event) {
+	if (getEventDispatcher()->isSuspended())
+		return false;
+
 	// Power events
 	if (!pmMainLoop() && !_dsReset) {
 		_dsReset = true;

@@ -54,6 +54,17 @@ VirtualMouse::~VirtualMouse() {
 	_eventDispatcher->unregisterSource(this);
 }
 
+void VirtualMouse::resetInputState() {
+	_inputAxisPositionX = 0;
+	_inputAxisPositionY = 0;
+	_mouseVelocityX = 0.f;
+	_mouseVelocityY = 0.f;
+	_slowModifier = 1.f;
+	_subPixelRemainderX = 0.f;
+	_subPixelRemainderY = 0.f;
+	_lastUpdateMillis = 0;
+}
+
 bool VirtualMouse::pollEvent(Event &event) {
 	// Update the virtual mouse once per frame (assuming 60Hz)
 	uint32 curTime = g_system->getMillis(true);

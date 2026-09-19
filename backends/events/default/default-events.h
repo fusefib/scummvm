@@ -57,6 +57,16 @@ class DefaultEventManager : public Common::EventManager, Common::EventObserver {
 	bool _shouldQuit;
 	bool _shouldReturnToLauncher;
 	bool _confirmExitDialogActive;
+	bool _exitCommitted;
+	bool _gameActive;
+	bool _inputChanged;
+
+	void updateInputState(const Common::Event &event);
+	void resetSessionInput();
+	void discardSessionEvents(bool acceptExitRequests);
+	void purgeExitRequests();
+	void resetExitCommitment();
+	bool processEvent(Common::Event &event);
 
 public:
 	DefaultEventManager(Common::EventSource *boss);
@@ -73,8 +83,13 @@ public:
 	int getModifierState() const override { return _modifierState; }
 	int shouldQuit() const override { return _shouldQuit; }
 	int shouldReturnToLauncher() const override { return _shouldReturnToLauncher; }
-	void resetReturnToLauncher() override { _shouldReturnToLauncher = false; }
-	void resetQuit() override { _shouldQuit = false; }
+	void resetReturnToLauncher() override;
+	void resetQuit() override;
+	void commitExit(bool returnToLauncher) override;
+	bool isExitCommitted() const override { return _exitCommitted; }
+	void beginGame() override;
+	void prepareForGameEnd() override;
+	void endGame() override;
 
 	Common::Keymapper *getKeymapper() override { return _keymapper; }
 	Common::Keymap *getGlobalKeymap() override;

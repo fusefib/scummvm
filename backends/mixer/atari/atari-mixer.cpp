@@ -195,19 +195,12 @@ int AtariMixerManager::resumeAudio() {
 }
 
 bool AtariMixerManager::notifyEvent(const Common::Event &event) {
-	switch (event.type) {
-	case Common::EVENT_QUIT:
-	case Common::EVENT_RETURN_TO_LAUNCHER:
-		if (s_playbackState != kPlaybackStopped) {
-			debug("silencing the mixer");
-			suspendAudio();
-		}
-		return false;
-	default:
-		break;
-	}
-
 	return false;
+}
+
+void AtariMixerManager::notifyExit(bool returnToLauncher) {
+	if (!_audioSuspended)
+		suspendAudio();
 }
 
 void AtariMixerManager::update() {

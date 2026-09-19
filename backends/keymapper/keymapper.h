@@ -83,6 +83,13 @@ public:
 	void cleanupGameKeymaps();
 
 	/**
+	 * Cancel delayed actions and forget held axes/gestures at a session
+	 * boundary. Consumers must also reset their logical pressed state;
+	 * canceled synthetic releases are deliberately not sent to a new UI.
+	 */
+	void resetInputState();
+
+	/**
 	 * This allows to specify which Game Keymaps are enabled or disabled.
 	 * @param id		ID of the game keymap to enable/disable.
 	 * @param enable	Whether the keymap is enabled(True means enabled)
@@ -166,6 +173,8 @@ private:
 	KeymapArray _keymaps;
 
 	bool _joystickAxisPreviouslyPressed[8]; // size should match the number of valid axis entries of defaultJoystickAxes (in hardware-input.cpp)
+	bool _vkeybdPressActive;
+	uint32 _vkeybdPressTime;
 
 	Keymap::KeymapMatch getMappedActions(const Event &event, Keymap::ActionArray &actions, Keymap::KeymapType keymapType) const;
 	Event executeAction(const Action *act, const Event &incomingEvent);
@@ -173,7 +182,6 @@ private:
 	IncomingEventType convertToIncomingEventType(const Event &ev) const;
 
 	void hardcodedEventMapping(Event ev);
-	void resetInputState();
 };
 
 /**
@@ -207,6 +215,9 @@ public:
 	 * Schedule an event to be produced after the specified delay
 	 */
 	void scheduleEvent(const Event &ev, uint32 delayMillis);
+
+	/** Discard all scheduled events, including those not yet due. */
+	void clear();
 
 private:
 	struct DelayedEventsEntry {

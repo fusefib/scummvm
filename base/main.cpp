@@ -251,6 +251,8 @@ static Common::Error runGame(const Plugin *enginePlugin, OSystem &system, const 
 			ConfMan.removeGameDomain(target.c_str());
 		}
 
+		if (engine)
+			system.getEventManager()->prepareForGameEnd();
 		metaEngine.deleteInstance(engine, game, meDescriptor);
 
 		return err;
@@ -330,6 +332,10 @@ static Common::Error runGame(const Plugin *enginePlugin, OSystem &system, const 
 	// Make sure we do not return to the launcher if this is not possible.
 	if (!engine->hasFeature(Engine::kSupportsReturnToLauncher))
 		ConfMan.setBool("gui_return_to_launcher_at_exit", false, Common::ConfigManager::kTransientDomain);
+
+	// Suspend input before backend cleanup and derived engine destructors.
+	// This does not poll sources or stop engine services.
+	system.getEventManager()->prepareForGameEnd();
 
 	// Inform backend that the engine finished
 	system.engineDone();
@@ -860,20 +866,31 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 			setupKeymapper(system);
 #endif
 
+			Common::EventManager *eventMan = system.getEventManager();
+			// Consume the accepted destination before resuming input.
+			// Only an undecided exit uses the error/configuration fallback policy.
+			const bool returnToLauncher = eventMan->isExitCommitted()
+				? eventMan->shouldReturnToLauncher()
+				: (result.getCode() != Common::kNoError || eventMan->shouldReturnToLauncher() ||
+				   system.hasFeature(OSystem::kFeatureNoQuit) || ConfMan.getBool("gui_return_to_launcher_at_exit"));
+			if (!returnToLauncher)
+				break;
+
+			// The outgoing game is retired. Reset its decision before entering
+			// any no-engine GUI, including the startup-error dialog below.
+			eventMan->resetReturnToLauncher();
+			eventMan->resetQuit();
+
 			// Did an error occur ?
 			if (result.getCode() != Common::kNoError && result.getCode() != Common::kUserCanceled) {
 				// Shows an informative error dialog if starting the selected game failed.
 				GUI::displayErrorDialog(result, _("Error running game:"));
 			}
 
-			// Quit unless an error occurred, or Return to launcher was requested
-			if (result.getCode() == Common::kNoError && !g_system->getEventManager()->shouldReturnToLauncher() &&
-			    !g_system->hasFeature(OSystem::kFeatureNoQuit) && !ConfMan.getBool("gui_return_to_launcher_at_exit"))
+			// A fresh process-quit decision made in the error dialog must survive
+			// this handoff, rather than being reset or starting a chained game.
+			if (eventMan->shouldQuit())
 				break;
-
-			// Reset the return to launcher and quit flags in case we want to load another engine
-			g_system->getEventManager()->resetReturnToLauncher();
-			g_system->getEventManager()->resetQuit();
 
 #ifdef ENABLE_EVENTRECORDER
 			if (g_eventRec.checkForContinueGame()) {

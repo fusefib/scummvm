@@ -41,7 +41,10 @@ DefaultEventManager::DefaultEventManager(Common::EventSource *boss) :
 	_modifierState(0),
 	_shouldQuit(false),
 	_shouldReturnToLauncher(false),
-	_confirmExitDialogActive(false) {
+	_confirmExitDialogActive(false),
+	_exitCommitted(false),
+	_gameActive(false),
+	_inputChanged(false) {
 
 	assert(boss);
 
@@ -80,17 +83,33 @@ void DefaultEventManager::init() {
 }
 
 bool DefaultEventManager::pollEvent(Common::Event &event) {
-	_dispatcher.dispatch();
-
-	if (g_engine)
-		// Handle autosaves if enabled
-		g_engine->handleAutoSave();
-
-	if (_eventQueue.empty()) {
+	if (_dispatcher.isSuspended())
 		return false;
+
+	// Rebind devices in the new input context, not during engine destruction.
+	if (_inputChanged) {
+		_inputChanged = false;
+		event = Common::Event();
+		event.type = Common::EVENT_INPUT_CHANGED;
+		return processEvent(event);
 	}
 
+	_dispatcher.dispatch();
+	if (_dispatcher.isSuspended())
+		return false;
+
+	if (g_engine)
+		g_engine->handleAutoSave();
+
+	// Autosaving can accept an exit from a nested dialog.
+	if (_dispatcher.isSuspended() || _eventQueue.empty())
+		return false;
+
 	event = _eventQueue.pop();
+	return processEvent(event);
+}
+
+bool DefaultEventManager::processEvent(Common::Event &event) {
 	bool forwardEvent = true;
 
 	// If the backend has the kFeatureNoQuit or the "Return to Launcher at Exit" option is enabled,
@@ -162,6 +181,11 @@ bool DefaultEventManager::pollEvent(Common::Event &event) {
 		if (g_engine && !g_engine->isPaused())
 			g_engine->openMainMenuDialog();
 
+		if (_exitCommitted) {
+			forwardEvent = false;
+			break;
+		}
+
 		if (_shouldQuit)
 			event.type = Common::EVENT_QUIT;
 		else if (_shouldReturnToLauncher)
@@ -194,6 +218,12 @@ bool DefaultEventManager::pollEvent(Common::Event &event) {
 		break;
 
 	case Common::EVENT_RETURN_TO_LAUNCHER:
+		// The launcher is already the destination. In particular, a backend
+		// QUIT on a no-quit platform must not latch an unusable launcher exit.
+		if (!_gameActive) {
+			forwardEvent = false;
+			break;
+		}
 		if (g_engine && !g_engine->hasFeature(Engine::kSupportsQuitDialogOverride) && ConfMan.getBool("confirm_exit")) {
 			if (_confirmExitDialogActive) {
 				forwardEvent = false;
@@ -205,11 +235,24 @@ bool DefaultEventManager::pollEvent(Common::Event &event) {
 				if (g_engine)
 					pt = g_engine->pauseEngine();
 				GUI::MessageDialog alert(_("Do you really want to return to the Launcher?\nAny unsaved progress will be lost."), _("Yes"), _("Cancel"));
-				forwardEvent = _shouldReturnToLauncher = (alert.runModal() == GUI::kMessageOK);
+				const int result = alert.runModal();
+				if (_exitCommitted) {
+					// A nested operation has already settled the destination.
+					forwardEvent = false;
+				} else if (result == GUI::kMessageOK) {
+					commitExit(true);
+				} else {
+					_shouldReturnToLauncher = false;
+					forwardEvent = false;
+				}
 			}
 			_confirmExitDialogActive = false;
-		} else
+		} else if (g_engine && g_engine->hasFeature(Engine::kSupportsQuitDialogOverride)) {
+			// Provisional: the engine must still be able to ask and cancel.
 			_shouldReturnToLauncher = true;
+		} else {
+			commitExit(true);
+		}
 		break;
 
 	case Common::EVENT_MUTE:
@@ -229,11 +272,23 @@ bool DefaultEventManager::pollEvent(Common::Event &event) {
 				PauseToken pt;
 				pt = g_engine->pauseEngine();
 				GUI::MessageDialog alert(_("Do you really want to quit?\nAny unsaved progress will be lost."), _("Quit"), _("Cancel"));
-				forwardEvent = _shouldQuit = (alert.runModal() == GUI::kMessageOK);
+				const int result = alert.runModal();
+				if (_exitCommitted) {
+					// A nested operation has already settled the destination.
+					forwardEvent = false;
+				} else if (result == GUI::kMessageOK) {
+					commitExit(false);
+				} else {
+					_shouldQuit = false;
+					forwardEvent = false;
+				}
 			}
 			_confirmExitDialogActive = false;
-		} else {
+		} else if (g_engine && g_engine->hasFeature(Engine::kSupportsQuitDialogOverride)) {
+			// Provisional: the engine must still be able to ask and cancel.
 			_shouldQuit = true;
+		} else {
+			commitExit(false);
 		}
 		break;
 
@@ -262,7 +317,150 @@ bool DefaultEventManager::pollEvent(Common::Event &event) {
 	return forwardEvent;
 }
 
+void DefaultEventManager::commitExit(bool returnToLauncher) {
+	if (_exitCommitted || (returnToLauncher && !_gameActive))
+		return;
+
+	// The explicit accepted decision supersedes any provisional flag.
+	_shouldReturnToLauncher = returnToLauncher;
+	_shouldQuit = !returnToLauncher;
+	_exitCommitted = true;
+	_dispatcher.setSuspended(true);
+	_dispatcher.notifyExit(returnToLauncher);
+}
+
+void DefaultEventManager::beginGame() {
+	assert(!_gameActive && !_dispatcher.isSuspended());
+	resetSessionInput();
+	_gameActive = true;
+}
+
+void DefaultEventManager::prepareForGameEnd() {
+	if (!_gameActive)
+		return;
+
+	_dispatcher.setSuspended(true);
+	// Flags left by an engine-owned confirmation are final once run() ends.
+	if (!_exitCommitted && (_shouldQuit || _shouldReturnToLauncher))
+		commitExit(_shouldReturnToLauncher);
+
+	discardSessionEvents(true);
+	resetSessionInput();
+}
+
+void DefaultEventManager::endGame() {
+	if (!_gameActive)
+		return;
+
+	// Also cover callers that delete an engine outside the normal run loop.
+	prepareForGameEnd();
+	_gameActive = false;
+}
+
+void DefaultEventManager::resetSessionInput() {
+	// Cancel future-due actions as well as held gestures. Do not replay a
+	// synthetic release into another session: start its logical input neutral.
+	_keymapper->resetInputState();
+	_virtualMouse->resetInputState();
+	_buttonState = 0;
+	_modifierState = 0;
+}
+
+void DefaultEventManager::updateInputState(const Common::Event &event) {
+	switch (event.type) {
+	case Common::EVENT_LBUTTONDOWN:
+	case Common::EVENT_LBUTTONUP:
+	case Common::EVENT_RBUTTONDOWN:
+	case Common::EVENT_RBUTTONUP:
+	case Common::EVENT_MOUSEMOVE:
+		_mousePos = event.mouse;
+		break;
+	case Common::EVENT_INPUT_CHANGED:
+		_inputChanged = true;
+		break;
+	default:
+		break;
+	}
+}
+
+void DefaultEventManager::discardSessionEvents(bool acceptExitRequests) {
+	Common::Event event;
+	// This source is only our queue. Do not poll the dispatcher or backend.
+	while (_artificialEventSource.pollEvent(event))
+		_eventQueue.push(event);
+
+	while (!_eventQueue.empty()) {
+		event = _eventQueue.pop();
+		updateInputState(event);
+		if (acceptExitRequests && !_exitCommitted) {
+			if (event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
+				commitExit(true);
+			} else if (event.type == Common::EVENT_QUIT) {
+				// runGame() has already applied the engine's launcher limit.
+				commitExit(g_system->hasFeature(OSystem::kFeatureNoQuit) ||
+				           ConfMan.getBool("gui_return_to_launcher_at_exit"));
+			}
+		}
+	}
+}
+
+void DefaultEventManager::purgeExitRequests() {
+	Common::Queue<Common::Event> kept;
+	while (!_eventQueue.empty()) {
+		const Common::Event event = _eventQueue.pop();
+		if (event.type != Common::EVENT_QUIT &&
+		    event.type != Common::EVENT_RETURN_TO_LAUNCHER &&
+		    event.type != Common::EVENT_MAINMENU)
+			kept.push(event);
+	}
+	_eventQueue = kept;
+
+	kept.clear();
+	Common::Event event;
+	while (_artificialEventSource.pollEvent(event)) {
+		if (event.type != Common::EVENT_QUIT &&
+		    event.type != Common::EVENT_RETURN_TO_LAUNCHER &&
+		    event.type != Common::EVENT_MAINMENU)
+			kept.push(event);
+	}
+	while (!kept.empty())
+		_artificialEventSource.addEvent(kept.pop());
+}
+
+void DefaultEventManager::resetExitCommitment() {
+	if (!_gameActive && !_shouldQuit && !_shouldReturnToLauncher) {
+		if (_dispatcher.isSuspended()) {
+			// Discard late outgoing commands before reopening launcher input.
+			discardSessionEvents(false);
+			resetSessionInput();
+		} else {
+			purgeExitRequests();
+		}
+		_exitCommitted = false;
+		_dispatcher.setSuspended(false);
+	}
+}
+
+void DefaultEventManager::resetQuit() {
+	if (_gameActive && _exitCommitted)
+		return;
+	_shouldQuit = false;
+	resetExitCommitment();
+}
+
+void DefaultEventManager::resetReturnToLauncher() {
+	if (_gameActive && _exitCommitted)
+		return;
+	_shouldReturnToLauncher = false;
+	resetExitCommitment();
+}
+
 void DefaultEventManager::pushEvent(const Common::Event &event) {
+	if (_exitCommitted && (event.type == Common::EVENT_QUIT ||
+	                      event.type == Common::EVENT_RETURN_TO_LAUNCHER ||
+	                      event.type == Common::EVENT_MAINMENU))
+		return;
+
 	// If already received an EVENT_QUIT, don't add another one
 	if (event.type == Common::EVENT_QUIT) {
 		if (!_shouldQuit)
@@ -272,7 +470,11 @@ void DefaultEventManager::pushEvent(const Common::Event &event) {
 }
 
 void DefaultEventManager::purgeMouseEvents() {
+	if (_dispatcher.isSuspended())
+		return;
 	_dispatcher.dispatch();
+	if (_dispatcher.isSuspended())
+		return;
 
 	Common::Queue<Common::Event> filteredQueue;
 	while (!_eventQueue.empty()) {
@@ -319,7 +521,11 @@ void DefaultEventManager::purgeMouseEvents() {
 }
 
 void DefaultEventManager::purgeKeyboardEvents() {
+	if (_dispatcher.isSuspended())
+		return;
 	_dispatcher.dispatch();
+	if (_dispatcher.isSuspended())
+		return;
 
 	Common::Queue<Common::Event> filteredQueue;
 	while (!_eventQueue.empty()) {

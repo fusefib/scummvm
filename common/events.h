@@ -357,6 +357,16 @@ public:
 	 * Notify the observer of pollEvent() query.
 	 */
 	virtual void notifyPoll() { }
+
+	/**
+	 * An exit has been accepted. This is a notification, not an input event
+	 * or a request for confirmation. It is not consumed by any observer.
+	 *
+	 * Called synchronously, once per committed decision, without polling.
+	 * Implementations must not re-enter event processing or change observer
+	 * registrations. Do not assume that a game engine is still available.
+	 */
+	virtual void notifyExit(bool returnToLauncher) { }
 };
 
 /**
@@ -399,6 +409,16 @@ public:
 	 * This dispatches *all* events the sources offer.
 	 */
 	void dispatch();
+
+	/**
+	 * Suspend source polling, mapping and ordinary observer callbacks.
+	 * An in-flight callback may finish, but no further input is dispatched.
+	 * clearEvents() also stops polling. Exit notifications are unaffected.
+	 * This does not stop timers or other services outside event dispatch.
+	 * Only the event manager changes this state, on the event thread.
+	 */
+	void setSuspended(bool suspended) { _suspended = suspended; }
+	bool isSuspended() const { return _suspended; }
 
 	/**
 	 * Clear all events currently in the event queue.
@@ -450,6 +470,9 @@ public:
 	 * This takes the "autoFree" flag passed to registerObserver into account.
 	 */
 	void unregisterObserver(EventObserver *obs);
+
+	/** Notify every observer of an already-accepted exit, without polling. */
+	void notifyExit(bool returnToLauncher);
 private:
 	struct Entry {
 		bool autoFree;
@@ -475,6 +498,7 @@ private:
 	};
 
 	List<ObserverEntry> _observers;
+	bool _suspended;
 
 	void dispatchEvent(const Event &event);
 	void dispatchPoll();
@@ -548,6 +572,38 @@ public:
 	 * Whether to return to the launcher.
 	 */
 	virtual int shouldReturnToLauncher() const = 0;
+
+	/**
+	 * Record an accepted destination immediately, without queuing a request.
+	 * Repeated calls preserve the first committed destination. Notify exit
+	 * observers once, without dispatching input or opening any dialogs.
+	 * Returning to the launcher without an active game is a no-op.
+	 */
+	virtual void commitExit(bool returnToLauncher) = 0;
+	virtual bool isExitCommitted() const = 0;
+
+	/** Begin a game session. Called before publishing the new engine. */
+	virtual void beginGame() = 0;
+
+	/**
+	 * Suspend input after run() returns, or before deleting a failed instance.
+	 * Call before backend engineDone() and derived destructors. Discard owned
+	 * input without polling external sources. Keep the session active until
+	 * endGame(); this does not destroy or withdraw the engine or its services.
+	 * Repeated calls are harmless. Do not call while a running engine can
+	 * still cancel its provisional quit request.
+	 */
+	virtual void prepareForGameEnd() = 0;
+
+	/**
+	 * End a game session with the global engine already withdrawn.
+	 * Discard already-collected session input without polling external sources or
+	 * invoking ordinary observers, mappers or UI. Preserve known exit intent.
+	 * Input stays suspended until the application consumes the destination
+	 * and resets both exit flags before entering launcher or error UI.
+	 * Unpolled backend events remain with their sources until input resumes.
+	 */
+	virtual void endGame() = 0;
 
 	/**
 	 * Reset the "return to launcher" flag (as returned shouldReturnToLauncher()) to false.

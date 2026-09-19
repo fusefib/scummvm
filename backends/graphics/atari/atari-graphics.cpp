@@ -1013,21 +1013,17 @@ void AtariGraphicsManager::updateMousePosition(int deltaX, int deltaY) {
 	}
 }
 
+void AtariGraphicsManager::notifyExit(bool returnToLauncher) {
+	if (returnToLauncher && isOverlayVisible()) {
+		// Only preserve the launcher overlay after an accepted exit.
+		fillScreen(0);
+		_ignoreHideOverlay = true;
+		_ignoreCursorChanges = true;
+	}
+}
+
 bool AtariGraphicsManager::notifyEvent(const Common::Event &event) {
 	switch (event.type) {
-	case Common::EVENT_RETURN_TO_LAUNCHER:
-		if (isOverlayVisible()) {
-			debug("Return to launcher from overlay");
-			// clear work screen: this is needed if *next* game shows an error upon startup
-			fillScreen(0);
-
-			_ignoreHideOverlay = true;
-			// gui manager would want to hide overlay, set game cursor etc
-			_ignoreCursorChanges = true;
-			return false;
-		}
-		break;
-
 	case Common::EVENT_CUSTOM_BACKEND_ACTION_START:
 		switch ((CustomEventAction) event.customType) {
 		case kActionToggleAspectRatioCorrection:

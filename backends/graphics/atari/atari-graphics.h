@@ -107,6 +107,7 @@ public:
 	void updateMousePosition(int deltaX, int deltaY);
 
 	bool notifyEvent(const Common::Event &event) override;
+	void notifyExit(bool returnToLauncher) override;
 	Common::Keymap *getKeymap() const;
 
 private:
