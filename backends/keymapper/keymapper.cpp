@@ -444,7 +444,9 @@ bool DelayedEventSource::pollEvent(Event &event) {
 
 	uint32 now = g_system->getMillis(true);
 
-	if (now >= _delayedEffectiveTime) {
+	// Deadlines may cross uint32 wrap. Delays and time between polls must
+	// stay below half the clock range; all callers schedule short input gaps.
+	if (now - _delayedEffectiveTime < 0x80000000U) {
 		event = _delayedEvents.pop().event;
 
 		if (!_delayedEvents.empty()) {

@@ -212,7 +212,9 @@ public:
 	bool allowMapping() const override;
 
 	/**
-	 * Schedule an event to be produced after the specified delay
+	 * Schedule an event to be produced after the specified delay.
+	 * Pending deadlines and intervals between polls must stay within half
+	 * the uint32 millisecond clock range for wrap-safe ordering.
 	 */
 	void scheduleEvent(const Event &ev, uint32 delayMillis);
 
