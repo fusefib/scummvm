@@ -251,6 +251,8 @@ static Common::Error runGame(const Plugin *enginePlugin, OSystem &system, const 
 			ConfMan.removeGameDomain(target.c_str());
 		}
 
+		if (engine)
+			system.getEventManager()->prepareForGameEnd();
 		metaEngine.deleteInstance(engine, game, meDescriptor);
 
 		return err;
@@ -330,6 +332,10 @@ static Common::Error runGame(const Plugin *enginePlugin, OSystem &system, const 
 	// Make sure we do not return to the launcher if this is not possible.
 	if (!engine->hasFeature(Engine::kSupportsReturnToLauncher))
 		ConfMan.setBool("gui_return_to_launcher_at_exit", false, Common::ConfigManager::kTransientDomain);
+
+	// Fence input before backend cleanup and derived engine destructors, not
+	// only once Engine::~Engine() is reached. Keep engine services alive.
+	system.getEventManager()->prepareForGameEnd();
 
 	// Inform backend that the engine finished
 	system.engineDone();

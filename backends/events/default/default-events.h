@@ -88,6 +88,7 @@ public:
 	void commitExit(bool returnToLauncher) override;
 	bool isExitCommitted() const override { return _exitCommitted; }
 	void beginGame() override;
+	void prepareForGameEnd() override;
 	void endGame() override;
 
 	Common::Keymapper *getKeymapper() override { return _keymapper; }

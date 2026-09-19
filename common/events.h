@@ -593,6 +593,16 @@ public:
 	virtual void beginGame() = 0;
 
 	/**
+	 * Start noninteractive retirement after run() has returned, or before
+	 * deleting a failed engine instance. Call before backend engineDone()
+	 * and derived destructors can invoke callbacks. Keep the session active
+	 * until endGame(); this does not destroy or withdraw the engine.
+	 * Repeated calls are harmless. Do not call while an engine is still
+	 * running and may cancel its provisional quit request.
+	 */
+	virtual void prepareForGameEnd() = 0;
+
+	/**
 	 * End a game session with the global engine already withdrawn.
 	 * Drain backend input once without ordinary observers or mapping, retire
 	 * session commands, and preserve any exit decision. Keep input suppressed

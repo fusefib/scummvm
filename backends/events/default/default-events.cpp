@@ -86,7 +86,7 @@ bool DefaultEventManager::pollEvent(Common::Event &event) {
 	_dispatcher.dispatch();
 
 	if (_dispatcher.isDraining()) {
-		discardSessionEvents(_endingGame || !_gameActive);
+		discardSessionEvents(true);
 		return false;
 	}
 
@@ -334,15 +334,23 @@ void DefaultEventManager::beginGame() {
 	_gameActive = true;
 }
 
+void DefaultEventManager::prepareForGameEnd() {
+	if (!_gameActive)
+		return;
+
+	_dispatcher.setDrainObserver(this);
+	// Flags left by an engine-owned confirmation are final once run() ends.
+	if (!_exitCommitted && (_shouldQuit || _shouldReturnToLauncher))
+		commitExit(_shouldReturnToLauncher);
+}
+
 void DefaultEventManager::endGame() {
 	if (!_gameActive || _endingGame)
 		return;
 
 	_endingGame = true;
-	_dispatcher.setDrainObserver(this);
-	// Flags left by an engine-owned confirmation are final once it exits.
-	if (!_exitCommitted && (_shouldQuit || _shouldReturnToLauncher))
-		commitExit(_shouldReturnToLauncher);
+	// Also cover callers that delete an engine without the normal run loop.
+	prepareForGameEnd();
 
 	// Poll only backend/artificial input. Ordinary observers, replay sources
 	// and mappers must not run after the engine has been withdrawn.
