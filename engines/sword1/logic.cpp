@@ -1737,7 +1737,7 @@ int Logic::fnQuitGame(Object *cpt, int32 id, int32 a, int32 b, int32 c, int32 d,
 	if (SwordEngine::_systemVars.isDemo) {
 		GUI::MessageDialog dialog(_("This is the end of the Broken Sword 1 Demo"));
 		dialog.runModal();
-		Engine::quitGame();
+		_vm->commitQuit();
 	} else
 		error("fnQuitGame() called");
 	return fnQuit(cpt, id, 0, 0, 0, 0, 0, 0);
