@@ -2475,7 +2475,7 @@ void ScummEngine_v6::o6_systemOps() {
 		break;
 	case SO_QUIT:
 		_quitFromScriptCmd = true;
-		quitGame();
+		commitQuit();
 		break;
 	default:
 		error("o6_systemOps invalid case %d", subOp);
