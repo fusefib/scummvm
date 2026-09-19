@@ -331,6 +331,10 @@ bool OSystem_iOS7::handleEvent_swipe(Common::Event &event, int direction, int to
 		}
 
 		case kUIViewSwipeRight: {
+			// Draining still collects platform events, but must not open UI or
+			// apply an outgoing game's touch-mode command.
+			if (getEventManager()->getEventDispatcher()->isDraining())
+				return false;
 			// Swipe right
 			if (_currentTouchMode == kTouchModeDirect) {
 				_currentTouchMode = kTouchModeTouchpad;
@@ -350,6 +354,8 @@ bool OSystem_iOS7::handleEvent_swipe(Common::Event &event, int direction, int to
 		}
 
 		case kUIViewSwipeLeft: {
+			if (getEventManager()->getEventDispatcher()->isDraining())
+				return false;
 			// Swipe left
 			bool connect = !ConfMan.getBool("gamepad_controller");
 			ConfMan.setBool("gamepad_controller", connect);

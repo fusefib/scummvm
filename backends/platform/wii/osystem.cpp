@@ -249,7 +249,9 @@ void OSystem_Wii::getTimeAndDate(TimeDate &td, bool skipRecord) const {
 }
 
 void OSystem_Wii::showOptionsDialog() {
-	if (_optionsDlgActive)
+	// Backend polling is also used to drain a retiring game. It must not
+	// enter a dialog whose input is suppressed by the dispatcher.
+	if (_optionsDlgActive || getEventManager()->getEventDispatcher()->isDraining())
 		return;
 
 	bool ds = (_actualGraphicsMode == gmDoubleStrike) ||
