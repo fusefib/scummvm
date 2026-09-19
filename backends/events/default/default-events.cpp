@@ -217,6 +217,12 @@ bool DefaultEventManager::processEvent(Common::Event &event) {
 		break;
 
 	case Common::EVENT_RETURN_TO_LAUNCHER:
+		// The launcher is already the destination. In particular, a backend
+		// QUIT on a no-quit platform must not latch an unusable launcher exit.
+		if (!_gameActive) {
+			forwardEvent = false;
+			break;
+		}
 		if (g_engine && !g_engine->hasFeature(Engine::kSupportsQuitDialogOverride) && ConfMan.getBool("confirm_exit")) {
 			if (_confirmExitDialogActive) {
 				forwardEvent = false;
@@ -311,7 +317,7 @@ bool DefaultEventManager::processEvent(Common::Event &event) {
 }
 
 void DefaultEventManager::commitExit(bool returnToLauncher) {
-	if (_exitCommitted)
+	if (_exitCommitted || (returnToLauncher && !_gameActive))
 		return;
 
 	// The explicit accepted decision supersedes any provisional flag.

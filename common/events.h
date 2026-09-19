@@ -566,6 +566,7 @@ public:
 	 * Record an accepted destination immediately, without queuing a request.
 	 * Repeated calls preserve the first committed destination. Notify exit
 	 * observers once, without dispatching input or opening any dialogs.
+	 * Returning to the launcher without an active game is a no-op.
 	 */
 	virtual void commitExit(bool returnToLauncher) = 0;
 	virtual bool isExitCommitted() const = 0;
