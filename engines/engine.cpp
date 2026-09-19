@@ -218,13 +218,11 @@ Engine::Engine(OSystem *syst)
 Engine::~Engine() {
 	_mixer->stopAll();
 
-	// Flush any pending remaining events
-	Common::Event evt;
-	while (g_system->getEventManager()->pollEvent(evt)) {}
+	// Do not expose the torn-down engine to event processing.
+	g_engine = nullptr;
 
 	delete _debugger;
 	delete _mainMenuDialog;
-	g_engine = NULL;
 
 	// Remove our cursors again to prevent memory leaks
 	CursorMan.popCursor();
