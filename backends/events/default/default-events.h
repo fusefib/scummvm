@@ -62,6 +62,7 @@ class DefaultEventManager : public Common::EventManager, Common::EventObserver {
 	bool _endingGame;
 
 	void updateInputState(const Common::Event &event);
+	void resetSessionInput();
 	void discardSessionEvents(bool acceptExitRequests);
 	void purgeExitRequests();
 	void resetExitCommitment();

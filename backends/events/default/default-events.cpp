@@ -330,6 +330,7 @@ void DefaultEventManager::commitExit(bool returnToLauncher) {
 
 void DefaultEventManager::beginGame() {
 	assert(!_gameActive && !_endingGame && !_dispatcher.isDraining());
+	resetSessionInput();
 	_gameActive = true;
 }
 
@@ -347,8 +348,18 @@ void DefaultEventManager::endGame() {
 	// and mappers must not run after the engine has been withdrawn.
 	_dispatcher.dispatch();
 	discardSessionEvents(true);
+	resetSessionInput();
 	_gameActive = false;
 	_endingGame = false;
+}
+
+void DefaultEventManager::resetSessionInput() {
+	// Cancel future-due actions as well as held gestures. Do not replay a
+	// synthetic release into another session: start its logical input neutral.
+	_keymapper->resetInputState();
+	_virtualMouse->resetInputState();
+	_buttonState = 0;
+	_modifierState = 0;
 }
 
 void DefaultEventManager::updateInputState(const Common::Event &event) {
@@ -435,6 +446,10 @@ void DefaultEventManager::resetExitCommitment() {
 	if (!_gameActive && !_shouldQuit && !_shouldReturnToLauncher) {
 		// Do not unlock a decision with old requests still in either queue.
 		purgeExitRequests();
+		// Backend input may have been drained again after endGame(). Do not
+		// expose any inherited pressed state when reopening launcher input.
+		if (_dispatcher.isDraining())
+			resetSessionInput();
 		_exitCommitted = false;
 		_dispatcher.setDrainObserver(nullptr);
 	}

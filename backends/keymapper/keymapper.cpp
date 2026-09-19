@@ -397,27 +397,35 @@ void Keymapper::hardcodedEventMapping(Event ev) {
 	// of middle mouse button.
 	const uint32 vkeybdTime = 1000;
 
-	static uint32 vkeybdThen = 0;
-
 	if (ev.type == EVENT_MBUTTONDOWN) {
-		vkeybdThen = g_system->getMillis();
+		_vkeybdPressActive = true;
+		_vkeybdPressTime = g_system->getMillis();
 	}
 
 	if (ev.type == EVENT_MBUTTONUP) {
-		if ((g_system->getMillis() - vkeybdThen) >= vkeybdTime) {
+		if (_vkeybdPressActive && (g_system->getMillis() - _vkeybdPressTime) >= vkeybdTime) {
 			Event vkeybdEvent;
 			vkeybdEvent.type = EVENT_VIRTUAL_KEYBOARD;
 
 			// Avoid blocking event from engine.
 			_delayedEventSource->scheduleEvent(vkeybdEvent, 100);
 		}
+		_vkeybdPressActive = false;
 	}
 }
 
 void Keymapper::resetInputState() {
+	_delayedEventSource->clear();
+	_vkeybdPressActive = false;
+	_vkeybdPressTime = 0;
 	for (uint i = 0; i < ARRAYSIZE(_joystickAxisPreviouslyPressed); i++) {
 		_joystickAxisPreviouslyPressed[i] = false;
 	}
+}
+
+void DelayedEventSource::clear() {
+	_delayedEvents.clear();
+	_delayedEffectiveTime = 0;
 }
 
 void DelayedEventSource::scheduleEvent(const Event &ev, uint32 delayMillis) {

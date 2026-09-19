@@ -55,6 +55,9 @@ public:
 	/** Add the virtual mouse keymapper actions to a keymap */
 	void addActionsToKeymap(Keymap *keymap);
 
+	/** Stop inherited motion and modifiers at a session boundary. */
+	void resetInputState();
+
 private:
 	static const int32 kUpdateDelay = 12;
 	static const int32 kDefaultScreenWidth = 640;
