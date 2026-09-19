@@ -238,7 +238,7 @@ void EventRecorder::processMillis(uint32 &millis, bool skipRecord) {
 		updateSubsystems();
 		_nextEvent = _playbackFile->getNextEvent();
 		_timerManager->handler();
-		if (_controlPanel)
+		if (_controlPanel && !isGameInputBlocked())
 			_controlPanel->setReplayedTime(_fakeTimer);
 		_processingMillis = false;
 		break;
@@ -299,7 +299,7 @@ void EventRecorder::processScreenUpdate() {
 			takeScreenshot();
 		}
 		_timerManager->handler();
-		if (_controlPanel)
+		if (_controlPanel && !isGameInputBlocked())
 			_controlPanel->setReplayedTime(_fakeTimer);
 		_processingMillis = false;
 		break;
@@ -637,12 +637,17 @@ bool EventRecorder::notifyEvent(const Common::Event &ev) {
 	case kRecorderPlayback:
 		if (evt.type == Common::EVENT_SCREEN_CHANGED && _controlPanel)
 			g_gui.processEvent(evt, _controlPanel);
+		if (isGameInputBlocked())
+			return false;
 		break;
 
 	case kRecorderRecord: {
 		if (_controlPanel)
 			g_gui.processEvent(evt, _controlPanel);
-		
+		// Mouse-driven panel commands can also run a nested modal.
+		if (isGameInputBlocked())
+			return false;
+
 		if (_controlPanel && ((evt.type == Common::EVENT_LBUTTONDOWN) || (evt.type == Common::EVENT_LBUTTONUP) || (evt.type == Common::EVENT_MOUSEMOVE)) && _controlPanel->isMouseOver())
 			return true;
 
@@ -657,6 +662,8 @@ bool EventRecorder::notifyEvent(const Common::Event &ev) {
 		if (_controlPanel) {
 			Common::Event dialogEvent = _controlPanel->isEditDlgVisible() ? ev : evt;
 			g_gui.processEvent(dialogEvent, _controlPanel->getActiveDlg());
+			if (isGameInputBlocked())
+				return false;
 			if (((dialogEvent.type == Common::EVENT_LBUTTONDOWN) || (dialogEvent.type == Common::EVENT_LBUTTONUP) || (dialogEvent.type == Common::EVENT_MOUSEMOVE)) && _controlPanel->isMouseOver())
 				return true;
 		}
