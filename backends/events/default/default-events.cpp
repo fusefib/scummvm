@@ -444,12 +444,15 @@ void DefaultEventManager::purgeExitRequests() {
 
 void DefaultEventManager::resetExitCommitment() {
 	if (!_gameActive && !_shouldQuit && !_shouldReturnToLauncher) {
-		// Do not unlock a decision with old requests still in either queue.
-		purgeExitRequests();
-		// Backend input may have been drained again after endGame(). Do not
-		// expose any inherited pressed state when reopening launcher input.
-		if (_dispatcher.isDraining())
+		if (_dispatcher.isDraining()) {
+			// Teardown code and purge helpers may have collected more events
+			// after endGame(). None belongs to the newly opened launcher UI.
+			// Reconcile device changes, but do not revisit the consumed exit.
+			discardSessionEvents(false);
 			resetSessionInput();
+		} else {
+			purgeExitRequests();
+		}
 		_exitCommitted = false;
 		_dispatcher.setDrainObserver(nullptr);
 	}
