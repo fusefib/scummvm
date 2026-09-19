@@ -36,7 +36,10 @@
 #include "common/config-manager.h"
 
 bool SwitchEventSource::pollEvent(Common::Event &event) {
-	((DefaultTimerManager *) g_system->getTimerManager())->handler();
+	// Dispatch draining cannot intercept callbacks run inside a source. In
+	// particular, recorder teardown has already stopped supplying fake time.
+	if (!g_system->getEventManager()->getEventDispatcher()->isDraining())
+		((DefaultTimerManager *) g_system->getTimerManager())->handler();
 	return SdlEventSource::pollEvent(event);
 }
 
