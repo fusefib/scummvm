@@ -48,7 +48,7 @@ EventMapper::~EventMapper() {}
 
 EventManager::~EventManager() {}
 
-EventDispatcher::EventDispatcher() {
+EventDispatcher::EventDispatcher() : _drainObserver(nullptr) {
 }
 
 EventDispatcher::~EventDispatcher() {
@@ -75,9 +75,15 @@ void EventDispatcher::dispatch() {
 	dispatchPoll();
 
 	for (auto &source : _sources) {
-		if (source.ignore)
+		if (_drainObserver ? !source.allowDuringDrain : source.ignore)
 			continue;
-		while (source.source->pollEvent(event)) {
+		// An observer or a nested modal may have started draining while this
+		// source was being dispatched. Do not poll it again unless approved.
+		while ((!_drainObserver || source.allowDuringDrain) && source.source->pollEvent(event)) {
+			if (_drainObserver) {
+				_drainObserver->notifyEvent(event);
+				continue;
+			}
 			// We only try to process the events via the setup event mapper, when
 			// we have a setup mapper and when the event source allows mapping.
 			if (source.source->allowMapping()) {
@@ -91,6 +97,8 @@ void EventDispatcher::dispatch() {
 				assert(event.type != EVENT_CUSTOM_ENGINE_ACTION_END);
 
 				for (auto &m : _mappers) {
+					if (_drainObserver)
+						break;
 					if (!mappedEvents.empty())
 						mappedEvents.clear();
 
@@ -117,9 +125,9 @@ void EventDispatcher::clearEvents() {
 	Event event;
 
 	for (auto &source : _sources) {
-		if (source.ignore)
+		if (_drainObserver ? !source.allowDuringDrain : source.ignore)
 			continue;
-		while (source.source->pollEvent(event)) {}
+		while ((!_drainObserver || source.allowDuringDrain) && source.source->pollEvent(event)) {}
 	}
 }
 
@@ -145,10 +153,11 @@ void EventDispatcher::unregisterMapper(EventMapper *mapper) {
 	}
 }
 
-void EventDispatcher::registerSource(EventSource *source, bool autoFree) {
+void EventDispatcher::registerSource(EventSource *source, bool autoFree, bool allowDuringDrain) {
 	SourceEntry newEntry;
 
 	newEntry.source = source;
+	newEntry.allowDuringDrain = allowDuringDrain;
 	newEntry.autoFree = autoFree;
 	newEntry.ignore = false;
 
@@ -205,9 +214,17 @@ void EventDispatcher::unregisterObserver(EventObserver *obs) {
 }
 
 void EventDispatcher::dispatchEvent(const Event &event) {
+	if (_drainObserver) {
+		_drainObserver->notifyEvent(event);
+		return;
+	}
 	for (auto &observer : _observers) {
 		if (observer.observer->notifyEvent(event))
 			break;
+		if (_drainObserver) {
+			_drainObserver->notifyEvent(event);
+			break;
+		}
 	}
 }
 
@@ -218,6 +235,8 @@ void EventDispatcher::notifyExit(bool returnToLauncher) {
 
 void EventDispatcher::dispatchPoll() {
 	for (auto &observer : _observers) {
+		if (_drainObserver)
+			break;
 		if (observer.poll)
 			observer.observer->notifyPoll();
 	}

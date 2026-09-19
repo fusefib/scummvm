@@ -48,8 +48,8 @@ DefaultEventManager::DefaultEventManager(Common::EventSource *boss) :
 
 	assert(boss);
 
-	_dispatcher.registerSource(boss, false);
-	_dispatcher.registerSource(&_artificialEventSource, false);
+	_dispatcher.registerSource(boss, false, true);
+	_dispatcher.registerSource(&_artificialEventSource, false, true);
 
 	_dispatcher.registerObserver(this, kEventManPriority, false);
 
@@ -85,8 +85,8 @@ void DefaultEventManager::init() {
 bool DefaultEventManager::pollEvent(Common::Event &event) {
 	_dispatcher.dispatch();
 
-	if (_exitCommitted || _endingGame) {
-		discardSessionEvents(_endingGame);
+	if (_dispatcher.isDraining()) {
+		discardSessionEvents(_endingGame || !_gameActive);
 		return false;
 	}
 
@@ -95,7 +95,7 @@ bool DefaultEventManager::pollEvent(Common::Event &event) {
 		g_engine->handleAutoSave();
 
 	// Autosaving may enter a modal dialog and commit an exit.
-	if (_exitCommitted) {
+	if (_dispatcher.isDraining()) {
 		discardSessionEvents(false);
 		return false;
 	}
@@ -324,11 +324,12 @@ void DefaultEventManager::commitExit(bool returnToLauncher) {
 	_shouldReturnToLauncher = returnToLauncher;
 	_shouldQuit = !returnToLauncher;
 	_exitCommitted = true;
+	_dispatcher.setDrainObserver(this);
 	_dispatcher.notifyExit(returnToLauncher);
 }
 
 void DefaultEventManager::beginGame() {
-	assert(!_gameActive && !_endingGame);
+	assert(!_gameActive && !_endingGame && !_dispatcher.isDraining());
 	_gameActive = true;
 }
 
@@ -337,12 +338,13 @@ void DefaultEventManager::endGame() {
 		return;
 
 	_endingGame = true;
+	_dispatcher.setDrainObserver(this);
 	// Flags left by an engine-owned confirmation are final once it exits.
 	if (!_exitCommitted && (_shouldQuit || _shouldReturnToLauncher))
 		commitExit(_shouldReturnToLauncher);
 
-	// Keep OS input/device bookkeeping and observer delivery, but do not
-	// run normal menu, debugger, hotspot or confirmation handlers here.
+	// Poll only backend/artificial input. Ordinary observers, replay sources
+	// and mappers must not run after the engine has been withdrawn.
 	_dispatcher.dispatch();
 	discardSessionEvents(true);
 	_gameActive = false;
@@ -434,6 +436,7 @@ void DefaultEventManager::resetExitCommitment() {
 		// Do not unlock a decision with old requests still in either queue.
 		purgeExitRequests();
 		_exitCommitted = false;
+		_dispatcher.setDrainObserver(nullptr);
 	}
 }
 

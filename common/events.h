@@ -411,6 +411,18 @@ public:
 	void dispatch();
 
 	/**
+	 * Redirect dispatch to a noninteractive drain observer, or restore normal
+	 * dispatch with nullptr. While draining, do not map input, notify ordinary
+	 * observers (including poll observers), or poll unapproved sources.
+	 *
+	 * The observer must only collect events; it must not run UI, re-enter
+	 * dispatch, or change registrations. It must outlive the drain interval.
+	 * Changes also take effect in an already-running dispatch.
+	 */
+	void setDrainObserver(EventObserver *observer) { _drainObserver = observer; }
+	bool isDraining() const { return _drainObserver != nullptr; }
+
+	/**
 	 * Clear all events currently in the event queue.
 	 * The cleared events are not dispatched and are simply discarded.
 	 */
@@ -430,8 +442,12 @@ public:
 
 	/**
 	 * Register a new EventSource with the Dispatcher.
+	 *
+	 * Sources explicitly allowed during draining must only collect backend
+	 * input, never run game/UI callbacks. They are polled even if playback
+	 * has ignored normal sources; replay and other sources remain unpolled.
 	 */
-	void registerSource(EventSource *source, bool autoFree);
+	void registerSource(EventSource *source, bool autoFree, bool allowDuringDrain = false);
 
 	/**
 	 * Unregister an EventSource.
@@ -477,6 +493,7 @@ private:
 
 	struct SourceEntry : public Entry {
 		EventSource *source;
+		bool allowDuringDrain;
 	};
 
 	List<SourceEntry> _sources;
@@ -488,6 +505,7 @@ private:
 	};
 
 	List<ObserverEntry> _observers;
+	EventObserver *_drainObserver;
 
 	void dispatchEvent(const Event &event);
 	void dispatchPoll();
@@ -576,9 +594,11 @@ public:
 
 	/**
 	 * End a game session with the global engine already withdrawn.
-	 * Collect pending input once, retire session commands noninteractively,
-	 * and preserve any exit decision. False-returning internal events must
-	 * not terminate this cleanup. Do not call an engine or create game UI.
+	 * Drain backend input once without ordinary observers or mapping, retire
+	 * session commands, and preserve any exit decision. Keep input suppressed
+	 * until the application consumes the destination and resets both flags,
+	 * even if the game ended without committing an exit. Do not call an engine
+	 * or create game UI. A no-engine dialog may only start after that handoff.
 	 */
 	virtual void endGame() = 0;
 

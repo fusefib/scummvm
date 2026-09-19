@@ -195,6 +195,7 @@ public:
 private:
 
 	bool isImGuiRecorderEnabled() const;
+	bool isGameInputBlocked() const;
 
 	bool pollEvent(Common::Event &ev) override;
 	bool notifyEvent(const Common::Event &event) override;

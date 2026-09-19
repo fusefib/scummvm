@@ -131,8 +131,13 @@ void EventRecorder::updateFakeTimer(uint32 millis) {
 		_controlPanel->setReplayedTime(_fakeTimer);
 }
 
+bool EventRecorder::isGameInputBlocked() const {
+	Common::EventManager *eventMan = g_system ? g_system->getEventManager() : nullptr;
+	return eventMan && eventMan->getEventDispatcher()->isDraining();
+}
+
 void EventRecorder::processTimeAndDate(TimeDate &td, bool skipRecord) {
-	if (!_initialized) {
+	if (!_initialized || isGameInputBlocked()) {
 		return;
 	}
 	if (skipRecord) {
@@ -178,7 +183,10 @@ void EventRecorder::processTimeAndDate(TimeDate &td, bool skipRecord) {
 }
 
 void EventRecorder::processMillis(uint32 &millis, bool skipRecord) {
-	if (!_initialized) {
+	// Backend polling may ask for time during teardown. Do not replay timer
+	// callbacks or touch the recorder UI, but retain the mixer/save services
+	// until the existing deinit() after engine destruction.
+	if (!_initialized || isGameInputBlocked()) {
 		return;
 	}
 	if (skipRecord || _processingMillis) {
@@ -251,7 +259,7 @@ bool EventRecorder::processAutosave() {
 }
 
 void EventRecorder::processScreenUpdate() {
-	if (!_initialized) {
+	if (!_initialized || isGameInputBlocked()) {
 		return;
 	}
 
@@ -309,7 +317,7 @@ void EventRecorder::checkForKeyCode(const Common::Event &event) {
 bool EventRecorder::pollEvent(Common::Event &ev) {
 	if (((_recordMode != kRecorderPlayback) &&
 		(_recordMode != kRecorderUpdate)) ||
-		!_initialized)
+		!_initialized || isGameInputBlocked())
 		return false;
 
 	if (_nextEvent.recordedtype == Common::kRecorderEventTypeTimer
@@ -344,6 +352,8 @@ void EventRecorder::switchFastMode() {
 }
 
 void EventRecorder::togglePause() {
+	if (isGameInputBlocked())
+		return;
 	RecordMode oldState;
 	switch (_recordMode) {
 	case kRecorderPlayback:
@@ -598,10 +608,13 @@ void EventRecorder::updateSubsystems() {
 }
 
 bool EventRecorder::notifyEvent(const Common::Event &ev) {
-	if (!_initialized && _recordMode != kRecorderPlaybackPause)
+	if (isGameInputBlocked() || (!_initialized && _recordMode != kRecorderPlaybackPause))
 		return false;
 
 	checkForKeyCode(ev);
+	// The pause panel may have committed an exit in its nested modal loop.
+	if (isGameInputBlocked())
+		return false;
 	Common::Event evt = ev;
 	evt.mouse.x = evt.mouse.x * (g_system->getOverlayWidth() / g_system->getWidth());
 	evt.mouse.y = evt.mouse.y * (g_system->getOverlayHeight() / g_system->getHeight());
@@ -736,7 +749,7 @@ Common::SaveFileManager *EventRecorder::getSaveManager(Common::SaveFileManager *
 }
 
 void EventRecorder::preDrawOverlayGui() {
-	if (isImGuiRecorderEnabled())
+	if (isGameInputBlocked() || isImGuiRecorderEnabled())
 		return;
 
 	if ((_initialized) || (_needRedraw)) {
@@ -756,7 +769,7 @@ void EventRecorder::preDrawOverlayGui() {
 }
 
 void EventRecorder::postDrawOverlayGui() {
-	if (isImGuiRecorderEnabled())
+	if (isGameInputBlocked() || isImGuiRecorderEnabled())
 		return;
 
 	if ((_initialized) || (_needRedraw)) {
@@ -805,6 +818,8 @@ SDL_Surface *EventRecorder::getSurface(int width, int height) {
 }
 
 bool EventRecorder::switchMode() {
+	if (!g_engine || isGameInputBlocked())
+		return false;
 	const Plugin *plugin = PluginMan.findEnginePlugin(ConfMan.get("engineid"));
 	bool metaInfoSupport = plugin->get<MetaEngine>().hasFeature(MetaEngine::kSavesSupportMetaInfo);
 	bool featuresSupport = metaInfoSupport &&
@@ -870,7 +885,7 @@ bool EventRecorder::isImGuiRecorderEnabled() const {
 #ifdef USE_IMGUI
 
 void EventRecorder::showImGui() {
-	if (_recordMode == kPassthrough || !_initialized)
+	if (_recordMode == kPassthrough || !_initialized || isGameInputBlocked())
 		return;
 
 	if (!isImGuiRecorderEnabled())
