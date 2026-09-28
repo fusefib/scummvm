@@ -35,6 +35,24 @@
 
 namespace Scumm {
 
+// Called after fade-out, before the old room and initiating script change.
+void ScummEngine::applyC64RoomPreparationDelay(int room) {
+	// Empirical preparation budget for better intro syncing.
+	if (_game.id == GID_MANIAC && _game.platform == Common::kPlatformC64) {
+		int preparationTicks = 0;
+		if (_currentRoom == 33 && room == 49 && currentScriptSlotIs(115))
+			preparationTicks = 0; // Logo preparation.
+		else if (_currentRoom == 0 && room == 44 && currentScriptSlotIs(126))
+			preparationTicks = 0; // Exterior preparation.
+		if (preparationTicks && !_fastMode && !_saveLoadFlag) {
+			_lastWaitTime = _system->getMillis();
+			while (preparationTicks-- > 0 && !shouldQuit() && !_fastMode && !_saveLoadFlag &&
+			       _keyPressed.keycode != Common::KEYCODE_ESCAPE)
+				waitForTimer(4, true);
+		}
+	}
+}
+
 /**
  * Start a 'scene' by loading the specified room with the given main actor.
  * The actor is placed next to the object indicated by objectNr.
@@ -53,6 +71,8 @@ void ScummEngine::startScene(int room, Actor *a, int objectNr) {
 	stopTalk();
 
 	fadeOut(_switchRoomEffect2);
+
+	applyC64RoomPreparationDelay(room);
 	_newEffect = _switchRoomEffect;
 
 	if (_currentScript != 0xFF) {

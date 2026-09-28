@@ -1090,6 +1090,7 @@ protected:
 	int	getScriptSlot();
 
 	void startScene(int room, Actor *a, int b);
+	void applyC64RoomPreparationDelay(int room);
 	bool startManiac();
 
 public:
