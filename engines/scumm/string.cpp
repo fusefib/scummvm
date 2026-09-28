@@ -1139,7 +1139,10 @@ void ScummEngine::displayDialog() {
 		_useTalkAnims = true;
 	}
 
-	_talkDelay = (VAR_DEFAULT_TALK_DELAY != 0xFF) ? VAR(VAR_DEFAULT_TALK_DELAY) : 60;
+	if (VAR_DEFAULT_TALK_DELAY != 0xFF)
+		_talkDelay = VAR(VAR_DEFAULT_TALK_DELAY);
+	else
+		_talkDelay = _game.platform == Common::kPlatformC64 ? 30 : 60;
 
 	if (!_keepText) {
 #ifndef DISABLE_TOWNS_DUAL_LAYER_MODE
