@@ -269,7 +269,8 @@ bool ScummEngine::handleNextCharsetCode(Actor *a, int *code) {
 		switch (c) {
 		case 1:
 			c = 13; // new line
-			_msgCount = _screenWidth;
+			// C64 Zak's explicit newline selects cell 40, not a pixel offset.
+			_msgCount = (_game.platform == Common::kPlatformC64 && _game.id == GID_ZAK) ? 40 : _screenWidth;
 			endLoop = true;
 			break;
 		case 2:
@@ -650,6 +651,9 @@ bool ScummEngine::newLine() {
 	}
 	if (_game.version == 0) {
 		return false;
+	} else if (_game.platform == Common::kPlatformC64) {
+		// C64 Zak selects the second row, even after an earlier explicit newline.
+		_nextTop = _string[0].ypos + _screenTop + _charset->getFontHeight();
 	} else if (!(_game.platform == Common::kPlatformFMTowns) && _string[0].height) {
 		_nextTop += _string[0].height;
 	} else {
@@ -1154,6 +1158,9 @@ void ScummEngine::displayDialog() {
 		_msgCount = 0;
 	} else if (_game.version <= 2) {
 		_talkDelay += _msgCount * _defaultTextSpeed;
+		// C64 Zak native retained-cursor loop also visits zero after a nonzero start.
+		if (_game.platform == Common::kPlatformC64 && _game.id == GID_ZAK && _msgCount)
+			_talkDelay += _defaultTextSpeed;
 	}
 
 	if (_game.version > 3) {
@@ -1314,6 +1321,19 @@ void ScummEngine::displayDialog() {
 		} else {
 			_talkDelay += (int)VAR(VAR_CHARINC);
 		}
+
+		// C64 Zak's two-row page ends before the next source byte is fetched.
+		// Like an explicit wait, a full page resumes without retained text.
+		if (_game.platform == Common::kPlatformC64 && _game.id == GID_ZAK && _msgCount == 80) {
+			_haveMsg = 0xFF;
+			_keepText = false;
+			_msgCount = 0;
+			break;
+		}
+
+		// C64 MM stops before fetching cell 41, even when it is a CR or NUL.
+		if (_game.platform == Common::kPlatformC64 && _game.id == GID_MANIAC && _msgCount == 40)
+			break;
 	}
 
 #ifdef USE_TTS
