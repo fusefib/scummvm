@@ -681,7 +681,7 @@ int ScummEngine_v0::DelayCalculateDelta() {
 	Time += _V0Delay._objectRedrawCount * 7;
 	Time += _V0Delay._objectStripRedrawCount * 0.6;
 	Time += _V0Delay._actorRedrawCount * 2.0;
-	Time += _V0Delay._actorLimbRedrawDrawCount * 0.3;
+	Time += _V0Delay._actorLimbRedrawDrawCount * ((_game.platform == Common::kPlatformC64 && !_isC64PALSystem) ? 1.0 : 0.3);
 
 	if (_V0Delay._screenScroll)
 		Time += 3.6f;
