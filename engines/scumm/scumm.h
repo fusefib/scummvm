@@ -661,6 +661,9 @@ protected:
 	virtual void parseEvent(Common::Event event);
 
 	void waitForTimer(int quarterFrames, bool freezeMacGui = false);
+	// Service timers independent of foreground scripts; return a polling interval.
+	virtual uint32 serviceWaitTimers() { return 10; }
+	virtual void advanceTalkTimer(int delta);
 	uint32 _lastWaitTime;
 
 	void setTimerAndShakeFrequency();

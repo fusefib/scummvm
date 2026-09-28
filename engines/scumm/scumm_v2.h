@@ -43,6 +43,11 @@ protected:
 	Common::String _sentenceBuf;
 	uint16 _inventoryOffset;
 
+	uint32 _talkTimerLast = 0;
+	uint32 _talkTimerFraction = 0;
+	bool _talkTimerValid = false;
+	bool _preparingTalk = false;
+
 public:
 	ScummEngine_v2(OSystem *syst, const DetectorResult &dr);
 
@@ -62,6 +67,15 @@ protected:
 	void setupScummVars() override;
 	void resetScummVars() override;
 	void decodeParseString() override;
+
+	bool usesC64TalkTimer() const;
+	void resetTalkTimer();
+	uint32 serviceWaitTimers() override;
+	void advanceTalkTimer(int delta) override;
+	virtual void advanceC64Talk(int ticks);
+	void pauseEngineIntern(bool pause) override;
+	void actorTalk(const byte *msg) override;
+	void displayDialog() override;
 
 	void saveLoadWithSerializer(Common::Serializer &s) override;
 	int checkSoundEngineSaveDataSize(Serializer &s) override;

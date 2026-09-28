@@ -37,6 +37,7 @@
 #include "scumm/macgui/macgui.h"
 #include "scumm/resource.h"
 #include "scumm/scumm.h"
+#include "scumm/scumm_v0.h"
 #include "scumm/scumm_v2.h"
 #include "scumm/scumm_v6.h"
 #include "scumm/scumm_v7.h"
@@ -1032,6 +1033,59 @@ void ScummEngine_v2::drawSentence() {
 #endif
 
 	drawString(2, (byte *)string);
+}
+
+void ScummEngine_v2::displayDialog() {
+	if (!usesC64TalkTimer()) {
+		ScummEngine::displayDialog();
+		return;
+	}
+
+	// C64 Zak calls printer during preparation and in the foreground loop.
+	// Synchronize the old countdown, then construct the new batch atomically
+	// with respect to the cooperative clock. Do not bill it for older time.
+	serviceWaitTimers();
+	_preparingTalk = true;
+	ScummEngine::displayDialog();
+	serviceWaitTimers();
+	_preparingTalk = false;
+}
+
+void ScummEngine_v0::displayDialog() {
+	if (!usesC64TalkTimer()) {
+		ScummEngine::displayDialog();
+		return;
+	}
+
+	// Original C64 MM interpreter: prepare, but do not print.
+	// Other foreground calls must not bypass the message timer either.
+	if (_preparingTalk) {
+		// Preserve the running phase, but do not charge preparation time
+		// to a countdown that is only being armed now.
+		serviceWaitTimers();
+		_talkDelay = 1;
+	}
+}
+
+void ScummEngine_v0::advanceC64Talk(int ticks) {
+	while (ticks > 0 && _haveMsg) {
+		// Jump to the next countdown boundary, equivalent to servicing each
+		// IRQ. A zero countdown can also be a user's skip-text request.
+		const int untilService = MAX(1, int(_talkDelay));
+		if (ticks < untilService) {
+			_talkDelay -= ticks;
+			break;
+		}
+		ticks -= untilService;
+		_talkDelay = 0;
+		ScummEngine::displayDialog();
+		updateDirtyScreen(kTextVirtScreen);
+
+		// TTS may hold a completed countdown at zero. Retry on a later
+		// service, without spinning through an overdue host-time backlog.
+		if (!_talkDelay)
+			break;
+	}
 }
 
 void ScummEngine::displayDialog() {

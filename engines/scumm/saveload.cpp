@@ -2222,6 +2222,8 @@ void ScummEngine_v0::saveLoadWithSerializer(Common::Serializer &s) {
 
 
 void ScummEngine_v2::saveLoadWithSerializer(Common::Serializer &s) {
+	if (s.isLoading())
+		resetTalkTimer();
 	ScummEngine::saveLoadWithSerializer(s);
 
 	s.syncAsUint16LE(_inventoryOffset, VER(79));

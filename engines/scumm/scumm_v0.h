@@ -80,8 +80,11 @@ protected:
 
 	void setupScummVars() override;
 	void resetScummVars() override;
+	void advanceC64Talk(int ticks) override;
 	void scummLoop(int delta) override;
 	void decodeParseString() override;
+	void actorTalk(const byte *msg) override;
+	void displayDialog() override;
 
 	void processInput() override;
 

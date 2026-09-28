@@ -2261,6 +2261,7 @@ void ScummEngine_v0::resetScumm() {
 }
 
 void ScummEngine_v2::resetScumm() {
+	resetTalkTimer();
 	ScummEngine_v3::resetScumm();
 
 	if (_game.platform == Common::kPlatformNES) {
@@ -2975,6 +2976,7 @@ void ScummEngine::waitForTimer(int quarterFrames, bool freezeMacGui) {
 	while (!shouldQuit()) {
 		_sound->updateCD(); // Loop CD Audio if needed
 		parseEvents();
+		const uint32 timerDelay = serviceWaitTimers();
 
 		updateScreenShakeEffect();
 
@@ -2998,7 +3000,7 @@ void ScummEngine::waitForTimer(int quarterFrames, bool freezeMacGui) {
 #endif
 		if (cur >= endTime)
 			break;
-		_system->delayMillis(MIN<uint32>(10, endTime - cur));
+		_system->delayMillis(MIN<uint32>(timerDelay, endTime - cur));
 	}
 
 	// Set the last wait time as the expected end time, which may be different
@@ -3138,6 +3140,71 @@ double ScummEngine::getAmigaMusicTimerFrequency() {
 	return _game.id == GID_LOOM ? AMIGA_NTSC_VBLANK_RATE : getTimerFrequency();
 }
 
+void ScummEngine::advanceTalkTimer(int delta) {
+	_talkDelay -= delta;
+	if (_talkDelay < 0)
+		_talkDelay = 0;
+}
+
+bool ScummEngine_v2::usesC64TalkTimer() const {
+	return _game.platform == Common::kPlatformC64;
+}
+
+void ScummEngine_v2::resetTalkTimer() {
+	_talkTimerLast = 0;
+	_talkTimerFraction = 0;
+	_talkTimerValid = false;
+}
+
+uint32 ScummEngine_v2::serviceWaitTimers() {
+	if (!usesC64TalkTimer())
+		return 10;
+
+	const uint32 now = _system->getMillis();
+	if (!_talkTimerValid || isPaused() || _fastMode || _saveLoadFlag || shouldQuit()) {
+		_talkTimerLast = now;
+		_talkTimerFraction = 0;
+		_talkTimerValid = true;
+		return 10;
+	}
+
+	// C64 rates are integral quarter-frames/second. Keep the fractional
+	// tick rather than rounding every backend poll to whole milliseconds.
+	const uint32 elapsed = now - _talkTimerLast;
+	_talkTimerLast = now;
+	const uint32 rate = uint32(getTimerFrequency());
+	const uint64 units = _talkTimerFraction + uint64(elapsed) * rate;
+	_talkTimerFraction = units % 4000;
+	if (!_preparingTalk)
+		advanceC64Talk(units / 4000);
+
+	// Wake for the next message tick, without lengthening the enclosing wait.
+	return MIN<uint32>(10, (4000 - _talkTimerFraction + rate - 1) / rate);
+}
+
+void ScummEngine_v2::advanceTalkTimer(int delta) {
+	if (!usesC64TalkTimer()) {
+		ScummEngine::advanceTalkTimer(delta);
+		return;
+	}
+
+	serviceWaitTimers();
+	// Fast-forward intentionally removes real waits. Retain progress using
+	// the foreground's logical delta instead of waiting for host time.
+	if (_fastMode && !isPaused() && !_saveLoadFlag && !shouldQuit())
+		advanceC64Talk(delta);
+}
+
+void ScummEngine_v2::advanceC64Talk(int ticks) {
+	// Zak's IRQ only counts down. Printing and clearing remain foreground work.
+	_talkDelay = MAX(0, int(_talkDelay) - ticks);
+}
+
+void ScummEngine_v2::pauseEngineIntern(bool pause) {
+	ScummEngine_v3old::pauseEngineIntern(pause);
+	resetTalkTimer();
+}
+
 void ScummEngine_v0::scummLoop(int delta) {
 	VAR(VAR_IS_SOUND_RUNNING) = (_sound->_lastSound && _sound->isSoundRunning(_sound->_lastSound) != 0);
 
@@ -3170,9 +3237,7 @@ void ScummEngine::scummLoop(int delta) {
 
 	decreaseScriptDelay(delta);
 
-	_talkDelay -= delta;
-	if (_talkDelay < 0)
-		_talkDelay = 0;
+	advanceTalkTimer(delta);
 
 #ifdef USE_TTS
 	if (_game.id == GID_PASS && _roomResource == 2) {

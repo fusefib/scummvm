@@ -3463,6 +3463,21 @@ void ScummEngine_v7::actorTalk(const byte *msg) {
 }
 #endif
 
+void ScummEngine_v2::actorTalk(const byte *msg) {
+	// Retire the old countdown before the script replaces its message.
+	serviceWaitTimers();
+	ScummEngine::actorTalk(msg);
+}
+
+void ScummEngine_v0::actorTalk(const byte *msg) {
+	// Retire elapsed time before replacing the message, never against the
+	// new countdown. The native prepare routine arms 1; the IRQ prints it.
+	serviceWaitTimers();
+	_preparingTalk = true;
+	ScummEngine::actorTalk(msg);
+	_preparingTalk = false;
+}
+
 void ScummEngine::actorTalk(const byte *msg) {
 	Actor *a;
 
