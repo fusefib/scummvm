@@ -734,7 +734,7 @@ static const ExtraGuiOption mmnesClassicPaletteOption = {
 #ifdef USE_SID_AUDIO
 static const ExtraGuiOption c64SidTypeOption = {
 	_s("Use PAL timing for SID audio"),
-	_s("This lowers the pitch and slows down playback compared to the original NTSC timing."),
+	_s("This lowers the pitch and, except in Zak, slows down playback compared to the original NTSC timing."),
 	"c64_sid_type",
 	false,
 	0,
