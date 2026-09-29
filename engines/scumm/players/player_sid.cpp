@@ -33,9 +33,12 @@ namespace Scumm {
  * The player's onTimer() routine is called once per (NTSC/PAL) frame as it is
  * called by the VIC Rasterline interrupt handler which is in turn called
  * approx. 50 (PAL) or 60 (NTSC) times per second.
- * The SCUMM V0/V1 music playback routines or sound data have not been adjusted
- * to PAL systems. As a consequence, music is played audibly (-16%) slower
- * on PAL systems.
+ * The SCUMM V0 music playback routines or sound data have not been adjusted
+ * to PAL systems. As a consequence, Maniac Mansion music is played audibly
+ * (-16%) slower on PAL systems.
+ * Zak's PAL sound routine compensates by running a second sound update every
+ * fifth frame. This keeps playback close to the NTSC rate without changing
+ * the SID oscillator clock or the note-frequency table.
  * In addition, the SID oscillator frequency depends on the video clock too.
  * As SCUMM games use an NTSC frequency table for both NTSC and PAL versions
  * all tone frequencies on PAL systems are slightly (-4%) lower than on NTSC ones.
@@ -256,10 +259,20 @@ void Player_SID::resetSID() { // $48D8
 	resetPlayerState();
 }
 
-void Player_SID::onTimer() { // $481B
+void Player_SID::onTimer() {
 	if (initializing)
 		return;
 
+	stepSound();
+	// Zak's PAL player runs the whole sound service again every fifth frame.
+	// NTSC Zak and Maniac Mansion retain one update per frame.
+	if (_vm->_game.id == GID_ZAK && _vm->_isC64PALSystem && ++_zakSoundFrame == 5) {
+		_zakSoundFrame = 0;
+		stepSound();
+	}
+}
+
+void Player_SID::stepSound() { // $481B
 	if (_soundInQueue) {
 		for (int i = 6; i >= 0; --i) {
 			if (_soundQueue[i] != -1)
@@ -1270,12 +1283,13 @@ void Player_SID::SID_Write(int reg, uint8 data) {
 void Player_SID::initSID() {
 	// sound speed is slightly different on NTSC and PAL machines
 	// as the SID clock depends on the frame rate.
-	// ScummVM does not distinguish between NTSC and PAL targets
-	// so we use the NTSC timing by default here as the music was composed
-	// for NTSC systems (music on PAL systems is slower).
+	// ScummVM does not distinguish between NTSC and PAL targets, so
+	// we use the NTSC timing by default here as the music was composed
+	// for NTSC systems (Maniac Mansion's music on PAL systems is slower).
 	// But who are we to argue with nostalgia, when there are players who
 	// originally experienced it in PAL mode and think that just adds to
 	// the mood of the game?
+	// Zak's PAL sound-update compensation is handled in onTimer().
 
 	SID::Config::SidType sidType = _vm->_isC64PALSystem ? SID::Config::kSidPAL : SID::Config::kSidNTSC;
 

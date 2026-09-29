@@ -66,6 +66,7 @@ private:
 	Common::Mutex _mutex;
 
 	int _music_timer;
+	uint8 _zakSoundFrame = 0; // PAL Zak sound-update divider.
 	uint8* _music;
 
 private:
@@ -75,7 +76,8 @@ private:
 	void stopMusic_intern(); // $4CAA
 
 	void resetSID(); // $48D8
-	void onTimer(); // $481B
+	void onTimer();
+	void stepSound(); // $481B
 	void handleMusicBuffer();
 	int setupSongFileData(); // $36cb
 	void func_3674(int channel); // $3674
