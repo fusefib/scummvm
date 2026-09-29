@@ -1660,7 +1660,8 @@ void ScummEngine_v2::setUserState(byte state) {
 	Common::Rect rect;
 	rect.top = _virtscr[kVerbVirtScreen].topline;
 	rect.bottom = _virtscr[kVerbVirtScreen].topline + 8 * 88;
-	rect.right = _virtscr[kVerbVirtScreen].w - 1;
+	const int pixelXOffset = (_game.platform == Common::kPlatformC64) ? 1 : 0;
+	rect.right = _virtscr[kVerbVirtScreen].w - 1 + pixelXOffset;
 	if (_game.platform == Common::kPlatformNES) {
 		rect.left = 16;
 	} else {
