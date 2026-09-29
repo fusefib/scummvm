@@ -980,7 +980,7 @@ void Player_SID::findLessPrioChannels(uint8 soundPrio) { // $4ED8
 	chansWithLowerPrioCount = 0;
 	for (int i = 2; i >= 0; --i) {
 		if (usedChannelBits & BITMASK[i]) {
-			if (chanPrio[i] < soundPrio)
+			if (_vm->_game.id == GID_ZAK ? chanPrio[i] <= soundPrio : chanPrio[i] < soundPrio)
 				++chansWithLowerPrioCount;
 			if (chanPrio[i] < minChanPrio) {
 				minChanPrio = chanPrio[i];
@@ -1070,7 +1070,8 @@ int Player_SID::initSound(int soundResID) { // $4D0A
 
 		while ((freeChannelCount < requestedChannels) || (filterNeeded && filterUsed)) {
 			findLessPrioChannels(soundPrio);
-			if (minChanPrio >= soundPrio) {
+			// Zak allows a new effect to replace one of equal priority; MM does not.
+			if (_vm->_game.id == GID_ZAK ? minChanPrio > soundPrio : minChanPrio >= soundPrio) {
 				initializing = false;
 				return -1;
 			}
