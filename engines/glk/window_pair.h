@@ -58,6 +58,8 @@ public:
 	 * Rearranges the window
 	 */
 	void rearrange(const Rect &box) override;
+	void splitRectangles(const Rect &box, const Conf &settings,
+		Rect &first, Rect &second) const;
 
 	/**
 	 * Redraw the window

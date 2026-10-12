@@ -37,6 +37,7 @@ namespace Glk {
 
 class Window;
 class PairWindow;
+struct PreparedWindowLayout;
 
 #define HISTORYLEN 100
 #define SCROLLBACK 512
@@ -98,6 +99,7 @@ private:
 	Window *_rootWin;          ///< The topmost window
 	Window *_focusWin;         ///< The window selected by the player
 	bool _drawSelect;
+	static Rect rootBounds(Conf &settings);
 private:
 	/**
 	 * Create a new window
@@ -135,6 +137,22 @@ private:
 	 */
 	void inputScrollFocus();
 public:
+	class PreparedLayout {
+		friend class Windows;
+		Common::Array<PreparedWindowLayout *> _windows;
+		bool prepare(Window *window, const Rect &box, const Conf &settings,
+			const Conf &before, const Conf &after, const PreparedFonts &fonts);
+		PreparedLayout(const PreparedLayout &);
+		PreparedLayout &operator=(const PreparedLayout &);
+	public:
+		PreparedLayout() {}
+		~PreparedLayout();
+	};
+	bool prepareLayout(Conf &settings, const Conf &before, const Conf &after,
+		const PreparedFonts &fonts, PreparedLayout &layout);
+	void installLayout(PreparedLayout &layout);
+	void updateAppearance(const Conf &before, const Conf &after, bool fonts);
+
 	static bool _overrideReverse;
 	static bool _overrideFgSet;
 	static bool _overrideBgSet;
@@ -271,6 +289,8 @@ struct WindowStyle {
 	uint bg;
 	uint fg;
 	bool reverse;
+	void updatePreferences(const WindowStyle &before, const WindowStyle &after,
+		uint requests, bool fonts);
 
 	/**
 	 * Constructor
@@ -627,6 +647,8 @@ class TextWindow : public Window {
 protected:
 	uint _styleRequests[style_NUMSTYLES];
 public:
+	void resolveStyles(const Conf &before, const Conf &after,
+		WindowStyle *styles, bool fonts) const;
 	/**
 	 * Constructor
 	 */

@@ -29,6 +29,7 @@ MODULE_OBJS := \
 	utils.o \
 	windows.o \
 	window_graphics.o \
+	window_layout.o \
 	window_pair.o \
 	window_text_buffer.o \
 	window_text_buffer_reflow.o \

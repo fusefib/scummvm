@@ -35,6 +35,7 @@ TextGridWindow::TextGridWindow(Windows *windows, uint rock) : TextWindow(windows
 	_inBuf = nullptr;
 	_inOrgX = _inOrgY = 0;
 	_inMax = 0;
+	_inRegisteredMax = 0;
 	_inCurs = _inLen = 0;
 	_inArrayRock.num = 0;
 	_lineTerminators = nullptr;
@@ -52,32 +53,59 @@ TextGridWindow::~TextGridWindow() {
 
 	if (_inBuf) {
 		if (g_vm->gli_unregister_arr)
-			(*g_vm->gli_unregister_arr)(_inBuf, _inMax, "&+#!Cn", _inArrayRock);
+			(*g_vm->gli_unregister_arr)(_inBuf, _inRegisteredMax, _lineRequestUni ? "&+#!Iu" : "&+#!Cn", _inArrayRock);
 		_inBuf = nullptr;
 	}
 
 	delete[] _lineTerminators;
 }
 
-void TextGridWindow::rearrange(const Rect &box) {
-	Window::rearrange(box);
-	int newwid, newhgt;
-
-	newwid = MAX(box.width() / _font._cellW, 0);
-	newhgt = MAX(box.height() / _font._cellH, 0);
-
-	if (newwid == _width && newhgt == _height)
-		return;
-
-	_lines.resize(newhgt);
-	for (int y = 0; y < newhgt; ++y) {
-		_lines[y].resize(newwid);
-		touch(y);
+TextGridWindow::ResizeState *TextGridWindow::prepareResize(const Rect &box,
+		const Conf &settings, bool protectInput) const {
+	if (settings._monoInfo._cellW <= 0 || settings._monoInfo._cellH <= 0)
+		return nullptr;
+	const int width = MAX(0, box.width() / settings._monoInfo._cellW);
+	const int height = MAX(0, box.height() / settings._monoInfo._cellH);
+	if (protectInput && _inBuf && (_inOrgY >= height || _inOrgX >= width ||
+			_inOrgX + _inLen > width))
+		return nullptr;
+	if ((uint64)width * height > 0x7fffffffU / (sizeof(uint32) + sizeof(Attributes)))
+		return nullptr;
+	ResizeState *state = new ResizeState;
+	state->_box = box;
+	state->_width = width;
+	state->_height = height;
+	state->_rows = _lines;
+	state->_rows.resize(_inBuf ? MAX(height, _inOrgY + 1) : height);
+	for (uint y = 0; y < state->_rows.size(); ++y) {
+		const int columns = _inBuf && (int)y == _inOrgY ? MAX(width, _inOrgX + _inLen) : width;
+		state->_rows[y].resize(columns);
+		state->_rows[y].dirty = true;
 	}
+	return state;
+}
 
-	_attr.clear();
-	_width = newwid;
-	_height = newhgt;
+void TextGridWindow::installResize(ResizeState &state) {
+	_lines.swap(state._rows);
+	_bbox = state._box;
+	_width = state._width;
+	_height = state._height;
+	if (_inBuf)
+		_inMax = MIN(_inRegisteredMax, (uint)MAX(0, _width - _inOrgX));
+	_windows->repaint(_bbox);
+}
+
+void TextGridWindow::rearrange(const Rect &box) {
+	if (MAX(0, box.width() / _font._cellW) == _width &&
+			MAX(0, box.height() / _font._cellH) == _height) {
+		_bbox = box;
+		return;
+	}
+	ResizeState *state = prepareResize(box, *g_conf, false);
+	if (state) {
+		installResize(*state);
+		delete state;
+	}
 }
 
 void TextGridWindow::refreshStyles() {
@@ -247,8 +275,8 @@ void TextGridWindow::requestLineEvent(char *buf, uint maxlen, uint initlen) {
 	_lineRequest = true;
 	gli_tts_flush();
 
-	if ((int)maxlen > (_width - _curX))
-		maxlen = (_width - _curX);
+	_inRegisteredMax = maxlen;
+	maxlen = MIN(maxlen, (uint)MAX(0, _width - _curX));
 
 	_inBuf = buf;
 	_inMax = maxlen;
@@ -288,7 +316,7 @@ void TextGridWindow::requestLineEvent(char *buf, uint maxlen, uint initlen) {
 	}
 
 	if (g_vm->gli_register_arr)
-		_inArrayRock = (*g_vm->gli_register_arr)(buf, maxlen, "&+#!Cn");
+		_inArrayRock = (*g_vm->gli_register_arr)(buf, _inRegisteredMax, "&+#!Cn");
 
 	// Switch focus to the new window
 	_windows->inputGuessFocus();
@@ -303,8 +331,8 @@ void TextGridWindow::requestLineEventUni(uint32 *buf, uint maxlen, uint initlen)
 	_lineRequestUni = true;
 	gli_tts_flush();
 
-	if ((int)maxlen > (_width - _curX))
-		maxlen = (_width - _curX);
+	_inRegisteredMax = maxlen;
+	maxlen = MIN(maxlen, (uint)MAX(0, _width - _curX));
 
 	_inBuf = buf;
 	_inMax = maxlen;
@@ -344,7 +372,7 @@ void TextGridWindow::requestLineEventUni(uint32 *buf, uint maxlen, uint initlen)
 	}
 
 	if (g_vm->gli_register_arr)
-		_inArrayRock = (*g_vm->gli_register_arr)(buf, maxlen, "&+#!Iu");
+		_inArrayRock = (*g_vm->gli_register_arr)(buf, _inRegisteredMax, "&+#!Iu");
 
 	// Switch focus to the new window
 	_windows->inputGuessFocus();
@@ -370,7 +398,6 @@ void TextGridWindow::cancelLineEvent(Event *ev) {
 	int inmax;
 	bool unicode = _lineRequestUni;
 	gidispatch_rock_t inarrayrock;
-	TextGridRow *ln = &_lines[_inOrgY];
 	Event dummyEv;
 
 	if (!ev)
@@ -380,10 +407,11 @@ void TextGridWindow::cancelLineEvent(Event *ev) {
 
 	if (!_lineRequest && !_lineRequestUni)
 		return;
+	TextGridRow *ln = &_lines[_inOrgY];
 
 
 	inbuf = _inBuf;
-	inmax = _inMax;
+	inmax = _inRegisteredMax;
 	inarrayrock = _inArrayRock;
 
 	if (!unicode) {
@@ -459,14 +487,14 @@ void TextGridWindow::acceptLine(uint32 keycode) {
 	void *inbuf;
 	int inmax;
 	gidispatch_rock_t inarrayrock;
-	TextGridRow *ln = &(_lines[_inOrgY]);
 	bool unicode = _lineRequestUni;
 
 	if (!_inBuf)
 		return;
+	TextGridRow *ln = &(_lines[_inOrgY]);
 
 	inbuf = _inBuf;
-	inmax = _inMax;
+	inmax = _inRegisteredMax;
 	inarrayrock = _inArrayRock;
 
 	gli_tts_purge();
@@ -520,10 +548,10 @@ void TextGridWindow::acceptLine(uint32 keycode) {
 
 void TextGridWindow::acceptReadLine(uint32 arg) {
 	int ix;
-	TextGridRow *ln = &(_lines[_inOrgY]);
 
 	if (!_inBuf)
 		return;
+	TextGridRow *ln = &(_lines[_inOrgY]);
 
 	if (_lineTerminators && checkTerminators(arg)) {
 		const uint32 *cx;

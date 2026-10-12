@@ -262,33 +262,71 @@ PairWindow *Windows::newPairWindow(uint method, Window *key, uint size) {
 	return pwin;
 }
 
+Rect Windows::rootBounds(Conf &settings) {
+	const int cellWidth = settings._monoInfo._cellW;
+	const int cellHeight = settings._monoInfo._cellH;
+	if (settings._lockCols) {
+		const int64 content = (int64)cellWidth * settings._cols;
+		settings._wMarginX = content + settings._wMarginSaveX * 2 > settings._imageW ?
+			settings._wMarginSaveX : (settings._imageW - content) / 2;
+	}
+	if (settings._lockRows) {
+		const int64 content = (int64)cellHeight * settings._rows;
+		settings._wMarginY = content + settings._wMarginSaveY * 2 > settings._imageH ?
+			settings._wMarginSaveY : (settings._imageH - content) / 2;
+	}
+	const int x = CLIP(settings._wMarginX, 0, settings._imageW / 2);
+	const int y = CLIP(settings._wMarginY, 0, settings._imageH / 2);
+	return Rect(x, y, settings._imageW - x, settings._imageH - y);
+}
+
 void Windows::rearrange() {
-	if (_rootWin) {
-		Rect box;
-		Point cell(g_conf->_monoInfo._cellW, g_conf->_monoInfo._cellH);
+	if (_rootWin)
+		_rootWin->rearrange(rootBounds(*g_conf));
+}
 
-		if (g_conf->_lockCols) {
-			int desired_width = g_conf->_wMarginSaveX * 2 + cell.x * g_conf->_cols;
-			if (desired_width > g_conf->_imageW)
-				g_conf->_wMarginX = g_conf->_wMarginSaveX;
-			else
-				g_conf->_wMarginX = (g_conf->_imageW - cell.x * g_conf->_cols) / 2;
+void WindowStyle::updatePreferences(const WindowStyle &before, const WindowStyle &after,
+		uint requests, bool fonts) {
+	if (before.fg != after.fg && !(requests & kStyleRequestForeground))
+		fg = after.fg;
+	if (before.bg != after.bg && !(requests & kStyleRequestBackground))
+		bg = after.bg;
+	if (before.reverse != after.reverse && !(requests & kStyleRequestReverse))
+		reverse = after.reverse;
+	if (fonts && before.font != after.font && (requests & kStyleRequestFont) != kStyleRequestFont) {
+		const bool prop = requests & kStyleRequestFamily ? isProp() : after.isProp();
+		const bool bold = requests & kStyleRequestWeight ? isBold() : after.isBold();
+		const bool italic = requests & kStyleRequestSlant ? isItalic() : after.isItalic();
+		font = makeFont(prop, bold, italic);
+	}
+}
+
+void TextWindow::resolveStyles(const Conf &before, const Conf &after,
+		WindowStyle *styles, bool fonts) const {
+	const WindowStyle *old = _type == wintype_TextGrid ? before._gStyles : before._tStyles;
+	const WindowStyle *next = _type == wintype_TextGrid ? after._gStyles : after._tStyles;
+	Common::copy(getStyles(), getStyles() + style_NUMSTYLES, styles);
+	for (int i = 0; i < style_NUMSTYLES; ++i)
+		styles[i].updatePreferences(old[i], next[i], _styleRequests[i], fonts);
+}
+
+void Windows::updateAppearance(const Conf &before, const Conf &after, bool fonts) {
+	for (iterator i = begin(); i != end(); ++i) {
+		Window *window = *i;
+		if (!(window->_appearanceRequests & kAppearanceWindowColor) &&
+				before._windowColor != after._windowColor)
+			window->_bgColor = after._windowColor;
+		if (window->_type == wintype_TextBuffer) {
+			TextBufferWindow *buffer = static_cast<TextBufferWindow *>(window);
+			buffer->resolveStyles(before, after, buffer->_styles, fonts);
+			if (before._propInfo._dashes != after._propInfo._dashes)
+				buffer->_dashed = 0;
+			if (before._propInfo._spaces != after._propInfo._spaces)
+				buffer->_spaced = 0;
+		} else if (window->_type == wintype_TextGrid) {
+			TextGridWindow *grid = static_cast<TextGridWindow *>(window);
+			grid->resolveStyles(before, after, grid->_styles, fonts);
 		}
-
-		if (g_conf->_lockRows) {
-			int desired_height = g_conf->_wMarginSaveY * 2 + cell.y * g_conf->_rows;
-			if (desired_height > g_conf->_imageH)
-				g_conf->_wMarginY = g_conf->_wMarginSaveY;
-			else
-				g_conf->_wMarginY = (g_conf->_imageH - cell.y * g_conf->_rows) / 2;
-		}
-
-		box.left = g_conf->_wMarginX;
-		box.top = g_conf->_wMarginY;
-		box.right = g_conf->_imageW - g_conf->_wMarginX;
-		box.bottom = g_conf->_imageH - g_conf->_wMarginY;
-
-		_rootWin->rearrange(box);
 	}
 }
 

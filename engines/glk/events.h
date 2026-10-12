@@ -171,6 +171,7 @@ private:
 	uint32 _frameCounter;           ///< Frame counter
 	bool _redraw;                   ///< Screen needed redrawing
 	CursorId _cursorId;             ///< Current cursor Id
+	bool _textCursorDirty;
 	Surface _cursors[4];            ///< Cursor pixel data
 	uint _timerMilli;               ///< Time in milliseconds between timer events
 	uint _timerTimeExpiry;          ///< When to trigger next timer event
@@ -179,6 +180,7 @@ private:
 	 * Initialize the cursor graphics
 	 */
 	void initializeCursors();
+	void initializeTextCursor();
 
 	/**
 	 * Checks for whether it's time for the next game frame
@@ -282,6 +284,7 @@ public:
 	 * Sets the current cursor
 	 */
 	void setCursor(CursorId cursorId);
+	void refreshTextCursor();
 
 	/**
 	 * Sets whether the mouse cursor is visible

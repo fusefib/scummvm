@@ -45,48 +45,48 @@ PairWindow::~PairWindow() {
 }
 
 void PairWindow::rearrange(const Rect &box) {
-	Rect box1, box2;
-	int min, diff, split, splitwid, max;
-	Window *ch1, *ch2;
-
 	_bbox = box;
-
-	if (_dir == winmethod_Arbitrary) {
-		// When a pair window is in "arbitrary" mode, each child window has it's own independent positioning,
-		// so thre's no need to be readjusting it
+	if (_dir == winmethod_Arbitrary)
 		return;
-	}
+	Rect first, second;
+	splitRectangles(box, *g_conf, first, second);
+	_children[_backward ? 1 : 0]->rearrange(first);
+	_children[_backward ? 0 : 1]->rearrange(second);
+}
 
-	if (!_backward) {
-		ch1 = _children[0];
-		ch2 = _children[1];
-	} else {
-		ch1 = _children[1];
-		ch2 = _children[0];
-	}
-
+void PairWindow::splitRectangles(const Rect &box, const Conf &settings,
+		Rect &first, Rect &second) const {
+	int min, diff, split, splitwid, max;
 	if (_vertical) {
-		min = _bbox.left;
-		max = _bbox.right;
+		min = box.left;
+		max = box.right;
 	} else {
-		min = _bbox.top;
-		max = _bbox.bottom;
+		min = box.top;
+		max = box.bottom;
 	}
 	diff = max - min;
 
 	// We now figure split.
 	if (_vertical)
-		splitwid = g_conf->_wPaddingX; // want border?
+		splitwid = settings._wPaddingX; // want border?
 	else
-		splitwid = g_conf->_wPaddingY; // want border?
+		splitwid = settings._wPaddingY; // want border?
+
+	splitwid = CLIP(splitwid, 0, MAX(0, diff));
 
 	switch (_division) {
 	case winmethod_Proportional:
-		split = (diff * _size) / 100;
+		split = MIN((uint64)MAX(0, diff) * _size / 100, (uint64)MAX(0, diff));
 		break;
 
 	case winmethod_Fixed:
-		split = !_key ? 0 : _key->getSplit(_size, _vertical);
+		if (_key && (_key->_type == wintype_TextBuffer || _key->_type == wintype_TextGrid)) {
+			const FontInfo &font = _key->_type == wintype_TextGrid ?
+				(const FontInfo &)settings._monoInfo : settings._propInfo;
+			split = MIN((uint64)_size * (_vertical ? font._cellW : font._cellH), (uint64)MAX(0, diff));
+		} else {
+			split = !_key ? 0 : _key->getSplit(_size, _vertical);
+		}
 		break;
 
 	default:
@@ -108,28 +108,15 @@ void PairWindow::rearrange(const Rect &box) {
 			split = max - splitwid;
 	}
 
+	first = box;
+	second = box;
 	if (_vertical) {
-		box1.left = _bbox.left;
-		box1.right = split;
-		box2.left = split + splitwid;
-		box2.right = _bbox.right;
-		box1.top = _bbox.top;
-		box1.bottom = _bbox.bottom;
-		box2.top = _bbox.top;
-		box2.bottom = _bbox.bottom;
+		first.right = split;
+		second.left = split + splitwid;
 	} else {
-		box1.top = _bbox.top;
-		box1.bottom = split;
-		box2.top = split + splitwid;
-		box2.bottom = _bbox.bottom;
-		box1.left = _bbox.left;
-		box1.right = _bbox.right;
-		box2.left = _bbox.left;
-		box2.right = _bbox.right;
+		first.bottom = split;
+		second.top = split + splitwid;
 	}
-
-	ch1->rearrange(box1);
-	ch2->rearrange(box2);
 }
 
 void PairWindow::redraw() {

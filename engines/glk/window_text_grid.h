@@ -64,6 +64,15 @@ private:
 	 */
 	void acceptLine(uint32 keycode);
 public:
+	class ResizeState {
+		friend class TextGridWindow;
+		TextGridRows _rows;
+		Rect _box;
+		int _width, _height;
+	};
+	ResizeState *prepareResize(const Rect &box, const Conf &settings, bool protectInput) const;
+	void installResize(ResizeState &state);
+
 	int _width, _height;
 	TextGridRows _lines;
 
@@ -73,6 +82,7 @@ public:
 	void *_inBuf;        ///< unsigned char* for latin1, uint32* for unicode
 	int _inOrgX, _inOrgY;
 	int _inMax;
+	uint _inRegisteredMax;
 	int _inCurs, _inLen;
 	Attributes _origAttr;
 	gidispatch_rock_t _inArrayRock;

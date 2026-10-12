@@ -60,6 +60,8 @@ public:
 	 * Rearranges the window
 	 */
 	void rearrange(const Rect &box) override;
+	bool prepareResize(const Rect &box, Graphics::ManagedSurface *&surface) const;
+	void installResize(const Rect &box, Graphics::ManagedSurface *surface);
 
 	/**
 	 * Get window split size within parent pair window

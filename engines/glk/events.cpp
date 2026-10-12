@@ -56,7 +56,8 @@ const byte ARROW[] = {
 };
 
 Events::Events() : _forceClick(false), _currentEvent(nullptr), _cursorId(CURSOR_NONE),
-	_timerMilli(0), _timerTimeExpiry(0), _priorFrameTime(0), _frameCounter(0) {
+	_timerMilli(0), _timerTimeExpiry(0), _priorFrameTime(0), _frameCounter(0),
+	_redraw(false), _textCursorDirty(false) {
 	initializeCursors();
 }
 
@@ -86,19 +87,38 @@ void Events::initializeCursors() {
 		}
 	}
 
-	// Setup selection cusor sized to the vertical line size
-	Surface &sel = _cursors[CURSOR_IBEAM];
-	sel.create(5, g_conf->_propInfo._leading, g_system->getScreenFormat());
-	sel.fillRect(Common::Rect(0, 0, sel.w, sel.h), TRANSPARENT);
-	sel.hLine(0, 0, 4, 0);
-	sel.hLine(0, sel.h - 1, 4, 0);
-	sel.vLine(2, 1, sel.h - 1, 0);
-	sel._hotspot = Common::Point(2, sel.h - 1);
+	initializeTextCursor();
 
 	// TODO: Hyperlink hand cursor
 }
 
+void Events::initializeTextCursor() {
+	const Graphics::PixelFormat format = g_system->getScreenFormat();
+	const uint transparent = format.RGBToColor(TRANSPARENT_RGB, TRANSPARENT_RGB, TRANSPARENT_RGB);
+	Surface &sel = _cursors[CURSOR_IBEAM];
+	sel.free();
+	sel.create(5, g_conf->_propInfo._leading, g_system->getScreenFormat());
+	sel.fillRect(Common::Rect(0, 0, sel.w, sel.h), transparent);
+	sel.hLine(0, 0, 4, 0);
+	sel.hLine(0, sel.h - 1, 4, 0);
+	sel.vLine(2, 1, sel.h - 1, 0);
+	sel._hotspot = Common::Point(2, sel.h - 1);
+}
+
+void Events::refreshTextCursor() {
+	initializeTextCursor();
+	_textCursorDirty = _cursorId == CURSOR_IBEAM;
+}
+
 void Events::checkForNextFrameCounter() {
+	// Options may still own the top cursor when a live update is installed.
+	if (_textCursorDirty) {
+		_textCursorDirty = false;
+		const Surface &cursor = _cursors[CURSOR_IBEAM];
+		const uint transparent = cursor.format.RGBToColor(TRANSPARENT_RGB, TRANSPARENT_RGB, TRANSPARENT_RGB);
+		CursorMan.replaceCursor(cursor, cursor._hotspot.x, cursor._hotspot.y, transparent);
+	}
+
 	// Check for next game frame
 	uint32 milli = g_system->getMillis();
 	if ((milli - _priorFrameTime) >= GAME_FRAME_TIME) {
@@ -401,6 +421,7 @@ void Events::waitForPress() {
 
 void Events::setCursor(CursorId cursorId) {
 	if (cursorId != _cursorId) {
+		_textCursorDirty = false;
 		if (cursorId == CURSOR_NONE) {
 			CursorMan.showMouse(false);
 		} else {

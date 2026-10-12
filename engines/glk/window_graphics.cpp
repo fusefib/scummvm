@@ -36,46 +36,37 @@ GraphicsWindow::~GraphicsWindow() {
 	delete _surface;
 }
 
-void GraphicsWindow::rearrange(const Rect &box) {
-	int newwid, newhgt;
-	int bothwid, bothhgt;
-	Graphics::ManagedSurface *newSurface;
+bool GraphicsWindow::prepareResize(const Rect &box, Graphics::ManagedSurface *&surface) const {
+	surface = nullptr;
+	const int width = MAX(0, (int)box.width()), height = MAX(0, (int)box.height());
+	if (!width || !height || (_surface && width == (int)_w && height == (int)_h))
+		return true;
+	const Graphics::PixelFormat format = g_system->getScreenFormat();
+	if ((uint64)width * height * format.bytesPerPixel > 0x7fffffffU)
+		return false;
+	surface = new Graphics::ManagedSurface(width, height, format);
+	surface->clear(_bgnd);
+	if (_surface)
+		surface->blitFrom(*_surface);
+	return true;
+}
 
+void GraphicsWindow::installResize(const Rect &box, Graphics::ManagedSurface *surface) {
 	_bbox = box;
-
-	newwid = box.width();
-	newhgt = box.height();
-
-	if (newwid <= 0 || newhgt <= 0) {
-		_w = 0;
-		_h = 0;
+	const uint width = MAX(0, (int)box.width()), height = MAX(0, (int)box.height());
+	if (surface || !width || !height) {
 		delete _surface;
-		_surface = nullptr;
-		return;
+		_surface = surface;
 	}
-
-	bothwid = _w;
-	if (newwid < bothwid)
-		bothwid = newwid;
-	bothhgt = _h;
-	if (newhgt < bothhgt)
-		bothhgt = newhgt;
-
-	// Create it
-	Graphics::PixelFormat pixelFormat = g_system->getScreenFormat();
-	newSurface = new Graphics::ManagedSurface(newwid, newhgt, pixelFormat);
-	newSurface->clear(_bgnd);
-
-	// If the new surface is equal or bigger than the old one, copy it over
-	if (_surface && bothwid && bothhgt)
-		newSurface->blitFrom(*_surface);
-
-	delete _surface;
-	_surface = newSurface;
-	_w = newwid;
-	_h = newhgt;
-
+	_w = width;
+	_h = height;
 	touch();
+}
+
+void GraphicsWindow::rearrange(const Rect &box) {
+	Graphics::ManagedSurface *surface = nullptr;
+	if (prepareResize(box, surface))
+		installResize(box, surface);
 }
 
 void GraphicsWindow::touch() {
