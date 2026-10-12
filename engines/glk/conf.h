@@ -31,6 +31,18 @@
 
 namespace Glk {
 
+enum AppearanceRequest {
+	kAppearanceWindowColor = 1 << 0,
+	kAppearanceBorderColor = 1 << 1,
+	kAppearanceCaretColor = 1 << 2,
+	kAppearanceGridCaretColor = 1 << 3,
+	kAppearanceMoreColor = 1 << 4,
+	kAppearanceLinkColor = 1 << 5,
+	kAppearanceWindowMargins = 1 << 6,
+	kAppearanceTextMarginY = 1 << 7,
+	kAppearanceWindowDefault = 1 << 8
+};
+
 /**
  * Engine configuration
  */
@@ -105,10 +117,14 @@ public:
 	Common::String _speakLanguage;
 	int _styleHint;
 	bool _safeClicks;
+	uint _appearanceRequests;
 	WindowStyle _tStyles[style_NUMSTYLES];
 	WindowStyle _gStyles[style_NUMSTYLES];
 	WindowStyle _tStylesDefault[style_NUMSTYLES];
 	WindowStyle _gStylesDefault[style_NUMSTYLES];
+	// Requests apply to current styles; default requests survive hint clearing.
+	uint _tStyleRequests[style_NUMSTYLES], _gStyleRequests[style_NUMSTYLES];
+	uint _tDefaultRequests[style_NUMSTYLES], _gDefaultRequests[style_NUMSTYLES];
 
 	int _imageW, _imageH;
 public:

@@ -292,6 +292,11 @@ void Windows::rearrange() {
 	}
 }
 
+TextWindow::TextWindow(Windows *windows, uint rock) : Window(windows, rock) {
+	for (int i = 0; i < style_NUMSTYLES; ++i)
+		_styleRequests[i] = 0;
+}
+
 void Windows::inputGuessFocus() {
 	Window *altWin = _focusWin;
 
@@ -526,6 +531,7 @@ Window::Window(Windows *windows, uint rock) : _windows(windows), _rock(rock),
 
 	_bgColor = g_conf->_windowColor;
 	_fgColor = g_conf->_propInfo._moreColor;
+	_appearanceRequests = g_conf->_appearanceRequests;
 
 	Streams &streams = *g_vm->_streams;
 	_stream = streams.openWindowStream(this);

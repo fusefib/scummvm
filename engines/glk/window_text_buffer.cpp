@@ -49,6 +49,7 @@ TextBufferWindow::TextBufferWindow(Windows *windows, uint rock) : TextWindow(win
 	_attrs = _lines[0]._attrs;
 
 	Common::copy(&g_conf->_tStyles[0], &g_conf->_tStyles[style_NUMSTYLES], _styles);
+	Common::copy(g_conf->_tStyleRequests, g_conf->_tStyleRequests + style_NUMSTYLES, _styleRequests);
 
 	if (g_conf->_speak)
 		gli_initialize_tts();

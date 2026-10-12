@@ -252,6 +252,7 @@ void WindowStream::setZColors(uint fg, uint bg) {
 			info->_moreColor = info->_moreSave;
 			info->_caretColor = info->_caretSave;
 			info->_linkColor = info->_linkSave;
+			g_conf->_appearanceRequests &= ~(kAppearanceMoreColor | kAppearanceCaretColor | kAppearanceLinkColor);
 		} else if (fg != zcolor_Current) {
 			_window->_attr.fgset = true;
 			_window->_attr.fgcolor = fg;
@@ -261,6 +262,7 @@ void WindowStream::setZColors(uint fg, uint bg) {
 			info->_moreColor = fore;
 			info->_caretColor = fore;
 			info->_linkColor = fore;
+			g_conf->_appearanceRequests |= kAppearanceMoreColor | kAppearanceCaretColor | kAppearanceLinkColor;
 		}
 	}
 
@@ -273,6 +275,9 @@ void WindowStream::setZColors(uint fg, uint bg) {
 
 			g_conf->_windowColor = g_conf->_windowSave;
 			g_conf->_borderColor = g_conf->_borderSave;
+			g_conf->_appearanceRequests &= ~(kAppearanceWindowColor | kAppearanceBorderColor);
+			if (g_conf->_appearanceRequests & kAppearanceWindowDefault)
+				g_conf->_appearanceRequests |= kAppearanceWindowColor;
 		} else if (bg != zcolor_Current) {
 			_window->_attr.bgset = true;
 			_window->_attr.bgcolor = bg;
@@ -281,6 +286,7 @@ void WindowStream::setZColors(uint fg, uint bg) {
 
 			g_conf->_windowColor = back;
 			g_conf->_borderColor = back;
+			g_conf->_appearanceRequests |= kAppearanceWindowColor | kAppearanceBorderColor;
 		}
 	}
 

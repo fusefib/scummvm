@@ -40,6 +40,7 @@ TextGridWindow::TextGridWindow(Windows *windows, uint rock) : TextWindow(windows
 	_lineTerminators = nullptr;
 
 	Common::copy(&g_conf->_gStyles[0], &g_conf->_gStyles[style_NUMSTYLES], _styles);
+	Common::copy(g_conf->_gStyleRequests, g_conf->_gStyleRequests + style_NUMSTYLES, _styleRequests);
 
 	if (g_conf->_speak)
 		gli_initialize_tts();

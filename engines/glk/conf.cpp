@@ -82,7 +82,7 @@ Conf::Conf(InterpreterType interpType, bool installGlobal,
 		_windowColor(parseColor(WHITE)), _windowSave(parseColor(WHITE)),
 		_sound(true), _speak(false), _speakInput(false), _styleHint(1),
 		_scrollBg(parseColor(SCROLL_BG)), _scrollFg(parseColor(SCROLL_FG)),
-		_scrollWidth(0), _safeClicks(false) {
+		_scrollWidth(0), _safeClicks(false), _appearanceRequests(0) {
 	if (_installedGlobal)
 		g_conf = this;
 	_imageW = _width;
@@ -119,6 +119,8 @@ Conf::Conf(InterpreterType interpType, bool installGlobal,
 		_graphics = false;
 
 	for (int i = 0; i < style_NUMSTYLES; ++i) {
+		_tStyleRequests[i] = _gStyleRequests[i] = 0;
+		_tDefaultRequests[i] = _gDefaultRequests[i] = 0;
 		_tStyles[i].fg = parseColor(T_STYLES[i].fg);
 		_tStyles[i].bg = parseColor(T_STYLES[i].bg);
 		_tStyles[i].font = T_STYLES[i].font;

@@ -309,6 +309,11 @@ void GlkEngine::switchToWhiteOnBlack() {
 	_conf->_monoInfo._caretColor = WHITE;
 
 	_conf->_windowColor = _conf->_windowSave = 0;
+	_conf->_appearanceRequests |= kAppearanceWindowMargins | kAppearanceTextMarginY |
+		kAppearanceCaretColor | kAppearanceGridCaretColor | kAppearanceWindowColor | kAppearanceWindowDefault;
+	_conf->_tStyleRequests[style_Normal] |= kStyleRequestForeground | kStyleRequestBackground;
+	_conf->_tStyleRequests[style_Input] |= kStyleRequestForeground | kStyleRequestBackground;
+	_conf->_gStyleRequests[style_Normal] |= kStyleRequestForeground | kStyleRequestBackground;
 	WindowStyle &ws1 = _conf->_tStyles[style_Normal];
 	ws1.bg = BLACK;
 	ws1.fg = WHITE;

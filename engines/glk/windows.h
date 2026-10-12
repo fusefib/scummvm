@@ -253,6 +253,16 @@ struct WindowStyleStatic {
 	bool reverse;
 };
 
+enum StyleRequest {
+	kStyleRequestFamily = 1 << 0,
+	kStyleRequestWeight = 1 << 1,
+	kStyleRequestSlant = 1 << 2,
+	kStyleRequestForeground = 1 << 3,
+	kStyleRequestBackground = 1 << 4,
+	kStyleRequestReverse = 1 << 5,
+	kStyleRequestFont = kStyleRequestFamily | kStyleRequestWeight | kStyleRequestSlant
+};
+
 /**
  * Window styles
  */
@@ -417,6 +427,7 @@ public:
 
 	Attributes _attr;
 	uint _bgColor, _fgColor;
+	uint _appearanceRequests;
 
 	gidispatch_rock_t _dispRock;
 public:
@@ -609,11 +620,13 @@ public:
  * Abstract common base for the text window classes
  */
 class TextWindow : public Window {
+protected:
+	uint _styleRequests[style_NUMSTYLES];
 public:
 	/**
 	 * Constructor
 	 */
-	TextWindow(Windows *windows, uint rock) : Window(windows, rock) {}
+	TextWindow(Windows *windows, uint rock);
 };
 
 } // End of namespace Glk

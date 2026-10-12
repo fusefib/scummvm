@@ -469,21 +469,27 @@ void GlkAPI::glk_stylehint_set(uint wintype, uint style, uint hint, int val) {
 	if (!g_conf->_styleHint)
 		return;
 
+	uint &requests = (wintype == wintype_TextGrid ?
+		g_conf->_gStyleRequests : g_conf->_tStyleRequests)[style];
 	switch (hint) {
 	case stylehint_TextColor:
 		styles[style].fg = _conf->parseColor(val);
+		requests |= kStyleRequestForeground;
 		break;
 
 	case stylehint_BackColor:
 		styles[style].bg = _conf->parseColor(val);
+		requests |= kStyleRequestBackground;
 		break;
 
 	case stylehint_ReverseColor:
 		styles[style].reverse = (val != 0);
+		requests |= kStyleRequestReverse;
 		break;
 
 	case stylehint_Proportional:
 		if (wintype == wintype_TextBuffer) {
+			requests |= kStyleRequestFamily;
 			p = val > 0;
 			b = styles[style].isBold();
 			i = styles[style].isItalic();
@@ -492,6 +498,7 @@ void GlkAPI::glk_stylehint_set(uint wintype, uint style, uint hint, int val) {
 		break;
 
 	case stylehint_Weight:
+		requests |= kStyleRequestWeight;
 		p = styles[style].isProp();
 		b = val > 0;
 		i = styles[style].isItalic();
@@ -499,6 +506,7 @@ void GlkAPI::glk_stylehint_set(uint wintype, uint style, uint hint, int val) {
 		break;
 
 	case stylehint_Oblique:
+		requests |= kStyleRequestSlant;
 		p = styles[style].isProp();
 		b = styles[style].isBold();
 		i = val > 0;
@@ -511,11 +519,13 @@ void GlkAPI::glk_stylehint_set(uint wintype, uint style, uint hint, int val) {
 
 	if (wintype == wintype_TextBuffer && style == style_Normal && hint == stylehint_BackColor) {
 		g_conf->_windowColor = styles[style].bg;
+		g_conf->_appearanceRequests |= kAppearanceWindowColor;
 	}
 
 	if (wintype == wintype_TextBuffer && style == style_Normal && hint == stylehint_TextColor) {
 		g_conf->_propInfo._moreColor = styles[style].fg;
 		g_conf->_propInfo._caretColor = styles[style].fg;
+		g_conf->_appearanceRequests |= kAppearanceMoreColor | kAppearanceCaretColor;
 	}
 }
 
@@ -545,28 +555,38 @@ void GlkAPI::glk_stylehint_clear(uint wintype, uint style, uint hint) {
 	if (!g_conf->_styleHint)
 		return;
 
+	uint &requests = (wintype == wintype_TextGrid ?
+		g_conf->_gStyleRequests : g_conf->_tStyleRequests)[style];
+	const uint defaultRequests = (wintype == wintype_TextGrid ?
+		g_conf->_gDefaultRequests : g_conf->_tDefaultRequests)[style];
+	uint cleared = 0;
 	switch (hint) {
 	case stylehint_TextColor:
 		styles[style].fg = defaults[style].fg;
+		cleared = kStyleRequestForeground;
 		break;
 
 	case stylehint_BackColor:
 		styles[style].bg = defaults[style].bg;
+		cleared = kStyleRequestBackground;
 		break;
 
 	case stylehint_ReverseColor:
 		styles[style].reverse = defaults[style].reverse;
+		cleared = kStyleRequestReverse;
 		break;
 
 	case stylehint_Proportional:
 	case stylehint_Weight:
 	case stylehint_Oblique:
 		styles[style].font = defaults[style].font;
+		cleared = kStyleRequestFont;
 		break;
 
 	default:
 		break;
 	}
+	requests = (requests & ~cleared) | (defaultRequests & cleared);
 }
 
 uint GlkAPI::glk_style_distinguish(winid_t win, uint style1, uint style2) {
