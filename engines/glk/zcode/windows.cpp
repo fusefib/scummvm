@@ -133,7 +133,10 @@ void Window::updateMeasurements() {
 	TextBufferWindow *win = dynamic_cast<TextBufferWindow *>(_win);
 	_properties[LEFT_MARGIN] = (win ? win->_ladjw : 0) / cellW;
 	_properties[RIGHT_MARGIN] = (win ? win->_radjw : 0) / cellW;
-	_properties[FONT_SIZE] = (g_conf->_monoInfo._cellH << 8) | g_conf->_monoInfo._cellW;
+	const FontInfo &font = g_vm->h_version == V6 || _win->_type == wintype_TextGrid ||
+		(_currStyle & FIXED_WIDTH_STYLE) || _currFont == GRAPHICS_FONT || _currFont == FIXED_WIDTH_FONT ?
+		(const FontInfo &)g_conf->_monoInfo : g_conf->_propInfo;
+	_properties[FONT_SIZE] = (font._cellH << 8) | font._cellW;
 }
 
 void Windows::updateAppearance(const Conf &before, const Conf &after, bool metrics) {
@@ -145,13 +148,8 @@ void Windows::updateAppearance(const Conf &before, const Conf &after, bool metri
 			window._dashes = after._propInfo._dashes;
 		if (before._propInfo._spaces != after._propInfo._spaces)
 			window._spaces = after._propInfo._spaces;
-		if (metrics && window._win) {
+		if (metrics && window._win)
 			window.updateMeasurements();
-			const FontInfo &font = window._win->_type == wintype_TextGrid || (window._currStyle & FIXED_WIDTH_STYLE) ||
-				window._currFont == GRAPHICS_FONT || window._currFont == FIXED_WIDTH_FONT ?
-				(const FontInfo &)g_conf->_monoInfo : g_conf->_propInfo;
-			window._properties[FONT_SIZE] = (font._cellH << 8) | font._cellW;
-		}
 	}
 	if (currWin()._currFont == GRAPHICS_FONT) {
 		g_conf->_propInfo._quotes = 0;
