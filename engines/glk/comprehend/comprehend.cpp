@@ -64,11 +64,6 @@ void Comprehend::initGraphicsMode() {
 	initGraphics(640, 400, &pixelFormat);
 }
 
-void Comprehend::createConfiguration() {
-	GlkAPI::createConfiguration();
-	switchToWhiteOnBlack();
-}
-
 void Comprehend::runGame() {
 	initialize();
 

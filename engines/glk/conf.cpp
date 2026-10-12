@@ -134,6 +134,16 @@ Conf::Conf(InterpreterType interpType, bool installGlobal,
 
 	if (_interpType == INTERPRETER_ZCODE) {
 		ZCode::initializeAppearanceDefaults(*this, _zcodeVersion6);
+	} else if (_interpType == INTERPRETER_COMPREHEND) {
+		_wMarginX = _wMarginY = _wMarginSaveX = _wMarginSaveY = 0;
+		_tMarginY = 4;
+		_propInfo._caretColor = _monoInfo._caretColor = parseColor(WHITE);
+		_windowColor = _windowSave = 0;
+		WindowStyle *styles[] = { &_tStyles[style_Normal], &_tStyles[style_Input], &_gStyles[style_Normal] };
+		for (uint i = 0; i < ARRAYSIZE(styles); ++i) {
+			styles[i]->fg = parseColor(WHITE);
+			styles[i]->bg = 0;
+		}
 	}
 
 	Common::copy(_tStyles, _tStyles + style_NUMSTYLES, _tStylesDefault);

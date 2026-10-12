@@ -276,8 +276,6 @@ void WindowStream::setZColors(uint fg, uint bg) {
 			g_conf->_windowColor = g_conf->_windowSave;
 			g_conf->_borderColor = g_conf->_borderSave;
 			g_conf->_appearanceRequests &= ~(kAppearanceWindowColor | kAppearanceBorderColor);
-			if (g_conf->_appearanceRequests & kAppearanceWindowDefault)
-				g_conf->_appearanceRequests |= kAppearanceWindowColor;
 		} else if (bg != zcolor_Current) {
 			_window->_attr.bgset = true;
 			_window->_attr.bgcolor = bg;

@@ -107,11 +107,6 @@ protected:
 	 */
 	virtual void runGame() = 0;
 
-	/**
-	 * Switches Glk from the default black on white color scheme
-	 * to white on black
-	 */
-	void switchToWhiteOnBlack();
 	virtual void appearanceChanged(const Conf &before, const Conf &after, bool metrics) {}
 public:
 	Blorb *_blorb;

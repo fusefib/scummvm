@@ -298,33 +298,4 @@ void GlkEngine::beep() {
 	_pcSpeaker->speakerOn(50, 50);
 }
 
-void GlkEngine::switchToWhiteOnBlack() {
-	const uint WHITE = _conf->parseColor("ffffff");
-	const uint BLACK = _conf->parseColor("000000");
-
-	_conf->_wMarginX = 0;
-	_conf->_wMarginY = 0;
-	_conf->_tMarginY = 4;
-	_conf->_propInfo._caretColor = WHITE;
-	_conf->_monoInfo._caretColor = WHITE;
-
-	_conf->_windowColor = _conf->_windowSave = 0;
-	_conf->_appearanceRequests |= kAppearanceWindowMargins | kAppearanceTextMarginY |
-		kAppearanceCaretColor | kAppearanceGridCaretColor | kAppearanceWindowColor | kAppearanceWindowDefault;
-	_conf->_tStyleRequests[style_Normal] |= kStyleRequestForeground | kStyleRequestBackground;
-	_conf->_tStyleRequests[style_Input] |= kStyleRequestForeground | kStyleRequestBackground;
-	_conf->_gStyleRequests[style_Normal] |= kStyleRequestForeground | kStyleRequestBackground;
-	WindowStyle &ws1 = _conf->_tStyles[style_Normal];
-	ws1.bg = BLACK;
-	ws1.fg = WHITE;
-
-	WindowStyle &ws2 = _conf->_tStyles[style_Input];
-	ws2.bg = BLACK;
-	ws2.fg = WHITE;
-
-	WindowStyle &ws3 = _conf->_gStyles[style_Normal];
-	ws3.bg = BLACK;
-	ws3.fg = WHITE;
-}
-
 } // End of namespace Glk
