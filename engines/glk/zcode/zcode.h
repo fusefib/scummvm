@@ -45,6 +45,7 @@ protected:
 	 * Create the screen class
 	 */
 	Screen *createScreen() override;
+	void appearanceChanged(const Conf &before, const Conf &after, bool metrics) override;
 public:
 	/**
 	 * Constructor

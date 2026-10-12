@@ -67,6 +67,27 @@ Screen *ZCode::createScreen() {
 	return new FrotzScreen();
 }
 
+void ZCode::appearanceChanged(const Conf &before, const Conf &after, bool metrics) {
+	if (h_version == V6)
+		return;
+	if (metrics) {
+		h_font_width = _conf->_monoInfo._cellW;
+		h_font_height = _conf->_monoInfo._cellH;
+		h_screen_width = _screen->w;
+		h_screen_height = _screen->h;
+		uint columns = 0, upperRows = 0, lowerRows = 0;
+		if (_wp._upper)
+			glk_window_get_size(_wp._upper, &columns, &upperRows);
+		if (_wp._lower)
+			glk_window_get_size(_wp._lower, columns ? nullptr : &columns, &lowerRows);
+		h_screen_cols = columns;
+		h_screen_rows = upperRows + lowerRows + 1;
+		if (zmp)
+			update_screen_header();
+	}
+	_wp.updateAppearance(before, after, metrics);
+}
+
 void ZCode::runGame() {
 	story_fp = &_gameFile;
 	initialize();

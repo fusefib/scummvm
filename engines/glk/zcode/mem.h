@@ -101,6 +101,7 @@ protected:
 	 * Set all header fields which hold information about the interpreter.
 	 */
 	void restart_header();
+	void update_screen_header();
 
 	/**
 	 * Write a byte value to the dynamic Z-machine memory.

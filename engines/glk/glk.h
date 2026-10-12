@@ -112,6 +112,7 @@ protected:
 	 * to white on black
 	 */
 	void switchToWhiteOnBlack();
+	virtual void appearanceChanged(const Conf &before, const Conf &after, bool metrics) {}
 public:
 	Blorb *_blorb;
 	Clipboard *_clipboard;

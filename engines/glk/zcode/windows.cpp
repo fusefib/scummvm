@@ -113,6 +113,15 @@ Window::Window() : _windows(nullptr), _win(nullptr), _quotes(0), _dashes(0), _sp
 
 void Window::update() {
 	assert(_win);
+	updateMeasurements();
+	int cellW = (g_vm->h_version < V5) ? g_vm->h_font_width : 1;
+	int cellH = (g_vm->h_version < V5) ? g_vm->h_font_height : 1;
+	Point pt = _win->getCursor();
+	_properties[X_CURSOR] = (g_vm->h_version != V6) ? pt.x + 1 : pt.x / cellW + 1;
+	_properties[Y_CURSOR] = (g_vm->h_version != V6) ? pt.y + 1 : pt.y / cellH + 1;
+}
+
+void Window::updateMeasurements() {
 	int cellW = (g_vm->h_version < V5) ? g_vm->h_font_width : 1;
 	int cellH = (g_vm->h_version < V5) ? g_vm->h_font_height : 1;
 
@@ -121,14 +130,34 @@ void Window::update() {
 	_properties[X_SIZE] = _win->_bbox.width() / cellW;
 	_properties[Y_SIZE] = _win->_bbox.height() / cellH;
 
-	Point pt = _win->getCursor();
-	_properties[X_CURSOR] = (g_vm->h_version != V6) ? pt.x + 1 : pt.x / cellW + 1;
-	_properties[Y_CURSOR] = (g_vm->h_version != V6) ? pt.y + 1 : pt.y / cellH + 1;
-
 	TextBufferWindow *win = dynamic_cast<TextBufferWindow *>(_win);
 	_properties[LEFT_MARGIN] = (win ? win->_ladjw : 0) / cellW;
 	_properties[RIGHT_MARGIN] = (win ? win->_radjw : 0) / cellW;
 	_properties[FONT_SIZE] = (g_conf->_monoInfo._cellH << 8) | g_conf->_monoInfo._cellW;
+}
+
+void Windows::updateAppearance(const Conf &before, const Conf &after, bool metrics) {
+	for (uint i = 0; i < size(); ++i) {
+		Window &window = _windows[i];
+		if (before._propInfo._quotes != after._propInfo._quotes)
+			window._quotes = after._propInfo._quotes;
+		if (before._propInfo._dashes != after._propInfo._dashes)
+			window._dashes = after._propInfo._dashes;
+		if (before._propInfo._spaces != after._propInfo._spaces)
+			window._spaces = after._propInfo._spaces;
+		if (metrics && window._win) {
+			window.updateMeasurements();
+			const FontInfo &font = window._win->_type == wintype_TextGrid || (window._currStyle & FIXED_WIDTH_STYLE) ||
+				window._currFont == GRAPHICS_FONT || window._currFont == FIXED_WIDTH_FONT ?
+				(const FontInfo &)g_conf->_monoInfo : g_conf->_propInfo;
+			window._properties[FONT_SIZE] = (font._cellH << 8) | font._cellW;
+		}
+	}
+	if (currWin()._currFont == GRAPHICS_FONT) {
+		g_conf->_propInfo._quotes = 0;
+		g_conf->_propInfo._dashes = 0;
+		g_conf->_propInfo._spaces = 0;
+	}
 }
 
 Window &Window::operator=(winid_t win) {

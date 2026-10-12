@@ -99,6 +99,7 @@ private:
 	 * Updates the local window properties based on an attached Glk window
 	 */
 	void update();
+	void updateMeasurements();
 
 	/**
 	 * Creates a new Glk window to attach to the window
@@ -269,6 +270,7 @@ public:
 	 * Set current window
 	 */
 	void setWindow(int win);
+	void updateAppearance(const Conf &before, const Conf &after, bool metrics);
 
 	/**
 	 * Get the current window
