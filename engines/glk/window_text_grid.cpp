@@ -295,7 +295,7 @@ void TextGridWindow::requestLineEvent(char *buf, uint maxlen, uint initlen) {
 
 		for (uint ix = 0; ix < initlen; ix++) {
 			ln->_attrs[_inOrgX + ix].set(style_Input);
-			ln->_chars[_inOrgX + ix] = buf[ix];
+			ln->_chars[_inOrgX + ix] = (byte)buf[ix];
 		}
 
 		_inCurs += initlen;

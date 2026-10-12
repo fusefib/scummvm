@@ -178,7 +178,7 @@ void TextBufferWindow::putText(const char *buf, int len, int pos, int oldlen) {
 	}
 	if (len > 0) {
 		for (int i = 0; i < len; i++) {
-			_chars[pos + i] = buf[i];
+			_chars[pos + i] = (byte)buf[i];
 			_attrs[pos + i].set(style_Input);
 		}
 	}
