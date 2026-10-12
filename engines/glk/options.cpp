@@ -158,16 +158,13 @@ FACES GlkOptionsState::getFont(const Common::String &key, FACES fallback) const 
 }
 
 static bool applyPreferenceDelta(const Common::ConfigManager::Domain &stored,
-		const Common::ConfigManager::Domain &draft, Common::ConfigManager::Domain *destination,
-		bool *appearanceChanged = nullptr) {
+		const Common::ConfigManager::Domain &draft, Common::ConfigManager::Domain *destination) {
 	bool changed = false;
 	for (Common::ConfigManager::Domain::const_iterator it = stored.begin(); it != stored.end(); ++it) {
 		if (!draft.contains(it->_key)) {
 			if (destination)
 				destination->erase(it->_key);
 			changed = true;
-			if (appearanceChanged && (findGlkOptionContract(it->_key) || it->_key == "glk_ignore_global_appearance"))
-				*appearanceChanged = true;
 		}
 	}
 	for (Common::ConfigManager::Domain::const_iterator it = draft.begin(); it != draft.end(); ++it) {
@@ -175,8 +172,6 @@ static bool applyPreferenceDelta(const Common::ConfigManager::Domain &stored,
 			if (destination)
 				destination->setVal(it->_key, it->_value);
 			changed = true;
-			if (appearanceChanged && (findGlkOptionContract(it->_key) || it->_key == "glk_ignore_global_appearance"))
-				*appearanceChanged = true;
 		}
 	}
 	return changed;
@@ -186,15 +181,13 @@ bool GlkOptionsState::hasGlobalChanges() const {
 	return applyPreferenceDelta(_storedApplication, _applicationPreferences, nullptr);
 }
 
-bool GlkOptionsState::apply(bool *appearanceChanged) {
-	if (appearanceChanged)
-		*appearanceChanged = false;
+bool GlkOptionsState::apply() {
 	Common::ConfigManager::Domain *target = ConfMan.getDomain(_domain);
 	if (!target || !ConfMan.hasGameDomain(_domain))
 		return false;
-	bool changed = applyPreferenceDelta(_storedPreferences, _draftPreferences, target, appearanceChanged);
+	bool changed = applyPreferenceDelta(_storedPreferences, _draftPreferences, target);
 	changed = applyPreferenceDelta(_storedApplication, _applicationPreferences,
-		ConfMan.getDomain(Common::ConfigManager::kApplicationDomain), appearanceChanged) || changed;
+		ConfMan.getDomain(Common::ConfigManager::kApplicationDomain)) || changed;
 	_storedPreferences = _draftPreferences;
 	_storedApplication = _applicationPreferences;
 	_editedPreferences.clear();

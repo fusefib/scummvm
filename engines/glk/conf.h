@@ -128,7 +128,6 @@ public:
 	void load(const Common::String &domain = Common::String());
 
 	void load(const GlkPreferences &preferences);
-	void reload();
 
 	/**
 	 * Destructor
