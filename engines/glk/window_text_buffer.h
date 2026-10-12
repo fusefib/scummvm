@@ -55,8 +55,8 @@ class TextBufferWindow : public TextWindow, Speech {
 	typedef Common::Array<TextBufferRow> TextBufferRows;
 private:
 	PropFontInfo &_font;
+	bool _needsReflow;
 private:
-	void reflow();
 	void touchScroll();
 	bool putPicture(Picture *pic, uint align, uint linkval);
 
@@ -92,6 +92,31 @@ private:
 	void scrollResize();
 	int calcWidth(const uint32 *chars, const Attributes *attrs, int startchar, int numchars, int spw);
 public:
+	class ReflowState {
+		friend class TextBufferWindow;
+		enum { kMaxRows = 0x7fffffffU / (2 * sizeof(TextBufferRow)) };
+		TextBufferRows _rows;
+		uint32 *_copyBuf;
+		Rect _box;
+		int _width, _height, _yAdj;
+		int _scrollPos, _lastSeen, _scrollMax;
+		int _fence, _cursor;
+		int _leftWidth, _leftLines, _rightWidth, _rightLines;
+		bool _hidden;
+		ReflowState(const ReflowState &);
+		ReflowState &operator=(const ReflowState &);
+		bool nextLine(bool forced);
+		bool append(uint32 ch, const Attributes &attr, const Conf &settings,
+			const PreparedFonts &fonts, const WindowStyle *styles);
+	public:
+		ReflowState();
+		~ReflowState();
+	};
+
+	ReflowState *prepareReflow(const Rect &box, const Conf &settings,
+		const PreparedFonts &fonts, const WindowStyle *styles) const;
+	void installReflow(ReflowState &state);
+
 	int _width, _height;
 	int _spaced;
 	int _dashed;
@@ -230,7 +255,7 @@ public:
 	void requestCharEventUni() override;
 
 	void setEchoLineEvent(uint val) override {
-		_echoLineInput = val != 0;
+		_echoLineInputBase = val != 0;
 	}
 
 	void requestHyperlinkEvent() override {

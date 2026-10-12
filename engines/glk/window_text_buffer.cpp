@@ -36,9 +36,10 @@ namespace Glk {
 
 
 TextBufferWindow::TextBufferWindow(Windows *windows, uint rock) : TextWindow(windows, rock),
-		_font(g_conf->_propInfo), _historyPos(0), _historyFirst(0), _historyPresent(0),
+		_font(g_conf->_propInfo), _needsReflow(true), _historyPos(0), _historyFirst(0), _historyPresent(0),
 		_lastSeen(0), _scrollPos(0), _scrollMax(0), _scrollBack(SCROLLBACK), _width(-1), _height(-1),
-		_inBuf(nullptr), _lineTerminators(nullptr), _echoLineInput(true), _ladjw(0), _radjw(0),
+		_inBuf(nullptr), _inMax(0), _inFence(0), _inCurs(0),
+		_lineTerminators(nullptr), _echoLineInput(true), _ladjw(0), _radjw(0),
 		_ladjn(0), _radjn(0), _numChars(0), _chars(nullptr), _attrs(nullptr), _spaced(0), _dashed(0),
 		_copyBuf(nullptr), _copyPos(0) {
 	_type = wintype_TextBuffer;
@@ -61,7 +62,7 @@ TextBufferWindow::~TextBufferWindow() {
 
 	if (_inBuf) {
 		if (g_vm->gli_unregister_arr)
-			(*g_vm->gli_unregister_arr)(_inBuf, _inMax, "&+#!Cn", _inArrayRock);
+			(*g_vm->gli_unregister_arr)(_inBuf, _inMax, _lineRequestUni ? "&+#!Iu" : "&+#!Cn", _inArrayRock);
 		_inBuf = nullptr;
 	}
 
@@ -77,178 +78,28 @@ TextBufferWindow::~TextBufferWindow() {
 }
 
 void TextBufferWindow::rearrange(const Rect &box) {
-	Window::rearrange(box);
-	int newwid, newhgt;
-	int rnd;
-
-	newwid = MAX((box.width() - g_conf->_tMarginX * 2 - g_conf->_scrollWidth) / _font._cellW, 0);
-	newhgt = MAX((box.height() - g_conf->_tMarginY * 2) / _font._cellH, 0);
-
-	// align text with bottom
-	rnd = newhgt * _font._cellH + g_conf->_tMarginY * 2;
-	_yAdj = (box.height() - rnd);
-	_bbox.top += (box.height() - rnd);
-
-	if (newwid != _width) {
-		_width = newwid;
-		reflow();
-	}
-
-	if (newhgt != _height) {
-		// scroll up if we obscure new lines
-		if (_lastSeen >= newhgt - 1)
-			_scrollPos += (_height - newhgt);
-
-		_height = newhgt;
-
-		// keep window within 'valid' lines
-		if (_scrollPos > _scrollMax - _height + 1)
-			_scrollPos = _scrollMax - _height + 1;
-		if (_scrollPos < 0)
-			_scrollPos = 0;
-		touchScroll();
-
-		// allocate copy buffer
-		if (_copyBuf)
-			delete[] _copyBuf;
-		_copyBuf = new uint32[_height * TBLINELEN];
-
-		for (int i = 0; i < (_height * TBLINELEN); i++)
-			_copyBuf[i] = 0;
-
-		_copyPos = 0;
+	const Rect previous(_bbox.left, _bbox.top - _yAdj, _bbox.right, _bbox.bottom);
+	if (box == previous && !_needsReflow)
+		return;
+	PreparedFonts fonts;
+	ReflowState *state = prepareReflow(box, *g_conf, fonts, _styles);
+	if (state) {
+		installReflow(*state);
+		delete state;
 	}
 }
 
 void TextBufferWindow::refreshStyles() {
-	// copy updated engine styles/font info into the window's private copy
-	Common::copy(&g_conf->_tStyles[0], &g_conf->_tStyles[style_NUMSTYLES], _styles);
-	_font = g_conf->_propInfo;
-	rearrange(_bbox);
-}
-
-void TextBufferWindow::reflow() {
-	int inputbyte = -1;
-	Attributes curattr, oldattr;
-	int i, k, p, s;
-	int x;
-
-	if (_height < 4 || _width < 20)
-		return;
-
-	_lines[0]._len = _numChars;
-
-	// allocate temp buffers
-	Attributes *attrbuf = new Attributes[SCROLLBACK * TBLINELEN];
-	uint32 *charbuf = new uint32[SCROLLBACK * TBLINELEN];
-	int *alignbuf = new int[SCROLLBACK];
-	Picture **pictbuf = new Picture *[SCROLLBACK];
-	uint *hyperbuf = new uint[SCROLLBACK];
-	int *offsetbuf = new int[SCROLLBACK];
-
-	if (!attrbuf || !charbuf || !alignbuf || !pictbuf || !hyperbuf || !offsetbuf) {
-		delete[] attrbuf;
-		delete[] charbuf;
-		delete[] alignbuf;
-		delete[] pictbuf;
-		delete[] hyperbuf;
-		delete[] offsetbuf;
-		return;
-	}
-
-	// copy text to temp buffers
-
-	oldattr = _attr;
-	curattr.clear();
-
-	x = 0;
-	p = 0;
-	s = _scrollMax < SCROLLBACK ? _scrollMax : SCROLLBACK - 1;
-
-	for (k = s; k >= 0; k--) {
-		if (k == 0 && _lineRequest)
-			inputbyte = p + _inFence;
-
-		if (_lines[k]._lPic) {
-			offsetbuf[x] = p;
-			alignbuf[x] = imagealign_MarginLeft;
-			pictbuf[x] = _lines[k]._lPic;
-
-			if (pictbuf[x]) pictbuf[x]->increment();
-			hyperbuf[x] = _lines[k]._lHyper;
-			x++;
-		}
-
-		if (_lines[k]._rPic) {
-			offsetbuf[x] = p;
-			alignbuf[x] = imagealign_MarginRight;
-			pictbuf[x] = _lines[k]._rPic;
-			if (pictbuf[x]) pictbuf[x]->increment();
-			hyperbuf[x] = _lines[k]._rHyper;
-			x++;
-		}
-
-		for (i = 0; i < _lines[k]._len; i++) {
-			attrbuf[p] = curattr = _lines[k]._attrs[i];
-			charbuf[p] = _lines[k]._chars[i];
-			p++;
-		}
-
-		if (_lines[k]._newLine) {
-			attrbuf[p] = curattr;
-			charbuf[p] = '\n';
-			p++;
-		}
-	}
-
-	offsetbuf[x] = -1;
-
-	// clear window
-	clear();
-
-	// and dump text back
-	x = 0;
-	for (i = 0; i < p; i++) {
-		if (i == inputbyte)
-			break;
-		_attr = attrbuf[i];
-
-		if (offsetbuf[x] == i) {
-			putPicture(pictbuf[x], alignbuf[x], hyperbuf[x]);
-			x++;
-		}
-
-		putCharUni(charbuf[i]);
-	}
-
-	// terribly sorry about this...
-	_lastSeen = 0;
-	_scrollPos = 0;
-
-	if (inputbyte != -1) {
-		_inFence = _numChars;
-		putTextUni(charbuf + inputbyte, p - inputbyte, _numChars, 0);
-		_inCurs = _numChars;
-	}
-
-	// free temp buffers
-	delete[] attrbuf;
-	delete[] charbuf;
-	delete[] alignbuf;
-	delete[] pictbuf;
-	delete[] hyperbuf;
-	delete[] offsetbuf;
-
-	_attr = oldattr;
-
-	touchScroll();
+	Common::copy(g_conf->_tStyles, g_conf->_tStyles + style_NUMSTYLES, _styles);
+	_needsReflow = true;
+	rearrange(Rect(_bbox.left, _bbox.top - _yAdj, _bbox.right, _bbox.bottom));
 }
 
 void TextBufferWindow::touchScroll() {
 	g_vm->_selection->clearSelection();
 	_windows->repaint(_bbox);
 
-	for (int i = 0; i < _scrollMax; i++)
+	for (int i = 0; i <= _scrollMax; i++)
 		_lines[i]._dirty = true;
 }
 
@@ -832,6 +683,8 @@ void TextBufferWindow::redraw() {
 	gli_tts_flush();
 
 	Window::redraw();
+	if (_width <= 0 || _height <= 0)
+		return;
 
 	_lines[0]._len = _numChars;
 	sx0 = sx1 = selleft = selright = 0;
@@ -888,6 +741,18 @@ void TextBufferWindow::redraw() {
 			continue;
 
 		linelen = ln._len;
+		// Keep the pending input cursor visible without changing its text.
+		int inputStart = 0;
+		if (i == 0 && (_lineRequest || _lineRequestUni)) {
+			const int available = MAX(1, pw - ln._lm - ln._rm - 8 * GLI_SUBPIX);
+			while (inputStart < _inCurs &&
+					calcWidth(_chars, _attrs, inputStart, _inCurs, 0) >= available)
+				++inputStart;
+			linelen -= inputStart;
+			memmove(ln._chars, ln._chars + inputStart, linelen * sizeof(uint32));
+			memmove(ln._attrs, ln._attrs + inputStart, linelen * sizeof(Attributes));
+			ln._len = linelen;
+		}
 
 		// kill spaces at the end unless they're a different color
 		color = Windows::_overrideBgSet ? g_conf->_windowColor : _bgColor;
@@ -1029,7 +894,7 @@ void TextBufferWindow::redraw() {
 		 */
 
 		if (_windows->getFocusWindow() == this && i == 0 && (_lineRequest || _lineRequestUni)) {
-			w = calcWidth(_chars, _attrs, 0, _inCurs, spw);
+			w = calcWidth(_chars, _attrs, inputStart, _inCurs, spw);
 			if (w < pw - _font._caretShape * 2 * GLI_SUBPIX)
 				_font.drawCaret(Point(x0 + SLOP + ln._lm + w, y + _font._baseLine));
 		}

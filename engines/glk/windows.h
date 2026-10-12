@@ -464,17 +464,21 @@ public:
 	 * Set the size of a window
 	 */
 	virtual void setSize(const Point &newSize) {
-		_bbox.setWidth(newSize.x);
-		_bbox.setHeight(newSize.y);
-		rearrange(_bbox);
+		Rect box(_bbox);
+		box.top -= _yAdj;
+		box.setWidth(newSize.x);
+		box.setHeight(newSize.y);
+		rearrange(box);
 	}
 
 	/**
 	 * Sets the position of a window
 	 */
 	virtual void setPosition(const Point &newPos) {
-		_bbox.moveTo(newPos);
-		rearrange(_bbox);
+		Rect box(_bbox);
+		box.top -= _yAdj;
+		box.moveTo(newPos);
+		rearrange(box);
 	}
 
 	/**

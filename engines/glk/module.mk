@@ -31,6 +31,7 @@ MODULE_OBJS := \
 	window_graphics.o \
 	window_pair.o \
 	window_text_buffer.o \
+	window_text_buffer_reflow.o \
 	window_text_grid.o \
 	adrift/adrift.o \
 	adrift/os_glk.o \
