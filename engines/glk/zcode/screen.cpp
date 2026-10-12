@@ -33,16 +33,20 @@
 namespace Glk {
 namespace ZCode {
 
-FrotzScreen::FrotzScreen() : Glk::Screen() {
+FrotzScreen::FrotzScreen() : Glk::Screen(), _version6(false) {
 	g_conf->_tStyles[style_User1].font = CUSTOM;
 	g_conf->_gStyles[style_User1].font = CUSTOM;
 	g_conf->_tStyles[style_User2].font = CUSTOM2;
+	g_conf->_tStyleRequests[style_User1] = kStyleRequestFont;
+	g_conf->_gStyleRequests[style_User1] = kStyleRequestFont;
+	g_conf->_tStyleRequests[style_User2] = kStyleRequestFont;
 }
 
 void FrotzScreen::loadFonts(Common::Archive *archive) {
 	// Get the zmachine version. At this point the header isn't loaded, so we have to do it manually
 	g_vm->_gameFile.seek(0);
 	byte version = g_vm->_gameFile.readByte();
+	_version6 = version == 6;
 
 	if (version == 6) {
 		loadVersion6Fonts(archive);
@@ -52,7 +56,14 @@ void FrotzScreen::loadFonts(Common::Archive *archive) {
 	}
 
 	// Add character graphics and runic fonts
-	loadExtraFonts(archive);
+	if (!loadExtraFonts(archive, g_conf->_propInfo._size, _fonts))
+		error("Could not load Z-code character graphics or runic fonts");
+}
+
+bool FrotzScreen::loadReplacementFonts(Common::Archive *archive, const Conf &settings,
+		Common::Array<const Graphics::Font *> &fonts) {
+	return !_version6 && Screen::loadReplacementFonts(archive, settings, fonts) &&
+		loadExtraFonts(archive, settings._propInfo._size, fonts);
 }
 
 void FrotzScreen::loadVersion6Fonts(Common::Archive *archive) {
@@ -76,6 +87,10 @@ void FrotzScreen::loadVersion6Fonts(Common::Archive *archive) {
 	for (uint idx = 0; idx < style_NUMSTYLES; ++idx) {
 		g_conf->_tStyles[idx].bg = g_conf->_tStylesDefault[idx].bg = zcolor_Transparent;
 		g_conf->_gStyles[idx].bg = g_conf->_gStylesDefault[idx].bg = zcolor_Transparent;
+		g_conf->_tStyleRequests[idx] |= kStyleRequestBackground;
+		g_conf->_gStyleRequests[idx] |= kStyleRequestBackground;
+		g_conf->_tDefaultRequests[idx] |= kStyleRequestBackground;
+		g_conf->_gDefaultRequests[idx] |= kStyleRequestBackground;
 	}
 
 	_fonts.resize(8);
@@ -109,20 +124,29 @@ void FrotzScreen::loadVersion6Fonts(Common::Archive *archive) {
 	_fonts[PROPZ] = new VariableWidthBitmapFont(emph, fontSize, 6, 8);
 }
 
-void FrotzScreen::loadExtraFonts(Common::Archive *archive) {
+bool FrotzScreen::loadExtraFonts(Common::Archive *archive, double size,
+		Common::Array<const Graphics::Font *> &fonts) {
 	Image::XBMDecoder decoder;
 	decoder.loadBits(infocom_graphics_bits, infocom_graphics_width, infocom_graphics_height);
 
-	Common::Point fontSize(_fonts[0]->getMaxCharWidth(), _fonts[0]->getFontHeight());
-	_fonts.push_back(new FixedWidthBitmapFont(*decoder.getSurface(), fontSize));
+	Common::Point fontSize(fonts[0]->getMaxCharWidth(), fonts[0]->getFontHeight());
+	fonts.push_back(new FixedWidthBitmapFont(*decoder.getSurface(), fontSize));
 
 	// Add Runic font. It provides cleaner versions of the runic characters in the
 	// character graphics font
 	Common::File *f = new Common::File();
-	if (!f->open("NotoSansRunic-Regular.ttf", *archive))
-		error("Could not load font");
-
-	_fonts.push_back(Graphics::loadTTFFont(f, DisposeAfterUse::YES, g_conf->_propInfo._size, Graphics::kTTFSizeModeCharacter));
+	if (!f->open("NotoSansRunic-Regular.ttf", *archive)) {
+		delete f;
+		return false;
+	}
+	const Graphics::Font *font = Graphics::loadTTFFont(f, DisposeAfterUse::YES,
+		(int)size, Graphics::kTTFSizeModeCharacter);
+	if (!font) {
+		delete f;
+		return false;
+	}
+	fonts.push_back(font);
+	return true;
 }
 
 } // End of namespace ZCode

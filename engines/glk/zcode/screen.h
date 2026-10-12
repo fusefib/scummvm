@@ -32,6 +32,7 @@ namespace ZCode {
  */
 class FrotzScreen : public Glk::Screen {
 private:
+	bool _version6;
 	/**
 	 * Handles loading fonts for V6 games
 	 */
@@ -40,17 +41,21 @@ private:
 	/**
 	 * Handles loading the character graphics and runic fonts
 	 */
-	void loadExtraFonts(Common::Archive *archive);
+	bool loadExtraFonts(Common::Archive *archive, double size,
+		Common::Array<const Graphics::Font *> &fonts);
 protected:
 	/**
 	 * Load the fonts
 	 */
 	void loadFonts(Common::Archive *archive) override;
+	bool loadReplacementFonts(Common::Archive *archive, const Conf &settings,
+		Common::Array<const Graphics::Font *> &fonts) override;
 public:
 	/**
 	 * Constructor
 	 */
 	FrotzScreen();
+	bool supportsLiveMetrics() const override { return !_version6; }
 };
 
 } // End of namespace ZCode

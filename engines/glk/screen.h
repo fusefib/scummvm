@@ -31,6 +31,20 @@
 
 namespace Glk {
 
+class Conf;
+
+/** Temporary ownership of a replacement font set; installation swaps owners. */
+class PreparedFonts {
+	friend class Screen;
+	Common::Array<const Graphics::Font *> _fonts;
+	PreparedFonts(const PreparedFonts &);
+	PreparedFonts &operator=(const PreparedFonts &);
+public:
+	PreparedFonts() {}
+	~PreparedFonts();
+	void clear();
+};
+
 #define FONTS_TOTAL 8
 
 enum CaretShape {
@@ -59,6 +73,8 @@ protected:
 	 * Load the fonts
 	 */
 	virtual void loadFonts(Common::Archive *archive);
+	virtual bool loadReplacementFonts(Common::Archive *archive, const Conf &settings,
+		Common::Array<const Graphics::Font *> &fonts);
 public:
 	/**
 	 * Return the name for a given font Id
@@ -88,6 +104,12 @@ public:
 	 * Initialize the screen
 	 */
 	void initialize();
+
+	virtual bool supportsLiveMetrics() const { return true; }
+	bool prepareFonts(Conf &settings, bool replace, PreparedFonts &prepared);
+	void installFonts(PreparedFonts &prepared);
+	size_t preparedTextWidth(const PreparedFonts &prepared, int fontIdx,
+		const Common::U32String &text) const;
 
 	/**
 	 * Fills the screen with a given color

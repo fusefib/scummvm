@@ -29,6 +29,63 @@ namespace Glk {
 
 #define FONTS_FILENAME "fonts.dat"
 
+PreparedFonts::~PreparedFonts() {
+	clear();
+}
+
+void PreparedFonts::clear() {
+	for (uint i = 0; i < _fonts.size(); ++i)
+		delete _fonts[i];
+	_fonts.clear();
+}
+
+bool Screen::loadReplacementFonts(Common::Archive *archive, const Conf &settings,
+		Common::Array<const Graphics::Font *> &fonts) {
+	for (int i = MONOR; i <= PROPZ; ++i) {
+		const double size = i < PROPR ? settings._monoInfo._size : settings._propInfo._size;
+		const Graphics::Font *font = loadFontFromArchive((FACES)i, archive, size);
+		if (!font)
+			return false;
+		fonts.push_back(font);
+	}
+	return true;
+}
+
+bool Screen::prepareFonts(Conf &settings, bool replace, PreparedFonts &prepared) {
+	prepared.clear();
+	if (!supportsLiveMetrics())
+		return false;
+	if (replace) {
+		Common::Archive *archive = openFontArchive();
+		const bool loaded = archive && loadReplacementFonts(archive, settings, prepared._fonts);
+		delete archive;
+		if (!loaded) {
+			prepared.clear();
+			return false;
+		}
+	}
+	const Common::Array<const Graphics::Font *> &fonts = replace ? prepared._fonts : _fonts;
+	if (fonts.size() < FONTS_TOTAL)
+		return false;
+	// The caller supplies configured minima, not previously measured metrics.
+	measureFont(settings._monoInfo, *fonts[MONOR], *fonts[MONOR], 0);
+	measureFont(settings._propInfo, *fonts[PROPZ], *fonts[MONOR], settings._propInfo._lineSeparation);
+	return settings._monoInfo._cellW > 0 && settings._monoInfo._cellH > 0 &&
+		settings._propInfo._cellH > 0;
+}
+
+void Screen::installFonts(PreparedFonts &prepared) {
+	if (!prepared._fonts.empty())
+		_fonts.swap(prepared._fonts);
+}
+
+size_t Screen::preparedTextWidth(const PreparedFonts &prepared, int fontIdx,
+		const Common::U32String &text) const {
+	const Common::Array<const Graphics::Font *> &fonts = prepared._fonts.empty() ? _fonts : prepared._fonts;
+	assert(fontIdx >= 0 && (uint)fontIdx < fonts.size());
+	return fonts[fontIdx]->getStringWidth(text) * GLI_SUBPIX;
+}
+
 Screen::~Screen() {
 	for (uint index = 0; index < _fonts.size(); ++index)
 		delete _fonts[index];
