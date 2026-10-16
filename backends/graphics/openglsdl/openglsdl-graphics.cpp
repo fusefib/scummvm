@@ -519,9 +519,11 @@ bool OpenGLSdlGraphicsManager::loadVideoMode(uint requestedWidth, uint requested
 	// that the requested size came from somewhere else.
 	_gotResize = false;
 
-	// Save the requested dimensions.
-	_lastRequestedWidth  = requestedWidth;
-	_lastRequestedHeight = requestedHeight;
+	// Keep the game's resize step when native rendering resizes its surface.
+	if (!_renderingAtOutputResolution) {
+		_lastRequestedWidth  = requestedWidth;
+		_lastRequestedHeight = requestedHeight;
+	}
 
 	// Fetch current desktop resolution and determining max. width and height
 	Common::Rect desktopRes = _window->getDesktopResolution();
