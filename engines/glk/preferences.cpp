@@ -44,7 +44,7 @@ static const GlkOptionContract GLK_OPTION_CONTRACTS[] = {
 	{ "propsize", kGlkOptionFloat, 10, 25 },
 	{ "leading", kGlkOptionInteger, 0, 200 },
 	{ "baseline", kGlkOptionInteger, 0, 200 },
-	{ "glk_presentation_mode", kGlkOptionInteger, 0, 2 },
+	{ "glk_presentation_mode", kGlkOptionInteger, 0, 3 },
 	{ "glk_reflow_scale", kGlkOptionInteger, 50, 300 },
 	{ "wmarginx", kGlkOptionInteger, 0, 200 },
 	{ "wmarginy", kGlkOptionInteger, 0, 200 },

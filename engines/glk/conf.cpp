@@ -161,7 +161,7 @@ void Conf::synchronize() {
 	syncAsInt("height", _height);
 	int presentation = kPresentationLegacy;
 	if (GlkPreferences::parseInteger(getString("glk_presentation_mode"), presentation) &&
-			presentation >= kPresentationLegacy && presentation <= kPresentationReflow)
+			presentation >= kPresentationLegacy && presentation <= kPresentationAdaptiveReflow)
 		_presentationMode = presentation;
 	int reflowScale = 100;
 	if (GlkPreferences::parseInteger(getString("glk_reflow_scale"), reflowScale) &&

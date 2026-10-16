@@ -28,7 +28,8 @@ namespace Glk {
 enum PresentationMode {
 	kPresentationLegacy,
 	kPresentationOriginal,
-	kPresentationReflow
+	kPresentationReflow,
+	kPresentationAdaptiveReflow
 };
 
 /** Game coordinates stay logical; only the screen draws in render pixels. */

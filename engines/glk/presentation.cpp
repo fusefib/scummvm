@@ -41,14 +41,22 @@ bool PresentationGeometry::calculate(const Common::Point &canvas, const Common::
 		scale = MIN((double)output.x / canvas.x, (double)output.y / canvas.y);
 		renderWidth = MAX(1, (int)(canvas.x * scale));
 		renderHeight = MAX(1, (int)(canvas.y * scale));
-	} else if (mode == kPresentationReflow) {
+	} else if (mode == kPresentationReflow || mode == kPresentationAdaptiveReflow) {
 		if (textScale < 50 || textScale > 300 || !(density > 0))
 			return false;
 		scale = textScale * density / 100.0;
+		if (mode == kPresentationAdaptiveReflow) {
+			// Keep at least the startup canvas available for text and split windows.
+			scale = MIN(scale, MIN((double)output.x / canvas.x, (double)output.y / canvas.y));
+		}
 		if (!(output.x / scale <= 32767 && output.y / scale <= 32767))
 			return false;
 		logicalWidth = (int)(output.x / scale);
 		logicalHeight = (int)(output.y / scale);
+		if (mode == kPresentationAdaptiveReflow) {
+			logicalWidth = MAX(logicalWidth, (int)canvas.x);
+			logicalHeight = MAX(logicalHeight, (int)canvas.y);
+		}
 		renderWidth = output.x;
 		renderHeight = output.y;
 	} else if (mode != kPresentationLegacy) {
