@@ -42,14 +42,14 @@ private:
 	 * Handles loading the character graphics and runic fonts
 	 */
 	bool loadExtraFonts(Common::Archive *archive, double size,
-		Common::Array<const Graphics::Font *> &fonts);
+		Common::Array<const Graphics::Font *> &fonts, double pixelAspect = 1.0);
 protected:
 	/**
 	 * Load the fonts
 	 */
 	void loadFonts(Common::Archive *archive) override;
 	bool loadReplacementFonts(Common::Archive *archive, const Conf &settings,
-		Common::Array<const Graphics::Font *> &fonts) override;
+		Common::Array<const Graphics::Font *> &fonts, double pixelAspect = 1.0) override;
 public:
 	/**
 	 * Constructor

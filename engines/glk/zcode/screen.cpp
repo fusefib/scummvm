@@ -61,9 +61,9 @@ void FrotzScreen::loadFonts(Common::Archive *archive) {
 }
 
 bool FrotzScreen::loadReplacementFonts(Common::Archive *archive, const Conf &settings,
-		Common::Array<const Graphics::Font *> &fonts) {
-	return !_version6 && Screen::loadReplacementFonts(archive, settings, fonts) &&
-		loadExtraFonts(archive, settings._propInfo._size, fonts);
+		Common::Array<const Graphics::Font *> &fonts, double pixelAspect) {
+	return !_version6 && Screen::loadReplacementFonts(archive, settings, fonts, pixelAspect) &&
+		loadExtraFonts(archive, settings._propInfo._size, fonts, pixelAspect);
 }
 
 void FrotzScreen::loadVersion6Fonts(Common::Archive *archive) {
@@ -126,7 +126,7 @@ void FrotzScreen::loadVersion6Fonts(Common::Archive *archive) {
 }
 
 bool FrotzScreen::loadExtraFonts(Common::Archive *archive, double size,
-		Common::Array<const Graphics::Font *> &fonts) {
+		Common::Array<const Graphics::Font *> &fonts, double pixelAspect) {
 	Image::XBMDecoder decoder;
 	decoder.loadBits(infocom_graphics_bits, infocom_graphics_width, infocom_graphics_height);
 
@@ -141,7 +141,7 @@ bool FrotzScreen::loadExtraFonts(Common::Archive *archive, double size,
 		return false;
 	}
 	const Graphics::Font *font = Graphics::loadTTFFont(f, DisposeAfterUse::YES,
-		(int)size, Graphics::kTTFSizeModeCharacter);
+		(int)size, Graphics::kTTFSizeModeCharacter, 72, (uint)(72 * pixelAspect + 0.5));
 	if (!font) {
 		delete f;
 		return false;

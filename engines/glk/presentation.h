@@ -37,10 +37,11 @@ struct PresentationGeometry {
 	Common::Point logicalSize;
 	Common::Point renderSize;
 	double fontScale;
+	double pixelAspect; // Logical pixel height relative to its width.
 
-	PresentationGeometry() : fontScale(1.0) {}
+	PresentationGeometry() : fontScale(1.0), pixelAspect(1.0) {}
 	bool calculate(const Common::Point &canvas, const Common::Point &output,
-		PresentationMode mode, int textScale, double density, int bytesPerPixel);
+		PresentationMode mode, int textScale, double density, int bytesPerPixel, bool aspectCorrection = false);
 	Common::Rect toRender(const Common::Rect &rect) const;
 	Common::Point toLogical(const Common::Point &point) const;
 	int renderX(int x) const;

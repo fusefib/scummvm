@@ -24,23 +24,31 @@
 #include "glk/screen.h"
 #include "glk/selection.h"
 #include "glk/windows.h"
+#include "common/config-manager.h"
 #include "common/ptr.h"
 #include "common/util.h"
 
 namespace Glk {
 
 bool PresentationGeometry::calculate(const Common::Point &canvas, const Common::Point &output,
-		PresentationMode mode, int textScale, double density, int bytesPerPixel) {
+		PresentationMode mode, int textScale, double density, int bytesPerPixel, bool aspectCorrection) {
 	if (canvas.x <= 0 || canvas.y <= 0 || output.x <= 0 || output.y <= 0 ||
 			bytesPerPixel < 2 || bytesPerPixel > 4)
 		return false;
 	int logicalWidth = canvas.x, logicalHeight = canvas.y;
 	int renderWidth = canvas.x, renderHeight = canvas.y;
 	double scale = 1.0;
+	double aspect = 1.0;
 	if (mode == kPresentationOriginal) {
-		scale = MIN((double)output.x / canvas.x, (double)output.y / canvas.y);
+		int displayHeight = canvas.y;
+		if (aspectCorrection && ((canvas.x == 320 && canvas.y == 200) ||
+				(canvas.x == 640 && (canvas.y == 400 || canvas.y == 350)) ||
+				(canvas.x == 720 && (canvas.y == 348 || canvas.y == 350))))
+			displayHeight = canvas.x * 3 / 4;
+		aspect = (double)displayHeight / canvas.y;
+		scale = MIN((double)output.x / canvas.x, (double)output.y / displayHeight);
 		renderWidth = MAX(1, (int)(canvas.x * scale));
-		renderHeight = MAX(1, (int)(canvas.y * scale));
+		renderHeight = MAX(1, (int)(displayHeight * scale));
 	} else if (mode == kPresentationReflow || mode == kPresentationAdaptiveReflow) {
 		if (textScale < 50 || textScale > 300 || !(density > 0))
 			return false;
@@ -70,6 +78,7 @@ bool PresentationGeometry::calculate(const Common::Point &canvas, const Common::
 	logicalSize = Common::Point(logicalWidth, logicalHeight);
 	renderSize = Common::Point(renderWidth, renderHeight);
 	fontScale = scale;
+	pixelAspect = aspect;
 	return true;
 }
 
@@ -105,14 +114,16 @@ bool GlkEngine::updatePresentation(bool backendChanged) {
 	if (!_screen->supportsLiveMetrics())
 		return false;
 	const Common::Point output = g_system->getGameOutputSize();
+	const bool aspect = _nativePresentation ? _savedAspectCorrection :
+		g_system->getFeatureState(OSystem::kFeatureAspectRatioCorrection);
 	PresentationGeometry geometry;
 	if (!geometry.calculate(_screen->canvasSize(), output, mode, _conf->_reflowScale,
-			g_system->getHiDPIScreenFactor(), _screen->format.bytesPerPixel))
+			g_system->getHiDPIScreenFactor(), _screen->format.bytesPerPixel, aspect))
 		return false;
 	const PresentationGeometry &current = _screen->presentation();
 	const bool resize = geometry.logicalSize != current.logicalSize;
 	const bool redraw = resize || geometry.renderSize != current.renderSize ||
-		geometry.fontScale != current.fontScale;
+		geometry.fontScale != current.fontScale || geometry.pixelAspect != current.pixelAspect;
 	if (_nativePresentation && mode != kPresentationLegacy && !redraw && !backendChanged &&
 			_presentationScreenChangeID == g_system->getScreenChangeID())
 		return true;
@@ -141,7 +152,6 @@ bool GlkEngine::updatePresentation(bool backendChanged) {
 	const int scaler = g_system->getScaler();
 	const int scaleFactor = g_system->getScaleFactor();
 	const int stretch = g_system->getStretchMode();
-	const bool aspect = g_system->getFeatureState(OSystem::kFeatureAspectRatioCorrection);
 	if (mode == kPresentationLegacy) {
 		g_system->beginGFXTransaction();
 		g_system->initSize(geometry.renderSize.x, geometry.renderSize.y, &_screen->format);
@@ -200,6 +210,8 @@ void GlkEngine::retryPresentation() {
 
 void GlkEngine::applyGameSettings() {
 	// The game menu has hidden its overlay and restored backend preferences.
+	if (_nativePresentation)
+		_savedAspectCorrection = ConfMan.getBool("aspect_ratio");
 	updatePresentation(true);
 }
 

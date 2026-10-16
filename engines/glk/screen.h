@@ -73,7 +73,7 @@ private:
 	Common::Point _canvasSize;
 	PresentationGeometry _presentation;
 	Common::Array<const Graphics::Font *> _renderFonts;
-	bool loadRenderFonts(Common::Archive *archive, const Conf &settings, double scale,
+	bool loadRenderFonts(Common::Archive *archive, const Conf &settings, const PresentationGeometry &geometry,
 		Common::Array<const Graphics::Font *> &fonts);
 	int drawRenderString(int x, int y, int fontIdx, uint color,
 		const Common::U32String &text, int spw, bool kern);
@@ -95,7 +95,7 @@ protected:
 	 */
 	virtual void loadFonts(Common::Archive *archive);
 	virtual bool loadReplacementFonts(Common::Archive *archive, const Conf &settings,
-		Common::Array<const Graphics::Font *> &fonts);
+		Common::Array<const Graphics::Font *> &fonts, double pixelAspect = 1.0);
 public:
 	/**
 	 * Return the name for a given font Id
@@ -109,7 +109,7 @@ public:
 	static void measureFont(FontInfo &info, const Graphics::Font &font,
 		const Graphics::Font &fixedFont, int lineSeparation);
 	static const Graphics::Font *loadFontFromArchive(FACES face,
-		Common::Archive *archive, double size);
+		Common::Archive *archive, double size, double pixelAspect = 1.0);
 public:
 	/**
 	 * Constructor
