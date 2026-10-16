@@ -133,6 +133,9 @@ void TextGridWindow::putCharUni(uint32 ch) {
 	if (_attr.style < style_User1)
 		gli_tts_speak(&ch, 1);
 
+	if (!_width)
+		return;
+
 	// Canonicalize the cursor position. That is, the cursor may have been
 	// left outside the window area; wrap it if necessary.
 	if (_curX < 0) {
@@ -165,6 +168,9 @@ void TextGridWindow::putCharUni(uint32 ch) {
 }
 
 bool TextGridWindow::unputCharUni(uint32 ch) {
+	if (!_width)
+		return false;
+
 	TextGridRow *ln;
 	int oldx = _curX, oldy = _curY;
 
@@ -665,6 +671,9 @@ void TextGridWindow::redraw() {
 	gli_tts_flush();
 
 	Window::redraw();
+
+	if (!_width)
+		return;
 
 	x0 = _bbox.left;
 	y0 = _bbox.top;
