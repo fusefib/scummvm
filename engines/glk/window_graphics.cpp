@@ -82,7 +82,7 @@ void GraphicsWindow::redraw() {
 		_dirty = 0;
 
 		if (_surface)
-			screen.blitFrom(*_surface, Point(_bbox.left, _bbox.top));
+			screen.drawImage(*_surface, Point(_bbox.left, _bbox.top));
 	}
 }
 

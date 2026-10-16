@@ -1,6 +1,7 @@
 MODULE := engines/glk
 
 MODULE_OBJS := \
+	presentation.o \
 	appearance.o \
 	blorb.o \
 	conf.o \

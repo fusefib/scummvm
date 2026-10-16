@@ -695,7 +695,7 @@ void TextGridWindow::redraw() {
 					o = x;
 
 					for (k = a, o = x; k < b; k++, o += _font._cellW) {
-						screen.drawStringUni(Point(o * GLI_SUBPIX, y + _font._baseLine), font,
+						screen.drawStringUni(o * GLI_SUBPIX, y + _font._baseLine, font,
 											 fgcolor, Common::U32String(ln->_chars[k]), -1);
 					}
 					if (link) {
@@ -719,12 +719,12 @@ void TextGridWindow::redraw() {
 			// Draw the caret if necessary
 			if (_windows->getFocusWindow() == this && i == _curY &&
 					(_lineRequest || _lineRequestUni || _charRequest || _charRequestUni)) {
-				_font.drawCaret(Point((x0 + _curX * _font._cellW) * GLI_SUBPIX, y + _font._baseLine));
+				_font.drawCaret((x0 + _curX * _font._cellW) * GLI_SUBPIX, y + _font._baseLine);
 			}
 
 			// Write out the text
 			for (k = a, o = x; k < b; k++, o += _font._cellW) {
-				screen.drawStringUni(Point(o * GLI_SUBPIX, y + _font._baseLine), font,
+				screen.drawStringUni(o * GLI_SUBPIX, y + _font._baseLine, font,
 									 fgcolor, Common::U32String(ln->_chars[k]));
 			}
 			if (link) {

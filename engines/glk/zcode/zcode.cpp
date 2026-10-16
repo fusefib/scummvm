@@ -75,15 +75,15 @@ void ZCode::appearanceChanged(const Conf &before, const Conf &after, bool metric
 	if (metrics) {
 		h_font_width = _conf->_monoInfo._cellW;
 		h_font_height = _conf->_monoInfo._cellH;
-		h_screen_width = _screen->w;
-		h_screen_height = _screen->h;
+		h_screen_width = _screen->presentation().logicalSize.x;
+		h_screen_height = _screen->presentation().logicalSize.y;
 		uint columns = 0, upperRows = 0, lowerRows = 0;
 		if (_wp._upper)
 			glk_window_get_size(_wp._upper, &columns, &upperRows);
 		if (_wp._lower)
 			glk_window_get_size(_wp._lower, columns ? nullptr : &columns, &lowerRows);
-		h_screen_cols = columns;
-		h_screen_rows = upperRows + lowerRows + 1;
+		h_screen_cols = MIN<uint>(columns, 255);
+		h_screen_rows = MIN<uint>(upperRows + lowerRows + 1, 255);
 		if (zmp)
 			update_screen_header();
 	}

@@ -253,10 +253,7 @@ void Picture::decrement() {
 }
 
 void Picture::drawPicture(const Common::Point &destPos, const Common::Rect &box) {
-	Graphics::ManagedSurface s(*g_vm->_screen, box);
-	Common::Point pt(destPos.x - box.left, destPos.y - box.top);
-
-	s.transBlitFrom(*this, pt, _transColor);
+	g_vm->_screen->drawPicture(*this, destPos, box, _transColor);
 }
 
 } // End of namespace Glk

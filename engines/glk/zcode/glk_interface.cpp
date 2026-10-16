@@ -74,12 +74,12 @@ void GlkInterface::initialize() {
 
 	gos_channel = nullptr;
 
-	h_screen_width = g_system->getWidth();
-	h_screen_height = g_system->getHeight();
+	h_screen_width = _screen->presentation().logicalSize.x;
+	h_screen_height = _screen->presentation().logicalSize.y;
 	h_font_width = g_conf->_monoInfo._cellW;
 	h_font_height = g_conf->_monoInfo._cellH;
-	h_screen_cols = h_screen_width / h_font_width;
-	h_screen_rows = h_screen_height / h_font_height;
+	h_screen_cols = MIN<uint>(h_screen_width / h_font_width, 255);
+	h_screen_rows = MIN<uint>(h_screen_height / h_font_height, 255);
 
 	// Must be after screen dimensions are computed
 	if (g_conf->_graphics) {
@@ -302,8 +302,8 @@ void GlkInterface::gos_update_width() {
 	uint width;
 	if (_wp._upper) {
 		glk_window_get_size(_wp._upper, &width, nullptr);
-		h_screen_cols = width;
-		SET_BYTE(H_SCREEN_COLS, width);
+		h_screen_cols = MIN<uint>(width, 255);
+		SET_BYTE(H_SCREEN_COLS, h_screen_cols);
 
 		uint curx = _wp._upper[X_CURSOR];
 		if (curx > width)
@@ -317,7 +317,7 @@ void GlkInterface::gos_update_height() {
 	if (_wp.currWin()) {
 		glk_window_get_size(_wp._upper, nullptr, &height_upper);
 		glk_window_get_size(_wp._lower, nullptr, &height_lower);
-		h_screen_rows = height_upper + height_lower + 1;
+		h_screen_rows = MIN<uint>(height_upper + height_lower + 1, 255);
 		SET_BYTE(H_SCREEN_ROWS, h_screen_rows);
 	}
 }
@@ -464,7 +464,8 @@ void GlkInterface::showBeyondZorkTitle() {
 
 	if (saveSlot == -1) {
 		winid_t win = glk_window_open(nullptr, 0, 0, wintype_Graphics, 0);
-		if (glk_image_draw_scaled(win, 1, 0, 0, g_vm->_screen->w, g_vm->_screen->h))
+		const Common::Point &size = _screen->presentation().logicalSize;
+		if (glk_image_draw_scaled(win, 1, 0, 0, size.x, size.y))
 			_events->waitForPress();
 
 		glk_window_close(win, nullptr);

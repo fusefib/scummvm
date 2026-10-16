@@ -29,14 +29,65 @@ namespace Glk {
 
 #define FONTS_FILENAME "fonts.dat"
 
+static void deleteFonts(Common::Array<const Graphics::Font *> &fonts) {
+	for (uint i = 0; i < fonts.size(); ++i)
+		delete fonts[i];
+	fonts.clear();
+}
+
+Screen::Screen() : Graphics::Screen(), _canvasSize(w, h) {
+	_presentation.logicalSize = _presentation.renderSize = _canvasSize;
+}
+
 PreparedFonts::~PreparedFonts() {
 	clear();
 }
 
 void PreparedFonts::clear() {
-	for (uint i = 0; i < _fonts.size(); ++i)
-		delete _fonts[i];
-	_fonts.clear();
+	deleteFonts(_fonts);
+	deleteFonts(_renderFonts);
+}
+
+PreparedPresentation::~PreparedPresentation() {
+	_surface.free();
+	deleteFonts(_fonts);
+}
+
+bool Screen::loadRenderFonts(Common::Archive *archive, const Conf &settings, double scale,
+		Common::Array<const Graphics::Font *> &fonts) {
+	Conf scaled(settings);
+	scaled._monoInfo._size *= scale;
+	scaled._propInfo._size *= scale;
+	return loadReplacementFonts(archive, scaled, fonts);
+}
+
+bool Screen::preparePresentation(const Conf &settings, const PresentationGeometry &geometry,
+		PreparedPresentation &prepared) {
+	if (!supportsLiveMetrics())
+		return false;
+	prepared._geometry = geometry;
+	if (geometry.fontScale != _presentation.fontScale && geometry.fontScale != 1.0) {
+		Common::Archive *archive = openFontArchive();
+		const bool loaded = archive && loadRenderFonts(archive, settings, geometry.fontScale, prepared._fonts);
+		delete archive;
+		if (!loaded)
+			return false;
+	}
+	if (w != geometry.renderSize.x || h != geometry.renderSize.y)
+		prepared._surface.create(geometry.renderSize.x, geometry.renderSize.y, format);
+	return true;
+}
+
+void Screen::installPresentation(PreparedPresentation &prepared) {
+	if (prepared._surface.getPixels()) {
+		// Both surfaces own their pixels; installation does not allocate.
+		SWAP(*surfacePtr(), prepared._surface);
+		clearDirtyRects();
+	}
+	if (prepared._geometry.fontScale != _presentation.fontScale)
+		_renderFonts.swap(prepared._fonts);
+	_presentation = prepared._geometry;
+	makeAllDirty();
 }
 
 bool Screen::loadReplacementFonts(Common::Archive *archive, const Conf &settings,
@@ -57,7 +108,9 @@ bool Screen::prepareFonts(Conf &settings, bool replace, PreparedFonts &prepared)
 		return false;
 	if (replace) {
 		Common::Archive *archive = openFontArchive();
-		const bool loaded = archive && loadReplacementFonts(archive, settings, prepared._fonts);
+		const bool loaded = archive && loadReplacementFonts(archive, settings, prepared._fonts) &&
+			(_presentation.fontScale == 1.0 ||
+			loadRenderFonts(archive, settings, _presentation.fontScale, prepared._renderFonts));
 		delete archive;
 		if (!loaded) {
 			prepared.clear();
@@ -75,8 +128,10 @@ bool Screen::prepareFonts(Conf &settings, bool replace, PreparedFonts &prepared)
 }
 
 void Screen::installFonts(PreparedFonts &prepared) {
-	if (!prepared._fonts.empty())
+	if (!prepared._fonts.empty()) {
 		_fonts.swap(prepared._fonts);
+		_renderFonts.swap(prepared._renderFonts);
+	}
 }
 
 size_t Screen::preparedTextWidth(const PreparedFonts &prepared, int fontIdx,
@@ -87,8 +142,8 @@ size_t Screen::preparedTextWidth(const PreparedFonts &prepared, int fontIdx,
 }
 
 Screen::~Screen() {
-	for (uint index = 0; index < _fonts.size(); ++index)
-		delete _fonts[index];
+	deleteFonts(_fonts);
+	deleteFonts(_renderFonts);
 }
 
 void Screen::initialize() {
@@ -104,7 +159,40 @@ void Screen::fill(uint color) {
 
 void Screen::fillRect(const Rect &box, uint color) {
 	if (color != zcolor_Transparent)
-		Graphics::Screen::fillRect(box, color);
+		Graphics::Screen::fillRect(_presentation.toRender(box), color);
+}
+
+void Screen::hLine(int x, int y, int x2, uint color) {
+	fillRect(Rect(x, y, x2 + 1, y + 1), color);
+}
+
+void Screen::vLine(int x, int y, int y2, uint color) {
+	fillRect(Rect(x, y, x + 1, y2 + 1), color);
+}
+
+void Screen::drawImage(const Graphics::ManagedSurface &image, const Point &position) {
+	const Common::Rect destination(position.x, position.y, position.x + image.w, position.y + image.h);
+	Graphics::Screen::blitFrom(image, image.getBounds(), _presentation.toRender(destination));
+}
+
+void Screen::drawPicture(const Graphics::ManagedSurface &image, const Point &position,
+		const Common::Rect &clip, uint transparent) {
+	const int left = MAX(0, clip.left - position.x);
+	const int top = MAX(0, clip.top - position.y);
+	const int right = MIN<int>(image.w, clip.right - position.x);
+	const int bottom = MIN<int>(image.h, clip.bottom - position.y);
+	if (left >= right || top >= bottom)
+		return;
+	Common::Rect bounds = _presentation.toRender(clip);
+	bounds.clip(getBounds());
+	if (bounds.isEmpty())
+		return;
+	Graphics::ManagedSurface destination(*this, bounds);
+	// Clip in logical coordinates before scaling beyond Rect's signed range.
+	Common::Rect area = _presentation.toRender(Common::Rect(position.x + left, position.y + top,
+		position.x + right, position.y + bottom));
+	area.translate(-bounds.left, -bounds.top);
+	destination.transBlitFrom(image, Common::Rect(left, top, right, bottom), area, transparent);
 }
 
 void Screen::measureFont(FontInfo &info, const Graphics::Font &font,
@@ -200,9 +288,11 @@ Common::String Screen::getFontName(FACES font) {
 	return "monor";
 }
 
-int Screen::drawString(const Point &pos, int fontIdx, uint color, const Common::String &text, int spw) {
+int Screen::drawString(int x, int y, int fontIdx, uint color, const Common::String &text, int spw) {
+	if (_presentation.fontScale != 1.0)
+		return drawRenderString(x, y, fontIdx, color, Common::U32String(text, Common::kLatin1), 0, true);
 	int baseLine = (fontIdx >= PROPR) ? g_conf->_propInfo._baseLine : g_conf->_monoInfo._baseLine;
-	Point pt(pos.x / GLI_SUBPIX, pos.y - baseLine);
+	Point pt(x / GLI_SUBPIX, y - baseLine);
 	const Graphics::Font *font = _fonts[fontIdx];
 	font->drawString(this, text, pt.x, pt.y, w - pt.x, color);
 
@@ -210,12 +300,14 @@ int Screen::drawString(const Point &pos, int fontIdx, uint color, const Common::
 	return MIN((int)pt.x, (int)w) * GLI_SUBPIX;
 }
 
-int Screen::drawStringUni(const Point &pos, int fontIdx, uint color, const Common::U32String &text, int spw) {
+int Screen::drawStringUni(int x, int y, int fontIdx, uint color, const Common::U32String &text, int spw) {
+	if (_presentation.fontScale != 1.0)
+		return drawRenderString(x, y, fontIdx, color, text, spw, false);
 	int baseLine = (fontIdx >= PROPR) ? g_conf->_propInfo._baseLine : g_conf->_monoInfo._baseLine;
-	Point pt(pos.x / GLI_SUBPIX, pos.y - baseLine);
+	Point pt(x / GLI_SUBPIX, y - baseLine);
 	const Graphics::Font *font = _fonts[fontIdx];
 	
-	int xSub = pos.x;
+	int xSub = x;
 	for (auto c : text) {
 		int xPix = xSub / GLI_SUBPIX;
 		font->drawString(this, Common::U32String(1, c), xPix, pt.y, w - xPix, color);
@@ -226,6 +318,29 @@ int Screen::drawStringUni(const Point &pos, int fontIdx, uint color, const Commo
 	}
 	int xFinalPix = MIN(xSub / GLI_SUBPIX, (int)w);
 	return xFinalPix * GLI_SUBPIX;
+}
+
+int Screen::drawRenderString(int x, int y, int fontIdx, uint color,
+		const Common::U32String &text, int spw, bool kern) {
+	const Graphics::Font &logical = *_fonts[fontIdx];
+	const Graphics::Font &render = *_renderFonts[fontIdx];
+	const int baseline = fontIdx >= PROPR ? g_conf->_propInfo._baseLine : g_conf->_monoInfo._baseLine;
+	y = _presentation.renderY(y - baseline);
+	if (kern)
+		x = x / GLI_SUBPIX * GLI_SUBPIX;
+	uint32 previous = 0;
+	for (uint i = 0; i < text.size(); ++i) {
+		const uint32 c = text[i];
+		if (kern)
+			x += logical.getKerningOffset(previous, c) * GLI_SUBPIX;
+		const int px = (int)((int64)x * w / (_presentation.logicalSize.x * GLI_SUBPIX));
+		render.drawChar(this, c, px, y, color);
+		x += logical.getCharWidth(c) * GLI_SUBPIX;
+		if (spw > 0 && c == ' ')
+			x += spw;
+		previous = c;
+	}
+	return MIN(x / GLI_SUBPIX, (int)_presentation.logicalSize.x) * GLI_SUBPIX;
 }
 
 size_t Screen::stringWidth(int fontIdx, const Common::String &text, int spw) {

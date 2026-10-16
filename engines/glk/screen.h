@@ -27,6 +27,7 @@
 #include "graphics/screen.h"
 #include "graphics/font.h"
 #include "glk/fonts.h"
+#include "glk/presentation.h"
 #include "glk/utils.h"
 
 namespace Glk {
@@ -37,12 +38,25 @@ class Conf;
 class PreparedFonts {
 	friend class Screen;
 	Common::Array<const Graphics::Font *> _fonts;
+	Common::Array<const Graphics::Font *> _renderFonts;
 	PreparedFonts(const PreparedFonts &);
 	PreparedFonts &operator=(const PreparedFonts &);
 public:
 	PreparedFonts() {}
 	~PreparedFonts();
 	void clear();
+};
+
+class PreparedPresentation {
+	friend class Screen;
+	Graphics::Surface _surface;
+	Common::Array<const Graphics::Font *> _fonts;
+	PresentationGeometry _geometry;
+	PreparedPresentation(const PreparedPresentation &);
+	PreparedPresentation &operator=(const PreparedPresentation &);
+public:
+	PreparedPresentation() {}
+	~PreparedPresentation();
 };
 
 #define FONTS_TOTAL 8
@@ -56,6 +70,13 @@ enum CaretShape {
  */
 class Screen : public Graphics::Screen {
 private:
+	Common::Point _canvasSize;
+	PresentationGeometry _presentation;
+	Common::Array<const Graphics::Font *> _renderFonts;
+	bool loadRenderFonts(Common::Archive *archive, const Conf &settings, double scale,
+		Common::Array<const Graphics::Font *> &fonts);
+	int drawRenderString(int x, int y, int fontIdx, uint color,
+		const Common::U32String &text, int spw, bool kern);
 	/**
 	 * Open the fonts archive and load all the fonts
 	 */
@@ -93,7 +114,7 @@ public:
 	/**
 	 * Constructor
 	 */
-	Screen() : Graphics::Screen() {}
+	Screen();
 
 	/**
 	 * Destructor
@@ -108,6 +129,11 @@ public:
 	virtual bool supportsLiveMetrics() const { return true; }
 	bool prepareFonts(Conf &settings, bool replace, PreparedFonts &prepared);
 	void installFonts(PreparedFonts &prepared);
+	const Common::Point &canvasSize() const { return _canvasSize; }
+	const PresentationGeometry &presentation() const { return _presentation; }
+	bool preparePresentation(const Conf &settings, const PresentationGeometry &geometry,
+		PreparedPresentation &prepared);
+	void installPresentation(PreparedPresentation &prepared);
 	size_t preparedTextWidth(const PreparedFonts &prepared, int fontIdx,
 		const Common::U32String &text) const;
 
@@ -120,26 +146,33 @@ public:
 	 * Fill a given area of the screen with a given color
 	 */
 	void fillRect(const Rect &box, uint color);
+	void hLine(int x, int y, int x2, uint color);
+	void vLine(int x, int y, int y2, uint color);
+	void drawImage(const Graphics::ManagedSurface &image, const Point &position);
+	void drawPicture(const Graphics::ManagedSurface &image, const Point &position,
+		const Common::Rect &clip, uint transparent);
 
 	/**
 	 * Draws a string using the specified font at the given co-ordinates
-	 * @param pos       Position for the bottom-left corner the text will be drawn with
+	 * @param x         Logical horizontal position in GLI_SUBPIX units
+	 * @param y         Logical baseline position in pixels
 	 * @param fontIdx   Which font to use
 	 * @param color     Text color
 	 * @param text      The text to draw
 	 * @param spw       ??
 	 */
-	int drawString(const Point &pos, int fontIdx, uint color, const Common::String &text, int spw = 0);
+	int drawString(int x, int y, int fontIdx, uint color, const Common::String &text, int spw = 0);
 
 	/**
 	 * Draws a unicode string using the specified font at the given co-ordinates
-	 * @param pos       Position for the bottom-left corner the text will be drawn with
+	 * @param x         Logical horizontal position in GLI_SUBPIX units
+	 * @param y         Logical baseline position in pixels
 	 * @param fontIdx   Which font to use
 	 * @param color     Text color
 	 * @param text      The text to draw
 	 * @param spw       ??
 	 */
-	int drawStringUni(const Point &pos, int fontIdx, uint color, const Common::U32String &text, int spw = 0);
+	int drawStringUni(int x, int y, int fontIdx, uint color, const Common::U32String &text, int spw = 0);
 
 	/**
 	 * Get the width in pixels of a string

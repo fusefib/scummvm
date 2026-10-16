@@ -895,7 +895,7 @@ void TextBufferWindow::redraw() {
 		if (_windows->getFocusWindow() == this && i == 0 && (_lineRequest || _lineRequestUni)) {
 			w = calcWidth(_chars, _attrs, inputStart, _inCurs, spw);
 			if (w < pw - _font._caretShape * 2 * GLI_SUBPIX)
-				_font.drawCaret(Point(x0 + SLOP + ln._lm + w, y + _font._baseLine));
+				_font.drawCaret(x0 + SLOP + ln._lm + w, y + _font._baseLine);
 		}
 
 		/*
@@ -909,7 +909,7 @@ void TextBufferWindow::redraw() {
 				link = ln._attrs[a].hyper;
 				font = ln._attrs[a].attrFont(_styles);
 				color = link ? _font._linkColor : ln._attrs[a].attrFg(_styles);
-				x = screen.drawStringUni(Point(x, y + _font._baseLine),
+				x = screen.drawStringUni(x, y + _font._baseLine,
 										 font, color, Common::U32String((const char32_t *)ln._chars + a, b - a), spw);
 				a = b;
 			}
@@ -917,7 +917,7 @@ void TextBufferWindow::redraw() {
 		link = ln._attrs[a].hyper;
 		font = ln._attrs[a].attrFont(_styles);
 		color = link ? _font._linkColor : ln._attrs[a].attrFg(_styles);
-		screen.drawStringUni(Point(x, y + _font._baseLine), font, color, Common::U32String((const char32_t *)ln._chars + a, linelen - a), spw);
+		screen.drawStringUni(x, y + _font._baseLine, font, color, Common::U32String((const char32_t *)ln._chars + a, linelen - a), spw);
 	}
 
 	/*
@@ -943,7 +943,7 @@ void TextBufferWindow::redraw() {
 			x = x1 - SLOP - w;
 
 		color = Windows::_overrideFgSet ? _font._moreColor : _fgColor;
-		screen.drawString(Point(x, y + _font._baseLine),
+		screen.drawString(x, y + _font._baseLine,
 						  _font._moreFont, color, _font._morePrompt);
 		y1 = y; // don't want pictures overdrawing "[more]"
 

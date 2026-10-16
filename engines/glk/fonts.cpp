@@ -32,10 +32,10 @@ FontInfo::FontInfo() : _caretColor(0), _caretSave(0), _caretShape(0),
 		_moreColor(0), _moreSave(0) {
 }
 
-void FontInfo::drawCaret(const Point &pos) {
+void FontInfo::drawCaret(int x, int y) {
 	uint color = _caretColor;
-	Graphics::Screen &s = *g_vm->_screen;
-	int x = pos.x / GLI_SUBPIX, y = pos.y;
+	Screen &s = *g_vm->_screen;
+	x /= GLI_SUBPIX;
 
 	switch (_caretShape) {
 	case SMALL_DOT:
