@@ -34,6 +34,7 @@
 #include "glk/conf.h"
 #include "glk/fonts.h"
 #include "glk/options.h"
+#include "glk/presentation.h"
 #include "glk/preview.h"
 #include "glk/screen.h"
 
@@ -458,6 +459,16 @@ GlkOptionsWidget::GlkOptionsWidget(GuiObject *boss, const Common::String &name,
 		_("Remove only this background-color override"), kResetStyleBackgroundCmd);
 
 	_tabs->addTab(_("Layout"), "GlkOptionsLayout");
+	_presentationMode = createPopup("GlkOptionsLayout.presentationlbl", _("Rendering:"),
+		"GlkOptionsLayout.presentation", _("Original layout enlarges the existing page. Reflow uses the available window space while keeping the chosen text scale."));
+	_presentationMode->appendEntry(_("Normal"), kPresentationLegacy);
+	_presentationMode->appendEntry(_("High-resolution, original layout"), kPresentationOriginal);
+	_presentationMode->appendEntry(_("High-resolution, reflow"), kPresentationReflow);
+	_reflowScale = createPopup("GlkOptionsLayout.reflowscalelbl", _("Reflow text scale:"),
+		"GlkOptionsLayout.reflowscale", _("Text scale in reflow mode, independent of window size and GUI zoom."));
+	const int reflowScales[] = { 50, 75, 100, 125, 150, 175, 200, 250, 300 };
+	for (uint i = 0; i < ARRAYSIZE(reflowScales); ++i)
+		_reflowScale->appendEntry(Common::U32String(Common::String::format("%d%%", reflowScales[i])), reflowScales[i]);
 	_wborderx = createEdit("GlkOptionsLayout.wborderx", _("Vertical divider thickness:"),
 		"GlkOptionsLayout.wborderhorizontal", _("Width of vertical dividers between panes, in pixels."));
 	_wbordery = createEdit("GlkOptionsLayout.wbordery", _("Horizontal divider thickness:"),
@@ -590,6 +601,8 @@ GlkOptionsWidget::GlkOptionsWidget(GuiObject *boss, const Common::String &name,
 	_controls.push_back(ControlBinding("baseline", _baseline, "GlkOptionsCompatibility.baselinelbl"));
 	_controls.push_back(ControlBinding("cols", _cols, "GlkOptionsLayout.colslbl"));
 	_controls.push_back(ControlBinding("rows", _rows, "GlkOptionsLayout.rowslbl"));
+	_controls.push_back(ControlBinding("glk_presentation_mode", _presentationMode, "GlkOptionsLayout.presentationlbl"));
+	_controls.push_back(ControlBinding("glk_reflow_scale", _reflowScale, "GlkOptionsLayout.reflowscalelbl"));
 	_controls.push_back(ControlBinding("safeclicks", _safeClicks, "GlkOptionsInteraction.safeclickslabel"));
 	_controls.push_back(ControlBinding("stylehint", _styleHint, "GlkOptionsInteraction.stylehintlabel"));
 	_controls.push_back(ControlBinding("lockcols", _lockcols, "GlkOptionsLayout.lockcolslbl"));
@@ -713,6 +726,13 @@ void GlkOptionsWidget::loadControls() {
 	setIntegerWidget(_baseline, _settings->getInt("baseline", _conf->_propInfo._baseLine));
 	setIntegerWidget(_cols, _settings->getInt("cols", _conf->_cols));
 	setIntegerWidget(_rows, _settings->getInt("rows", _conf->_rows));
+	_presentationMode->setSelectedTag(_settings->getInt("glk_presentation_mode", _conf->_presentationMode));
+	const int reflowScale = _settings->getInt("glk_reflow_scale", _conf->_reflowScale);
+	_reflowScale->setSelectedTag(reflowScale);
+	if (_reflowScale->getSelected() < 0 && reflowScale >= 50 && reflowScale <= 300) {
+		_reflowScale->appendEntry(Common::String::format("%d%%", reflowScale), reflowScale);
+		_reflowScale->setSelectedTag(reflowScale);
+	}
 
 	_safeClicks->setState(_settings->getBool("safeclicks", _conf->_safeClicks));
 	_styleHint->setState(_settings->getBool("stylehint", _conf->_styleHint != 0));
@@ -878,6 +898,7 @@ void GlkOptionsWidget::refreshControlValue(GUI::Widget *widget) {
 void GlkOptionsWidget::updateLayoutDependencies() {
 	_cols->setEnabled(_lockcols->getState());
 	_rows->setEnabled(_lockrows->getState());
+	_reflowScale->setEnabled(_presentationMode->getSelectedTag() == kPresentationReflow);
 }
 
 void GlkOptionsWidget::updateActionState() {
@@ -1796,6 +1817,8 @@ void GlkOptionsWidget::defineLayout(GUI::ThemeEval &layouts,
 		themeMetrics);
 	const char *layoutCheckboxes[] = { "lockcolslbl", "lockrowslbl" };
 	layoutPage.setCheckboxLabels(layoutCheckboxes, ARRAYSIZE(layoutCheckboxes));
+	layoutPage.addOptionRow("presentationlbl", "presentation", _presentationMode, true);
+	layoutPage.addOptionRow("reflowscalelbl", "reflowscale", _reflowScale, true);
 	layoutPage.addOptionRow("wmarginxlbl", "wmarginx", _wmarginx);
 	layoutPage.addOptionRow("wmarginylbl", "wmarginy", _wmarginy);
 	layoutPage.addOptionRow("tmarginxlbl", "tmarginx", _tmarginx);
