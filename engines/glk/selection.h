@@ -77,6 +77,7 @@ public:
 	 * Constructor
 	 */
 	WindowMask();
+	WindowMask(size_t width, size_t height);
 
 	/**
 	 * Destructor
@@ -87,6 +88,8 @@ public:
 	 * Resize the links array
 	 */
 	void resize(size_t x, size_t y);
+	void swapStorage(WindowMask &other);
+	void copyHyperlinks(const WindowMask &source, const Rect &area, const Point &destination);
 
 	void putHyperlink(uint linkval, uint x0, uint y0, uint x1, uint y1);
 

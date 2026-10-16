@@ -65,6 +65,8 @@ Common::String GlkOptionsState::inheritedValue(const Common::String &key) const 
 		{ "baseline", defaults._propInfo._baseLine },
 		{ "cols", defaults._cols },
 		{ "rows", defaults._rows },
+		{ "glk_presentation_mode", defaults._presentationMode },
+		{ "glk_reflow_scale", defaults._reflowScale },
 		{ "lockcols", defaults._lockCols },
 		{ "lockrows", defaults._lockRows },
 		{ "justify", defaults._propInfo._justify },

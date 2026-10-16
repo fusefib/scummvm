@@ -55,8 +55,34 @@ WindowMask::WindowMask() : _hor(0), _ver(0), _links(nullptr) {
 	resize(g_system->getWidth(), g_system->getHeight());
 }
 
+WindowMask::WindowMask(size_t width, size_t height) : _hor(0), _ver(0), _links(nullptr) {
+	_last.x = _last.y = 0;
+	resize(width, height);
+}
+
+void WindowMask::swapStorage(WindowMask &other) {
+	SWAP(_hor, other._hor);
+	SWAP(_ver, other._ver);
+	SWAP(_links, other._links);
+	_select = Rect();
+	_last = Point();
+}
+
 WindowMask::~WindowMask() {
 	clear();
+}
+
+void WindowMask::copyHyperlinks(const WindowMask &source, const Rect &area, const Point &destination) {
+	Rect clipped = area;
+	clipped.clip(Rect(0, 0, source._hor - 1, source._ver - 1));
+	Rect target(destination.x + clipped.left - area.left, destination.y + clipped.top - area.top,
+		destination.x + clipped.right - area.left, destination.y + clipped.bottom - area.top);
+	Rect bounds = target;
+	bounds.clip(Rect(0, 0, _hor - 1, _ver - 1));
+	for (int x = bounds.left; x < bounds.right; ++x) {
+		for (int y = bounds.top; y < bounds.bottom; ++y)
+			_links[x][y] = source._links[clipped.left + x - target.left][clipped.top + y - target.top];
+	}
 }
 
 void WindowMask::clear() {
@@ -83,7 +109,7 @@ void WindowMask::resize(size_t x, size_t y) {
 	}
 
 	for (size_t i = 0; i < _hor; i++) {
-		_links[i] = new uint[_ver];
+		_links[i] = new uint[_ver]();
 		if (!_links[i]) {
 			warning("resize_mask: could not allocate new memory");
 			return;
@@ -128,7 +154,7 @@ uint WindowMask::getHyperlink(const Point &pos) const {
 		return 0;
 	}
 
-	if (pos.x >= (int16)_hor || pos.y >= (int16)_ver || !_links[pos.x]) {
+	if (pos.x < 0 || pos.y < 0 || pos.x >= (int)_hor || pos.y >= (int)_ver || !_links[pos.x]) {
 		warning("getHyperlink: invalid range given");
 		return 0;
 	}
@@ -146,8 +172,8 @@ void Selection::startSelection(const Point &pos) {
 		return;
 	}
 
-	tx = MIN(pos.x, (int16)_hor);
-	ty = MIN(pos.y, (int16)_ver);
+	tx = CLIP<int>(pos.x, 0, _hor - 1);
+	ty = CLIP<int>(pos.y, 0, _ver - 1);
 
 	_select.left = _select.right = _last.x = tx;
 	_select.top = _select.bottom = _last.y = ty;
@@ -166,8 +192,8 @@ void Selection::moveSelection(const Point &pos) {
 		return;
 	}
 
-	tx = MIN(pos.x, (int16)_hor);
-	ty = MIN(pos.y, (int16)_ver);
+	tx = CLIP<int>(pos.x, 0, _hor - 1);
+	ty = CLIP<int>(pos.y, 0, _ver - 1);
 
 	_select.right = _last.x = tx;
 	_select.bottom = _last.y = ty;

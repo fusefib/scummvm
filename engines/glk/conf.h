@@ -97,6 +97,7 @@ public:
 	MonoFontInfo _monoInfo;
 	PropFontInfo _propInfo;
 	int _leadingMin, _baseLineMin;
+	int _presentationMode, _reflowScale;
 	int _cols, _rows;
 	int _lockCols, _lockRows;
 	int _wMarginX, _wMarginY;

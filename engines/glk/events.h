@@ -171,7 +171,8 @@ private:
 	uint32 _frameCounter;           ///< Frame counter
 	bool _redraw;                   ///< Screen needed redrawing
 	CursorId _cursorId;             ///< Current cursor Id
-	bool _textCursorDirty;
+	bool _cursorDirty;
+	bool _retryPresentation;
 	Surface _cursors[4];            ///< Cursor pixel data
 	uint _timerMilli;               ///< Time in milliseconds between timer events
 	uint _timerTimeExpiry;          ///< When to trigger next timer event
@@ -180,6 +181,7 @@ private:
 	 * Initialize the cursor graphics
 	 */
 	void initializeCursors();
+	void scaleCursor(Surface &cursor);
 	void initializeTextCursor();
 
 	/**
@@ -248,6 +250,7 @@ public:
 	 * Store an event for retrieval
 	 */
 	void store(EvType type, Window *win, uint val1 = 0, uint val2 = 0);
+	void requestPresentationRetry() { _retryPresentation = true; }
 
 	/**
 	 * Wait for a keypress
@@ -285,6 +288,7 @@ public:
 	 */
 	void setCursor(CursorId cursorId);
 	void refreshTextCursor();
+	void refreshCursors();
 
 	/**
 	 * Sets whether the mouse cursor is visible

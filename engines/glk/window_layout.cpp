@@ -48,6 +48,18 @@ Windows::PreparedLayout::~PreparedLayout() {
 		delete _windows[i];
 }
 
+void Windows::PreparedLayout::copyGraphicsLinks(const WindowMask &source, WindowMask &destination) const {
+	for (uint i = 0; i < _windows.size(); ++i) {
+		const PreparedWindowLayout &entry = *_windows[i];
+		if (entry._window->_type != wintype_Graphics)
+			continue;
+		const Rect &old = entry._window->_bbox;
+		Rect overlap(old.left, old.top, old.left + MIN(old.width(), entry._box.width()),
+			old.top + MIN(old.height(), entry._box.height()));
+		destination.copyHyperlinks(source, overlap, Point(entry._box.left, entry._box.top));
+	}
+}
+
 bool Windows::PreparedLayout::prepare(Window *window, const Rect &box,
 		const Conf &settings, const Conf &before, const Conf &after, const PreparedFonts &fonts) {
 	PreparedWindowLayout *entry = new PreparedWindowLayout(window, box);

@@ -19,6 +19,12 @@
  */
 
 #include "glk/presentation.h"
+#include "glk/glk.h"
+#include "glk/conf.h"
+#include "glk/screen.h"
+#include "glk/selection.h"
+#include "glk/windows.h"
+#include "common/ptr.h"
 #include "common/util.h"
 
 namespace Glk {
@@ -77,6 +83,116 @@ Common::Point PresentationGeometry::toLogical(const Common::Point &point) const 
 	// Invert the half-open intervals used by toRender(), including rounded edges.
 	return Common::Point(((x + 1) * logicalSize.x - 1) / renderSize.x,
 		((y + 1) * logicalSize.y - 1) / renderSize.y);
+}
+
+bool GlkEngine::updatePresentation(bool backendChanged) {
+	if (!_screen || !_conf || !_windows || !_events)
+		return false;
+	_presentationDeferred = false;
+	const PresentationMode mode = (PresentationMode)_conf->_presentationMode;
+	if (mode == kPresentationLegacy && !_nativePresentation)
+		return true;
+	if (g_system->isOverlayVisible())
+		return false;
+	if (!_screen->supportsLiveMetrics())
+		return false;
+	const Common::Point output = g_system->getGameOutputSize();
+	PresentationGeometry geometry;
+	if (!geometry.calculate(_screen->canvasSize(), output, mode, _conf->_reflowScale,
+			g_system->getHiDPIScreenFactor(), _screen->format.bytesPerPixel))
+		return false;
+	const PresentationGeometry &current = _screen->presentation();
+	const bool resize = geometry.logicalSize != current.logicalSize;
+	const bool redraw = resize || geometry.renderSize != current.renderSize ||
+		geometry.fontScale != current.fontScale;
+	if (_nativePresentation && mode != kPresentationLegacy && !redraw && !backendChanged &&
+			_presentationScreenChangeID == g_system->getScreenChangeID())
+		return true;
+	PreparedPresentation presentation;
+	if (redraw && !_screen->preparePresentation(*_conf, geometry, presentation))
+		return false;
+	Windows::PreparedLayout layout;
+	Common::ScopedPtr<WindowMask> mask;
+	int marginX = _conf->_wMarginX, marginY = _conf->_wMarginY;
+	if (resize) {
+		Conf candidate(*_conf);
+		candidate._imageW = geometry.logicalSize.x;
+		candidate._imageH = geometry.logicalSize.y;
+		candidate._wMarginX = candidate._wMarginSaveX;
+		candidate._wMarginY = candidate._wMarginSaveY;
+		PreparedFonts fonts;
+		if (!_windows->prepareLayout(candidate, *_conf, *_conf, fonts, layout)) {
+			_presentationDeferred = true;
+			return false;
+		}
+		mask.reset(new WindowMask(candidate._imageW, candidate._imageH));
+		layout.copyGraphicsLinks(*_selection, *mask);
+		marginX = candidate._wMarginX;
+		marginY = candidate._wMarginY;
+	}
+	const int scaler = g_system->getScaler();
+	const int scaleFactor = g_system->getScaleFactor();
+	const int stretch = g_system->getStretchMode();
+	const bool aspect = g_system->getFeatureState(OSystem::kFeatureAspectRatioCorrection);
+	if (mode == kPresentationLegacy) {
+		g_system->beginGFXTransaction();
+		g_system->initSize(geometry.renderSize.x, geometry.renderSize.y, &_screen->format);
+		g_system->setScaler(_savedScaler, _savedScaleFactor);
+		g_system->setStretchMode(_savedStretchMode);
+		g_system->setFeatureState(OSystem::kFeatureAspectRatioCorrection, _savedAspectCorrection);
+		g_system->endGFXTransaction();
+		// A failed shader can still leave the requested surface installed.
+		if (g_system->getWidth() != geometry.renderSize.x || g_system->getHeight() != geometry.renderSize.y ||
+				g_system->getScreenFormat() != _screen->format) {
+			g_system->setGameRenderSize(current.renderSize.x, current.renderSize.y);
+			_screen->makeAllDirty();
+			return false;
+		}
+	} else if (!g_system->setGameRenderSize(geometry.renderSize.x, geometry.renderSize.y)) {
+		return false;
+	}
+	if (!_nativePresentation) {
+		_savedScaler = scaler;
+		_savedScaleFactor = scaleFactor;
+		_savedStretchMode = stretch;
+		_savedAspectCorrection = aspect;
+	}
+	_nativePresentation = mode != kPresentationLegacy;
+	_presentationDeferred = false;
+	_presentationScreenChangeID = g_system->getScreenChangeID();
+	if (redraw)
+		_screen->installPresentation(presentation);
+	if (resize) {
+		_conf->_imageW = geometry.logicalSize.x;
+		_conf->_imageH = geometry.logicalSize.y;
+		_conf->_wMarginX = marginX;
+		_conf->_wMarginY = marginY;
+		_selection->swapStorage(*mask);
+		_copySelect = false;
+		_windows->installLayout(layout);
+		if (_windows->getRoot()) {
+			appearanceChanged(*_conf, *_conf, true);
+			_events->store(evtype_Arrange, nullptr);
+			_events->store(evtype_Redraw, nullptr);
+		}
+	}
+	if (redraw)
+		_events->refreshCursors();
+	// Rebuild hit areas before the next input, including after backend-only resets.
+	Windows::_forceRedraw = true;
+	_windows->redraw();
+	_screen->makeAllDirty();
+	return true;
+}
+
+void GlkEngine::retryPresentation() {
+	if (_presentationDeferred)
+		updatePresentation();
+}
+
+void GlkEngine::applyGameSettings() {
+	// The game menu has hidden its overlay and restored backend preferences.
+	updatePresentation(true);
 }
 
 } // End of namespace Glk

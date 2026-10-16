@@ -79,6 +79,13 @@ private:
 	 * Handles basic initialization
 	 */
 	void initialize();
+	bool _nativePresentation;
+	bool _presentationDeferred;
+	int _presentationScreenChangeID;
+	int _savedScaler;
+	int _savedScaleFactor;
+	int _savedStretchMode;
+	bool _savedAspectCorrection;
 protected:
 	const GlkGameDescription _gameDescription;
 	Common::RandomSource _random;
@@ -193,6 +200,8 @@ public:
 	// Before/after are resolved preferences, not game-modified presentation.
 	AppearanceResult applyAppearance(const Common::String &target,
 		const Conf &before, const Conf &after);
+	bool updatePresentation(bool backendChanged = false);
+	void retryPresentation();
 
 	/**
 	 * Return the filename for a given save slot
@@ -246,6 +255,7 @@ public:
 	 * Updates sound settings
 	 */
 	void syncSoundSettings() override;
+	void applyGameSettings() override;
 
 	/**
 	 * Generate a beep

@@ -147,6 +147,7 @@ public:
 	public:
 		PreparedLayout() {}
 		~PreparedLayout();
+		void copyGraphicsLinks(const WindowMask &source, WindowMask &destination) const;
 	};
 	bool prepareLayout(Conf &settings, const Conf &before, const Conf &after,
 		const PreparedFonts &fonts, PreparedLayout &layout);

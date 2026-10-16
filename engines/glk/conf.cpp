@@ -20,6 +20,7 @@
  */
 
 #include "glk/conf.h"
+#include "glk/presentation.h"
 #include "glk/utils.h"
 #include "glk/windows.h"
 #include "glk/zcode/config.h"
@@ -70,7 +71,7 @@ Conf::Conf(InterpreterType interpType, bool installGlobal,
 #else
 		_width(640), _height(400),
 #endif
-		_screenFormat(format),
+		_screenFormat(format), _presentationMode(kPresentationLegacy), _reflowScale(100),
 #ifndef USE_HIGHRES
 		_rows(12), _cols(30),
 #else
@@ -158,6 +159,14 @@ Conf Conf::defaults() const {
 void Conf::synchronize() {
 	syncAsInt("width", _width);
 	syncAsInt("height", _height);
+	int presentation = kPresentationLegacy;
+	if (GlkPreferences::parseInteger(getString("glk_presentation_mode"), presentation) &&
+			presentation >= kPresentationLegacy && presentation <= kPresentationReflow)
+		_presentationMode = presentation;
+	int reflowScale = 100;
+	if (GlkPreferences::parseInteger(getString("glk_reflow_scale"), reflowScale) &&
+			reflowScale >= 50 && reflowScale <= 300)
+		_reflowScale = reflowScale;
 	syncAsString("moreprompt", _propInfo._morePrompt);
 	syncAsColor("morecolor", _propInfo._moreColor);
 	syncAsColor("morecolor", _propInfo._moreSave);

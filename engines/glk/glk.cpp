@@ -49,10 +49,13 @@ namespace Glk {
 GlkEngine *g_vm;
 
 GlkEngine::GlkEngine(OSystem *syst, const GlkGameDescription &gameDesc) :
-		_gameDescription(gameDesc), Engine(syst), _random("Glk"), _quitFlag(false), _blorb(nullptr),
-		_clipboard(nullptr), _conf(nullptr),_events(nullptr), _pictures(nullptr), _screen(nullptr),
-		_selection(nullptr), _sounds(nullptr), _streams(nullptr), _windows(nullptr),
-		_copySelect(false), _terminated(false), _pcSpeaker(nullptr), _loadSaveSlot(-1),
+		Engine(syst), _nativePresentation(false), _presentationDeferred(false),
+		_presentationScreenChangeID(-1),
+		_savedScaler(0), _savedScaleFactor(1), _savedStretchMode(0), _savedAspectCorrection(false),
+		_gameDescription(gameDesc), _random("Glk"), _loadSaveSlot(-1), _pcSpeaker(nullptr),
+		_quitFlag(false), _blorb(nullptr), _clipboard(nullptr), _conf(nullptr), _events(nullptr),
+		_pictures(nullptr), _screen(nullptr), _selection(nullptr), _streams(nullptr),
+		_sounds(nullptr), _windows(nullptr), _copySelect(false), _terminated(false),
 		gli_register_obj(nullptr), gli_unregister_obj(nullptr), gli_register_arr(nullptr),
 		gli_unregister_arr(nullptr) {
 
@@ -91,6 +94,7 @@ void GlkEngine::initialize() {
 	_sounds = new Sounds();
 	_streams = new Streams();
 	_windows = new Windows(_screen);
+	updatePresentation();
 
 	// Setup mixer
 	syncSoundSettings();

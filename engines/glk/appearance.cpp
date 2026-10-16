@@ -102,7 +102,7 @@ static bool updateColor(uint &active, uint &saved, uint before, uint after, bool
 	return false;
 }
 
-static bool updatePresentation(Conf &current, const Conf &before, const Conf &after, bool fonts) {
+static bool updatePresentationPreferences(Conf &current, const Conf &before, const Conf &after, bool fonts) {
 	bool changed = false;
 	const uint requests = current._appearanceRequests;
 	changed |= updateColor(current._propInfo._caretColor, current._propInfo._caretSave,
@@ -202,7 +202,7 @@ AppearanceResult GlkEngine::applyAppearance(const Common::String &target,
 		}
 	}
 	const bool fonts = result.metrics == kAppearanceApplied;
-	const bool presentation = updatePresentation(*_conf, before, after, fonts);
+	const bool presentation = updatePresentationPreferences(*_conf, before, after, fonts);
 	if (presentation || installed) {
 		_windows->updateAppearance(before, after, fonts);
 		appearanceChanged(before, after, installed);
@@ -213,6 +213,10 @@ AppearanceResult GlkEngine::applyAppearance(const Common::String &target,
 		_events->store(evtype_Arrange, nullptr);
 		_events->store(evtype_Redraw, nullptr);
 	}
+	const bool modeChanged = updatePreference(_conf->_presentationMode, before._presentationMode, after._presentationMode);
+	const bool scaleChanged = updatePreference(_conf->_reflowScale, before._reflowScale, after._reflowScale);
+	if (modeChanged || scaleChanged)
+		updatePresentation();
 	return result;
 }
 

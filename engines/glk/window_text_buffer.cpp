@@ -661,6 +661,7 @@ void TextBufferWindow::cancelLineEvent(Event *ev) {
 
 	if (g_vm->gli_unregister_arr)
 		(*g_vm->gli_unregister_arr)(inbuf, inmax, unicode ? "&+#!Iu" : "&+#!Cn", inarrayrock);
+	g_vm->_events->requestPresentationRetry();
 }
 
 void TextBufferWindow::redraw() {

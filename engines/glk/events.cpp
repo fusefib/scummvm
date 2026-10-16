@@ -57,7 +57,7 @@ const byte ARROW[] = {
 
 Events::Events() : _forceClick(false), _currentEvent(nullptr), _cursorId(CURSOR_NONE),
 	_timerMilli(0), _timerTimeExpiry(0), _priorFrameTime(0), _frameCounter(0),
-	_redraw(false), _textCursorDirty(false) {
+	_redraw(false), _cursorDirty(false), _retryPresentation(false) {
 	initializeCursors();
 }
 
@@ -74,6 +74,7 @@ void Events::initializeCursors() {
 
 	// Setup arrow cursor
 	Surface &arr = _cursors[CURSOR_ARROW];
+	arr.free();
 	arr.create(8, 16, g_system->getScreenFormat());
 	arr.fillRect(Common::Rect(0, 0, 8, 16), TRANSPARENT);
 
@@ -87,6 +88,7 @@ void Events::initializeCursors() {
 		}
 	}
 
+	scaleCursor(arr);
 	initializeTextCursor();
 
 	// TODO: Hyperlink hand cursor
@@ -103,18 +105,41 @@ void Events::initializeTextCursor() {
 	sel.hLine(0, sel.h - 1, 4, 0);
 	sel.vLine(2, 1, sel.h - 1, 0);
 	sel._hotspot = Common::Point(2, sel.h - 1);
+	scaleCursor(sel);
+}
+
+void Events::scaleCursor(Surface &cursor) {
+	const PresentationGeometry &geometry = g_vm->_screen->presentation();
+	const int width = MAX(1, geometry.renderX(cursor.w));
+	const int height = MAX(1, geometry.renderY(cursor.h));
+	if (width == cursor.w && height == cursor.h)
+		return;
+	cursor._hotspot = Point(geometry.renderX(cursor._hotspot.x), geometry.renderY(cursor._hotspot.y));
+	Graphics::Surface *scaled = cursor.scale(width, height);
+	SWAP(static_cast<Graphics::Surface &>(cursor), *scaled);
+	scaled->free();
+	delete scaled;
 }
 
 void Events::refreshTextCursor() {
 	initializeTextCursor();
-	_textCursorDirty = _cursorId == CURSOR_IBEAM;
+	_cursorDirty = _cursorId == CURSOR_IBEAM;
+}
+
+void Events::refreshCursors() {
+	initializeCursors();
+	_cursorDirty = _cursorId != CURSOR_NONE;
 }
 
 void Events::checkForNextFrameCounter() {
 	// Options may still own the top cursor when a live update is installed.
-	if (_textCursorDirty) {
-		_textCursorDirty = false;
-		const Surface &cursor = _cursors[CURSOR_IBEAM];
+	if (_retryPresentation) {
+		_retryPresentation = false;
+		g_vm->retryPresentation();
+	}
+	if (_cursorDirty) {
+		_cursorDirty = false;
+		const Surface &cursor = _cursors[_cursorId];
 		const uint transparent = cursor.format.RGBToColor(TRANSPARENT_RGB, TRANSPARENT_RGB, TRANSPARENT_RGB);
 		CursorMan.replaceCursor(cursor, cursor._hotspot.x, cursor._hotspot.y, transparent);
 	}
@@ -165,6 +190,8 @@ void Events::getEvent(event_t *event, bool polled) {
 
 void Events::store(EvType type, Window *win, uint val1, uint val2) {
 	Event ev(type, win, val1, val2);
+	if (type == evtype_LineInput)
+		_retryPresentation = true;
 
 	switch (type) {
 	case evtype_Arrange:
@@ -204,6 +231,9 @@ void Events::pollEvents() {
 			return;
 
 		switch (event.type) {
+		case Common::EVENT_SCREEN_CHANGED:
+			g_vm->updatePresentation(true);
+			break;
 		case Common::EVENT_KEYDOWN: {
 			if (!isModifierKey(event.kbd.keycode)) {
 				// Handle all other keypresses
@@ -215,12 +245,12 @@ void Events::pollEvents() {
 
 		case Common::EVENT_LBUTTONDOWN:
 		case Common::EVENT_RBUTTONDOWN:
-			handleButtonDown(event.type == Common::EVENT_LBUTTONDOWN, event.mouse);
+			handleButtonDown(event.type == Common::EVENT_LBUTTONDOWN, g_vm->_screen->presentation().toLogical(event.mouse));
 			return;
 
 		case Common::EVENT_LBUTTONUP:
 		case Common::EVENT_RBUTTONUP:
-			handleButtonUp(event.type == Common::EVENT_LBUTTONUP, event.mouse);
+			handleButtonUp(event.type == Common::EVENT_LBUTTONUP, g_vm->_screen->presentation().toLogical(event.mouse));
 			return;
 
 		case Common::EVENT_WHEELUP:
@@ -230,7 +260,7 @@ void Events::pollEvents() {
 			return;
 
 		case Common::EVENT_MOUSEMOVE:
-			handleMouseMove(event.mouse);
+			handleMouseMove(g_vm->_screen->presentation().toLogical(event.mouse));
 			break;
 
 		default:
@@ -402,9 +432,13 @@ uint Events::getKeypress() {
 	Common::Event e;
 
 	while (!g_vm->shouldQuit()) {
-		g_system->getEventManager()->pollEvent(e);
+		const bool received = g_system->getEventManager()->pollEvent(e);
 		g_system->delayMillis(10);
 		checkForNextFrameCounter();
+		if (!received)
+			continue;
+		if (e.type == Common::EVENT_SCREEN_CHANGED)
+			g_vm->updatePresentation(true);
 
 		if (e.type == Common::EVENT_KEYDOWN && !isModifierKey(e.kbd.keycode))
 			return e.kbd.keycode;
@@ -421,7 +455,7 @@ void Events::waitForPress() {
 
 void Events::setCursor(CursorId cursorId) {
 	if (cursorId != _cursorId) {
-		_textCursorDirty = false;
+		_cursorDirty = false;
 		if (cursorId == CURSOR_NONE) {
 			CursorMan.showMouse(false);
 		} else {

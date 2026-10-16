@@ -158,6 +158,7 @@ Window *Windows::windowOpen(Window *splitwin, uint method, uint size,
 
 void Windows::windowClose(Window *win, StreamResult *result) {
 	_forceRedraw = true;
+	g_vm->_events->requestPresentationRetry();
 
 	if (win == _rootWin || win->_parent == nullptr) {
 		// Close the root window, which means all windows.
