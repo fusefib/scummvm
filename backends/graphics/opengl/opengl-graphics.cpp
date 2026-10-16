@@ -651,6 +651,7 @@ int OpenGLGraphicsManager::getScreenChangeID() const {
 }
 
 void OpenGLGraphicsManager::initSize(uint width, uint height, const Graphics::PixelFormat *format) {
+	_renderingAtOutputResolution = false;
 	Graphics::PixelFormat requestedFormat;
 #ifdef USE_RGB_COLOR
 	if (!format) {
@@ -665,6 +666,52 @@ void OpenGLGraphicsManager::initSize(uint width, uint height, const Graphics::Pi
 	_currentState.gameHeight = height;
 	_gameScreenShakeXOffset = 0;
 	_gameScreenShakeYOffset = 0;
+}
+
+bool OpenGLGraphicsManager::setGameRenderSize(uint width, uint height) {
+	if (_transactionMode != kTransactionNone || _overlayVisible || !_gameScreen ||
+		getGameOutputSize() == Common::Point() || !width || !height || width > 32767 || height > 32767)
+		return false;
+	const uint textureWidth = OpenGLContext.NPOTSupported ? width : Common::nextHigher2(width);
+	const uint textureHeight = OpenGLContext.NPOTSupported ? height : Common::nextHigher2(height);
+	if (textureWidth > 32767 || textureHeight > 32767 ||
+		textureWidth > (uint)OpenGLContext.maxTextureSize || textureHeight > (uint)OpenGLContext.maxTextureSize ||
+		textureWidth > 0x7fffffffU / textureHeight / 4)
+		return false;
+	const Graphics::PixelFormat format = _gameScreen->getFormat();
+	if (format.bytesPerPixel < 2)
+		return false;
+	const uint scaler = getDefaultScaler();
+	if (width == _currentState.gameWidth && height == _currentState.gameHeight &&
+		_currentState.scaleFactor == 1 && _currentState.scalerIndex == scaler &&
+		!_currentState.aspectRatioCorrection && _stretchMode == STRETCH_FIT) {
+		_renderingAtOutputResolution = true;
+		return true;
+	}
+
+	Surface *screen = createSurface(format);
+	if (!screen)
+		return false;
+	if (!screen->allocate(width, height)) {
+		delete screen;
+		return false;
+	}
+	screen->fill(format.RGBToColor(0, 0, 0));
+	delete _gameScreen;
+	_gameScreen = screen;
+	_currentState.gameWidth = width;
+	_currentState.gameHeight = height;
+	_currentState.scaleFactor = 1;
+	_currentState.scalerIndex = scaler;
+	_currentState.aspectRatioCorrection = false;
+	_stretchMode = STRETCH_FIT;
+	_renderingAtOutputResolution = true;
+	recalculateDisplayAreas();
+	recalculateCursorScaling();
+	updateTextureSettings();
+	_forceRedraw = true;
+	++_screenChangeID;
+	return true;
 }
 
 int16 OpenGLGraphicsManager::getWidth() const {

@@ -139,9 +139,10 @@ void TextureSurface::setRotation(Common::RotationMode rotation) {
 	_glTexture.setRotation(rotation);
 }
 
-void TextureSurface::allocate(uint width, uint height) {
+bool TextureSurface::allocate(uint width, uint height) {
 	// Assure the texture can contain our user data.
-	_glTexture.setSize(width, height);
+	if (!_glTexture.setSize(width, height))
+		return false;
 
 	// In case the needed texture dimension changed we will reinitialize the
 	// texture data buffer.
@@ -158,6 +159,7 @@ void TextureSurface::allocate(uint width, uint height) {
 	// Without this we might try to write a too big texture into the GL
 	// texture.
 	flagDirty();
+	return true;
 }
 
 void TextureSurface::updateGLTexture() {
@@ -227,16 +229,18 @@ FakeTextureSurface::~FakeTextureSurface() {
 	_rgbData.free();
 }
 
-void FakeTextureSurface::allocate(uint width, uint height) {
-	TextureSurface::allocate(width, height);
+bool FakeTextureSurface::allocate(uint width, uint height) {
+	if (!TextureSurface::allocate(width, height))
+		return false;
 
 	// We only need to reinitialize our surface when the output size
 	// changed.
 	if (width == (uint)_rgbData.w && height == (uint)_rgbData.h) {
-		return;
+		return true;
 	}
 
 	_rgbData.create(width, height, getFormat());
+	return true;
 }
 
 void FakeTextureSurface::setMask(const byte *mask) {
@@ -350,8 +354,9 @@ ScaledTextureSurface::~ScaledTextureSurface() {
 	}
 }
 
-void ScaledTextureSurface::allocate(uint width, uint height) {
-	TextureSurface::allocate(width * _scaleFactor, height * _scaleFactor);
+bool ScaledTextureSurface::allocate(uint width, uint height) {
+	if (!TextureSurface::allocate(width * _scaleFactor, height * _scaleFactor))
+		return false;
 
 	// We only need to reinitialize our surface when the output size
 	// changed.
@@ -369,6 +374,7 @@ void ScaledTextureSurface::allocate(uint width, uint height) {
 		delete _convData;
 		_convData = nullptr;
 	}
+	return true;
 }
 
 void ScaledTextureSurface::updateGLTexture() {
@@ -507,10 +513,10 @@ void TextureSurfaceCLUT8GPU::setRotation(Common::RotationMode rotation) {
 	_target->getTexture()->setRotation(rotation);
 }
 
-void TextureSurfaceCLUT8GPU::allocate(uint width, uint height) {
+bool TextureSurfaceCLUT8GPU::allocate(uint width, uint height) {
 	// Assure the texture can contain our user data.
-	_clut8Texture.setSize(width, height);
-	_target->setSize(width, height);
+	if (!_clut8Texture.setSize(width, height) || !_target->setSize(width, height))
+		return false;
 
 	// In case the needed texture dimension changed we will reinitialize the
 	// texture data buffer.
@@ -540,6 +546,7 @@ void TextureSurfaceCLUT8GPU::allocate(uint width, uint height) {
 	// Without this we might try to write a too big texture into the GL
 	// texture.
 	flagDirty();
+	return true;
 }
 
 Graphics::PixelFormat TextureSurfaceCLUT8GPU::getFormat() const {

@@ -74,8 +74,9 @@ public:
 	 *
 	 * @param width  The desired logical width.
 	 * @param height The desired logical height.
+	 * @return Whether the texture storage was accepted by OpenGL.
 	 */
-	virtual void allocate(uint width, uint height) = 0;
+	virtual bool allocate(uint width, uint height) = 0;
 
 	/**
 	 * Assign a mask to the surface, where a byte value of 0 is black with 0 alpha and 1 is the normal color.
@@ -181,7 +182,7 @@ public:
 	void enableLinearFiltering(bool enable) override;
 	void setRotation(Common::RotationMode rotation) override;
 
-	void allocate(uint width, uint height) override;
+	bool allocate(uint width, uint height) override;
 
 	uint getWidth() const override { return _userPixelData.w; }
 	uint getHeight() const override { return _userPixelData.h; }
@@ -213,7 +214,7 @@ public:
 	FakeTextureSurface(GLenum glIntFormat, GLenum glFormat, GLenum glType, const Graphics::PixelFormat &format, const Graphics::PixelFormat &fakeFormat);
 	~FakeTextureSurface() override;
 
-	void allocate(uint width, uint height) override;
+	bool allocate(uint width, uint height) override;
 	void setMask(const byte *mask) override;
 
 	Graphics::PixelFormat getFormat() const override { return _fakeFormat; }
@@ -243,7 +244,7 @@ public:
 	ScaledTextureSurface(GLenum glIntFormat, GLenum glFormat, GLenum glType, const Graphics::PixelFormat &format, const Graphics::PixelFormat &fakeFormat);
 	~ScaledTextureSurface() override;
 
-	void allocate(uint width, uint height) override;
+	bool allocate(uint width, uint height) override;
 
 	uint getWidth() const override { return _rgbData.w; }
 	uint getHeight() const override { return _rgbData.h; }
@@ -282,7 +283,7 @@ public:
 	void enableLinearFiltering(bool enable) override;
 	void setRotation(Common::RotationMode rotation) override;
 
-	void allocate(uint width, uint height) override;
+	bool allocate(uint width, uint height) override;
 
 	bool isDirty() const override { return _paletteDirty || Surface::isDirty(); }
 

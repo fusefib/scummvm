@@ -100,6 +100,7 @@ public:
 	int getScreenChangeID() const override;
 
 	void initSize(uint width, uint height, const Graphics::PixelFormat *format) override;
+	bool setGameRenderSize(uint width, uint height) override;
 
 	int16 getWidth() const override;
 	int16 getHeight() const override;

@@ -432,7 +432,7 @@ void OpenGLSdlGraphicsManager::notifyResize(const int width, const int height) {
 		createOrUpdateWindow(currentWidth, currentHeight, 0);
 	}
 
-	const bool engineSupportsArbitraryResolutions = !g_engine ||
+	const bool engineSupportsArbitraryResolutions = !g_engine || _renderingAtOutputResolution ||
 #if defined(USE_OPENGL_GAME) || defined(USE_OPENGL_SHADERS)
 		(_renderer3d && g_engine->hasFeature(Engine::kSupportsArbitraryResolutions));
 #else
@@ -527,7 +527,7 @@ bool OpenGLSdlGraphicsManager::loadVideoMode(uint requestedWidth, uint requested
 	Common::Rect desktopRes = _window->getDesktopResolution();
 
 	// We support arbitrary resolution in the launcher or in 3D games explicitely supporting them
-	const bool engineSupportsArbitraryResolutions = !g_engine ||
+	const bool engineSupportsArbitraryResolutions = !g_engine || _renderingAtOutputResolution ||
 #if defined(USE_OPENGL_GAME) || defined(USE_OPENGL_SHADERS)
 		(_renderer3d && g_engine->hasFeature(Engine::kSupportsArbitraryResolutions));
 #else
