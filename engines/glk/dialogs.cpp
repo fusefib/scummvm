@@ -379,6 +379,20 @@ GlkOptionsWidget::GlkOptionsWidget(GuiObject *boss, const Common::String &name,
 	_propsize = createEdit("GlkOptionsReading.propsizelbl", _("Proportional font size:"),
 		"GlkOptionsReading.propsize", _("Proportional font size in points (10-25)"));
 
+	_tabs->addTab(_("Display"), "GlkOptionsDisplay");
+	_presentationMode = createPopup("GlkOptionsDisplay.presentationlbl", _("Rendering:"),
+		"GlkOptionsDisplay.presentation", _("Original layout scales a fixed page. Reflow keeps text size fixed. Adaptive reflow reduces large text in smaller windows while filling the available space."));
+	_presentationMode->appendEntry(_("Normal"), kPresentationLegacy);
+	_presentationMode->appendEntry(_("High-resolution, original layout"), kPresentationOriginal);
+	_presentationMode->appendEntry(_("High-resolution, reflow"), kPresentationReflow);
+	_presentationMode->appendEntry(_("High-resolution, adaptive reflow"), kPresentationAdaptiveReflow);
+	createOptionLabel(_tabs, "GlkOptionsDisplay.reflowlbl", _("Reflow rendering settings"), Common::U32String());
+	_reflowScale = createPopup("GlkOptionsDisplay.reflowscalelbl", _("Reflow text scale:"),
+		"GlkOptionsDisplay.reflowscale", _("Text scale relative to display density, independent of GUI zoom. In adaptive reflow this is a maximum: smaller windows reduce it to keep the original page area available."));
+	const int reflowScales[] = { 50, 75, 100, 125, 150, 175, 200, 250, 300 };
+	for (uint i = 0; i < ARRAYSIZE(reflowScales); ++i)
+		_reflowScale->appendEntry(Common::U32String(Common::String::format("%d%%", reflowScales[i])), reflowScales[i]);
+
 	_tabs->addTab(_("Compatibility"), "GlkOptionsCompatibility");
 	// I18N: Minimum distance between successive text baselines, in pixels.
 	_leading = createEdit("GlkOptionsCompatibility.leadinglbl", _("Minimum line height:"),
@@ -459,16 +473,6 @@ GlkOptionsWidget::GlkOptionsWidget(GuiObject *boss, const Common::String &name,
 		_("Remove only this background-color override"), kResetStyleBackgroundCmd);
 
 	_tabs->addTab(_("Layout"), "GlkOptionsLayout");
-	_presentationMode = createPopup("GlkOptionsLayout.presentationlbl", _("Rendering:"),
-		"GlkOptionsLayout.presentation", _("Original layout enlarges the existing page. Reflow uses the available window space while keeping the chosen text scale."));
-	_presentationMode->appendEntry(_("Normal"), kPresentationLegacy);
-	_presentationMode->appendEntry(_("High-resolution, original layout"), kPresentationOriginal);
-	_presentationMode->appendEntry(_("High-resolution, reflow"), kPresentationReflow);
-	_reflowScale = createPopup("GlkOptionsLayout.reflowscalelbl", _("Reflow text scale:"),
-		"GlkOptionsLayout.reflowscale", _("Text scale in reflow mode, independent of window size and GUI zoom."));
-	const int reflowScales[] = { 50, 75, 100, 125, 150, 175, 200, 250, 300 };
-	for (uint i = 0; i < ARRAYSIZE(reflowScales); ++i)
-		_reflowScale->appendEntry(Common::U32String(Common::String::format("%d%%", reflowScales[i])), reflowScales[i]);
 	_wborderx = createEdit("GlkOptionsLayout.wborderx", _("Vertical divider thickness:"),
 		"GlkOptionsLayout.wborderhorizontal", _("Width of vertical dividers between panes, in pixels."));
 	_wbordery = createEdit("GlkOptionsLayout.wbordery", _("Horizontal divider thickness:"),
@@ -601,8 +605,8 @@ GlkOptionsWidget::GlkOptionsWidget(GuiObject *boss, const Common::String &name,
 	_controls.push_back(ControlBinding("baseline", _baseline, "GlkOptionsCompatibility.baselinelbl"));
 	_controls.push_back(ControlBinding("cols", _cols, "GlkOptionsLayout.colslbl"));
 	_controls.push_back(ControlBinding("rows", _rows, "GlkOptionsLayout.rowslbl"));
-	_controls.push_back(ControlBinding("glk_presentation_mode", _presentationMode, "GlkOptionsLayout.presentationlbl"));
-	_controls.push_back(ControlBinding("glk_reflow_scale", _reflowScale, "GlkOptionsLayout.reflowscalelbl"));
+	_controls.push_back(ControlBinding("glk_presentation_mode", _presentationMode, "GlkOptionsDisplay.presentationlbl"));
+	_controls.push_back(ControlBinding("glk_reflow_scale", _reflowScale, "GlkOptionsDisplay.reflowscalelbl"));
 	_controls.push_back(ControlBinding("safeclicks", _safeClicks, "GlkOptionsInteraction.safeclickslabel"));
 	_controls.push_back(ControlBinding("stylehint", _styleHint, "GlkOptionsInteraction.stylehintlabel"));
 	_controls.push_back(ControlBinding("lockcols", _lockcols, "GlkOptionsLayout.lockcolslbl"));
@@ -898,7 +902,8 @@ void GlkOptionsWidget::refreshControlValue(GUI::Widget *widget) {
 void GlkOptionsWidget::updateLayoutDependencies() {
 	_cols->setEnabled(_lockcols->getState());
 	_rows->setEnabled(_lockrows->getState());
-	_reflowScale->setEnabled(_presentationMode->getSelectedTag() == kPresentationReflow);
+	const uint mode = _presentationMode->getSelectedTag();
+	_reflowScale->setEnabled(mode == kPresentationReflow || mode == kPresentationAdaptiveReflow);
 }
 
 void GlkOptionsWidget::updateActionState() {
@@ -1110,7 +1115,7 @@ bool GlkOptionsWidget::invalidControl(GUI::Widget *widget, bool reportError) {
 
 void GlkOptionsWidget::showGlobalPreferenceError(const Common::String &key) {
 	const char *const pageTitles[] = {
-		_s("Reading"), _s("Compatibility"), _s("Colors"), _s("Styles"),
+		_s("Reading"), _s("Display"), _s("Compatibility"), _s("Colors"), _s("Styles"),
 		_s("Layout"), _s("Interaction"), _s("Paging & Text")
 	};
 	const char *const styleNames[] = {
@@ -1332,7 +1337,7 @@ void GlkOptionsWidget::handleCommand(GUI::CommandSender *sender, uint32 cmd, uin
 }
 
 void GlkOptionsWidget::focusControl(GUI::Widget *widget) {
-	const char *pages[] = { "GlkOptionsReading.", "GlkOptionsCompatibility.", "GlkOptionsColors.",
+	const char *pages[] = { "GlkOptionsReading.", "GlkOptionsDisplay.", "GlkOptionsCompatibility.", "GlkOptionsColors.",
 		"GlkOptionsStyles.", "GlkOptionsLayout.", "GlkOptionsInteraction.", "GlkOptionsPaging." };
 	for (uint i = 0; i < ARRAYSIZE(pages); ++i) {
 		if (widget->getName().hasPrefix(pages[i]))
@@ -1652,6 +1657,17 @@ public:
 		addBlock(height);
 	}
 
+	void addLabelRow(const char *name) {
+		const GlkOptionsLabelWidget *label = _owner.findOptionLabel(getFullName(name));
+		const int width = MIN(_labelColumnWidth, _availableWidth);
+		const int height = label->wrappedHeight(width);
+		_layouts.addLayout(GUI::ThemeLayout::kLayoutHorizontal, _metrics.spacing)
+			.addPadding(0, 0, 0, 0)
+			.addWidget(name, "", width, height, Graphics::kTextAlignEnd, true, true)
+			.closeLayout();
+		addBlock(height);
+	}
+
 	void addOptionRow(const char *label, const char *control,
 			GUI::Widget *controlWidget, bool grow = false) {
 		GlkOptionRowControl controls[1];
@@ -1781,6 +1797,14 @@ void GlkOptionsWidget::defineLayout(GUI::ThemeEval &layouts,
 #endif
 	reading.close();
 
+	GlkOptionsPageLayout display(layouts, *this, "GlkOptionsDisplay",
+		contentWidth, labelWidth, pageInset, effectivePageInset,
+		themeMetrics);
+	display.addOptionRow("presentationlbl", "presentation", _presentationMode, true);
+	display.addLabelRow("reflowlbl");
+	display.addOptionRow("reflowscalelbl", "reflowscale", _reflowScale, true);
+	display.close();
+
 	GlkOptionsPageLayout compatibility(layouts, *this,
 		"GlkOptionsCompatibility", contentWidth, labelWidth,
 		pageInset, effectivePageInset, themeMetrics);
@@ -1817,8 +1841,6 @@ void GlkOptionsWidget::defineLayout(GUI::ThemeEval &layouts,
 		themeMetrics);
 	const char *layoutCheckboxes[] = { "lockcolslbl", "lockrowslbl" };
 	layoutPage.setCheckboxLabels(layoutCheckboxes, ARRAYSIZE(layoutCheckboxes));
-	layoutPage.addOptionRow("presentationlbl", "presentation", _presentationMode, true);
-	layoutPage.addOptionRow("reflowscalelbl", "reflowscale", _reflowScale, true);
 	layoutPage.addOptionRow("wmarginxlbl", "wmarginx", _wmarginx);
 	layoutPage.addOptionRow("wmarginylbl", "wmarginy", _wmarginy);
 	layoutPage.addOptionRow("tmarginxlbl", "tmarginx", _tmarginx);
@@ -1857,7 +1879,7 @@ void GlkOptionsWidget::defineLayout(GUI::ThemeEval &layouts,
 	paging.addOptionRow("spaceslbl", "spaces", _spaces, true);
 	paging.close();
 
-	const int pageHeights[] = { reading.getContentHeight(), compatibility.getContentHeight(),
+	const int pageHeights[] = { reading.getContentHeight(), display.getContentHeight(), compatibility.getContentHeight(),
 		colors.getContentHeight(), styles.getContentHeight(), layoutPage.getContentHeight(),
 		interaction.getContentHeight(), paging.getContentHeight() };
 	const int pageHeight = pageHeights[_tabs->getActiveTab()];
