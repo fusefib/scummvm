@@ -523,6 +523,13 @@ OSystem::TransactionError SurfaceSdlGraphicsManager::endGFXTransaction() {
 		internUpdateScreen();
 	}
 
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	// Native renderers must also see stretch changes without surface replacement.
+	if (_renderingAtOutputResolution && _transactionDetails.needDisplayResize &&
+			!_transactionDetails.sizeChanged && !_transactionDetails.formatChanged && !_transactionDetails.needHotswap)
+		++_screenChangeCount;
+#endif
+
 	_transactionMode = kTransactionNone;
 	return (OSystem::TransactionError)errors;
 }
@@ -793,6 +800,7 @@ void SurfaceSdlGraphicsManager::getDefaultResolution(uint &w, uint &h) {
 
 void SurfaceSdlGraphicsManager::initSize(uint w, uint h, const Graphics::PixelFormat *format) {
 	assert(_transactionMode == kTransactionActive);
+	_renderingAtOutputResolution = false;
 
 	_gameScreenShakeXOffset = 0;
 	_gameScreenShakeYOffset = 0;
@@ -854,6 +862,104 @@ void SurfaceSdlGraphicsManager::initSize(uint w, uint h, const Graphics::PixelFo
 	_videoMode.screenHeight = h;
 
 	_transactionDetails.sizeChanged = true;
+}
+
+Common::Point SurfaceSdlGraphicsManager::getGameOutputSize() const {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	int width, height;
+	if (getRendererOutputSize(width, height))
+		return gameOutputSize(width, height);
+#endif
+	return Common::Point();
+}
+
+bool SurfaceSdlGraphicsManager::setGameRenderSize(uint width, uint height) {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	Common::StackLock lock(_graphicsMutex);
+	if (_transactionMode != kTransactionNone || _overlayVisible || !_renderer ||
+		!_screen || !_hwScreen || _screenIsLocked || _displayDisabled || _screenFormat.bytesPerPixel < 2 ||
+		!width || !height || width > 32767U - _maxExtraPixels * 2 ||
+		height > 32767U - _maxExtraPixels * 2)
+		return false;
+	const uint paddedWidth = width + _maxExtraPixels * 2;
+	const uint paddedHeight = height + _maxExtraPixels * 2;
+	// Keep GUI layouts usable even when the game viewport is very small.
+	const uint overlayWidth = MAX<uint>(320, width);
+	const uint overlayHeight = MAX<uint>(200, height);
+	const uint paddedOverlayWidth = overlayWidth + _maxExtraPixels * 2;
+	const uint paddedOverlayHeight = overlayHeight + _maxExtraPixels * 2;
+	if (paddedOverlayWidth > 0x7fffffffU / paddedOverlayHeight / _screenFormat.bytesPerPixel)
+		return false;
+	const uint scaler = getDefaultScaler();
+	if (width == (uint)_videoMode.screenWidth && height == (uint)_videoMode.screenHeight &&
+		_videoMode.scaleFactor == 1 && _videoMode.scalerIndex == scaler &&
+		!_videoMode.aspectRatioCorrection && _videoMode.stretchMode == STRETCH_FIT) {
+		_renderingAtOutputResolution = true;
+		return true;
+	}
+
+	SDL_Surface *screen = createSurface(width, height, _screen);
+	SDL_Surface *hardware = createSurface(overlayWidth, overlayHeight, _hwScreen);
+	SDL_Surface *converted = createSurface(paddedWidth, paddedHeight, _hwScreen);
+	SDL_Surface *overlay = createSurface(overlayWidth, overlayHeight, _hwScreen);
+	SDL_Surface *convertedOverlay = createSurface(paddedOverlayWidth, paddedOverlayHeight, _hwScreen);
+	SDL_Surface *surfaces[] = { screen, hardware, converted, overlay, convertedOverlay };
+#if !SDL_VERSION_ATLEAST(3, 0, 0)
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, _videoMode.filtering ? "linear" : "nearest");
+#endif
+	SDL_Texture *texture = SDL_CreateTexture(_renderer, SDL_PIXELFORMAT_RGB565,
+		SDL_TEXTUREACCESS_STREAMING, overlayWidth, overlayHeight);
+	bool prepared = texture != nullptr;
+	for (uint i = 0; i < ARRAYSIZE(surfaces); ++i)
+		prepared = prepared && surfaces[i] != nullptr;
+	if (!prepared) {
+		for (uint i = 0; i < ARRAYSIZE(surfaces); ++i)
+			if (surfaces[i])
+				destroySurface(surfaces[i]);
+		if (texture)
+			SDL_DestroyTexture(texture);
+		return false;
+	}
+	SDL_SetSurfaceBlendMode(screen, SDL_BLENDMODE_NONE);
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+	SDL_SetTextureScaleMode(texture, _videoMode.filtering ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
+#endif
+	for (uint i = 0; i < ARRAYSIZE(surfaces); ++i)
+		SDL_FillRect(surfaces[i], nullptr, 0);
+	destroySurface(_screen);
+	destroySurface(_hwScreen);
+	destroySurface(_tmpscreen);
+	destroySurface(_overlayscreen);
+	destroySurface(_tmpscreen2);
+	SDL_DestroyTexture(_screenTexture);
+	_screen = screen;
+	_hwScreen = hardware;
+	_tmpscreen = converted;
+	_overlayscreen = overlay;
+	_tmpscreen2 = convertedOverlay;
+	_screenTexture = texture;
+	_videoMode.screenWidth = width;
+	_videoMode.screenHeight = height;
+	_videoMode.overlayWidth = _videoMode.hardwareWidth = overlayWidth;
+	_videoMode.overlayHeight = _videoMode.hardwareHeight = overlayHeight;
+	_videoMode.scalerIndex = scaler;
+	_videoMode.scaleFactor = 1;
+	_videoMode.aspectRatioCorrection = false;
+	_videoMode.stretchMode = STRETCH_FIT;
+	_renderingAtOutputResolution = true;
+	_numDirtyRects = _numPrevDirtyRects = 0;
+	_mouseLastRect.w = _mouseLastRect.h = 0;
+	_mouseNextRect.w = _mouseNextRect.h = 0;
+	_needRestoreAfterOverlay = false;
+	setGraphicsModeIntern();
+	getRendererOutputSize(_windowWidth, _windowHeight);
+	recalculateDisplayAreas();
+	_cursorNeedsRedraw = true;
+	++_screenChangeCount;
+	return true;
+#else
+	return false;
+#endif
 }
 
 void SurfaceSdlGraphicsManager::fixupResolutionForAspectRatio(AspectRatio desiredAspectRatio, int &width, int &height) const {
@@ -1982,6 +2088,10 @@ void SurfaceSdlGraphicsManager::clearOverlay() {
 	if (!_overlayVisible)
 		return;
 
+	if (_renderingAtOutputResolution && (_videoMode.overlayWidth != _videoMode.screenWidth ||
+		_videoMode.overlayHeight != _videoMode.screenHeight))
+		SDL_FillRect(_overlayscreen, nullptr, 0);
+
 	// Clear the overlay by making the game screen "look through" everywhere.
 	SDL_Rect src, dst;
 	src.x = src.y = 0;
@@ -3007,9 +3117,29 @@ void SurfaceSdlGraphicsManager::notifyVideoExpose() {
 	_forceRedraw = true;
 }
 
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+bool SurfaceSdlGraphicsManager::getRendererOutputSize(int &width, int &height) const {
+	if (!_renderer)
+		return false;
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+	return SDL_GetRenderOutputSize(_renderer, &width, &height);
+#else
+	return SDL_GetRendererOutputSize(_renderer, &width, &height) == 0;
+#endif
+}
+#endif
+
 void SurfaceSdlGraphicsManager::notifyResize(const int width, const int height) {
 #if SDL_VERSION_ATLEAST(2, 0, 0)
-	handleResize(width, height);
+	if (_renderingAtOutputResolution) {
+		int outputWidth = width;
+		int outputHeight = height;
+		getRendererOutputSize(outputWidth, outputHeight);
+		handleResize(outputWidth, outputHeight);
+		++_screenChangeCount;
+	} else {
+		handleResize(width, height);
+	}
 #endif
 }
 
@@ -3160,6 +3290,12 @@ void SurfaceSdlGraphicsManager::SDL_UpdateRects(SDL_Surface *screen, int numrect
 	SDL_UpdateTexture(_screenTexture, nullptr, screen->pixels, screen->pitch);
 
 	SDL_Rect viewport;
+	SDL_Rect source = { 0, 0, _videoMode.screenWidth, _videoMode.screenHeight };
+	const bool cropGame = _renderingAtOutputResolution && !_overlayVisible;
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+	SDL_FRect fSource;
+	SDL_RectToFRect(&source, &fSource);
+#endif
 
 	Common::Rect &drawRect = (_overlayVisible) ? _overlayDrawRect : _gameDrawRect;
 
@@ -3185,17 +3321,17 @@ void SurfaceSdlGraphicsManager::SDL_UpdateRects(SDL_Surface *screen, int numrect
 #if SDL_VERSION_ATLEAST(3, 0, 0)
 		SDL_FRect fViewport;
 		SDL_RectToFRect(&viewport, &fViewport);
-		SDL_RenderTextureRotated(_renderer, _screenTexture, nullptr, &fViewport, rotangle, nullptr, SDL_FLIP_NONE);
+		SDL_RenderTextureRotated(_renderer, _screenTexture, cropGame ? &fSource : nullptr, &fViewport, rotangle, nullptr, SDL_FLIP_NONE);
 #else
-		SDL_RenderCopyEx(_renderer, _screenTexture, nullptr, &viewport, rotangle, nullptr, SDL_FLIP_NONE);
+		SDL_RenderCopyEx(_renderer, _screenTexture, cropGame ? &source : nullptr, &viewport, rotangle, nullptr, SDL_FLIP_NONE);
 #endif
 	} else {
 #if SDL_VERSION_ATLEAST(3, 0, 0)
 		SDL_FRect fViewport;
 		SDL_RectToFRect(&viewport, &fViewport);
-		SDL_RenderTexture(_renderer, _screenTexture, nullptr, &fViewport);
+		SDL_RenderTexture(_renderer, _screenTexture, cropGame ? &fSource : nullptr, &fViewport);
 #else
-		SDL_RenderCopy(_renderer, _screenTexture, nullptr, &viewport);
+		SDL_RenderCopy(_renderer, _screenTexture, cropGame ? &source : nullptr, &viewport);
 #endif
 	}
 }

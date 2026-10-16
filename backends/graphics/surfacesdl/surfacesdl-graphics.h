@@ -76,6 +76,8 @@ public:
 	int getStretchMode() const override;
 #endif
 	void initSize(uint w, uint h, const Graphics::PixelFormat *format = NULL) override;
+	Common::Point getGameOutputSize() const override;
+	bool setGameRenderSize(uint width, uint height) override;
 	int getScreenChangeID() const override { return _screenChangeCount; }
 
 	void beginGFXTransaction() override;
@@ -187,6 +189,9 @@ protected:
 	}
 
 	void handleResizeImpl(const int width, const int height) override;
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	bool getRendererOutputSize(int &width, int &height) const;
+#endif
 
 	virtual void setupHardwareSize();
 
