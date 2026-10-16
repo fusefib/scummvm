@@ -113,12 +113,13 @@ bool GlkEngine::updatePresentation(bool backendChanged) {
 		return false;
 	if (!_screen->supportsLiveMetrics())
 		return false;
-	const Common::Point output = g_system->getGameOutputSize();
+	float density;
+	const Common::Point output = g_system->getGameOutputSize(&density);
 	const bool aspect = _nativePresentation ? _savedAspectCorrection :
 		g_system->getFeatureState(OSystem::kFeatureAspectRatioCorrection);
 	PresentationGeometry geometry;
 	if (!geometry.calculate(_screen->canvasSize(), output, mode, _conf->_reflowScale,
-			g_system->getHiDPIScreenFactor(), _screen->format.bytesPerPixel, aspect))
+			density, _screen->format.bytesPerPixel, aspect))
 		return false;
 	const PresentationGeometry &current = _screen->presentation();
 	const bool resize = geometry.logicalSize != current.logicalSize;

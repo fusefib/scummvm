@@ -1133,8 +1133,10 @@ public:
 	 * Return the usable physical game output size, before letterboxing, in
 	 * game orientation. Returns (0, 0) when the backend cannot report it.
 	 * The result already includes display density; it is independent of GUI zoom.
+	 * If supplied, density receives the output's DPI scaling factor, independent
+	 * of the current game surface and before setGameRenderSize() is called.
 	 */
-	virtual Common::Point getGameOutputSize() const;
+	virtual Common::Point getGameOutputSize(float *density = nullptr) const;
 
 	/**
 	 * Replace the 2D game surface without resizing the window or changing saved

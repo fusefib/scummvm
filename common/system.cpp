@@ -237,7 +237,9 @@ Common::Rect OSystem::getSafeOverlayArea(int16 *width, int16 *height) const {
 	return Common::Rect(w, h);
 }
 
-Common::Point OSystem::getGameOutputSize() const {
+Common::Point OSystem::getGameOutputSize(float *density) const {
+	if (density)
+		*density = getHiDPIScreenFactor();
 	return Common::Point();
 }
 

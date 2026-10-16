@@ -89,7 +89,7 @@ public:
 	Common::List<Graphics::PixelFormat> getSupportedFormats() const override final;
 #endif
 	void initSize(uint width, uint height, const Graphics::PixelFormat *format = NULL) override final;
-	Common::Point getGameOutputSize() const override final;
+	Common::Point getGameOutputSize(float *density = nullptr) const override final;
 	bool setGameRenderSize(uint width, uint height) override final;
 	void initSizeHint(const Graphics::ModeList &modes) override final;
 	int getScreenChangeID() const override final;

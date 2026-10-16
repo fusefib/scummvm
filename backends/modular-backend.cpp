@@ -140,8 +140,8 @@ void ModularGraphicsBackend::initSize(uint w, uint h, const Graphics::PixelForma
 	_graphicsManager->initSize(w, h, format);
 }
 
-Common::Point ModularGraphicsBackend::getGameOutputSize() const {
-	return _graphicsManager->getGameOutputSize();
+Common::Point ModularGraphicsBackend::getGameOutputSize(float *density) const {
+	return _graphicsManager->getGameOutputSize(density);
 }
 
 bool ModularGraphicsBackend::setGameRenderSize(uint width, uint height) {

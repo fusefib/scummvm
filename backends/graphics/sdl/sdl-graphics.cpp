@@ -252,7 +252,9 @@ bool SdlGraphicsManager::lockMouse(bool lock) {
 	return _window->lockMouse(lock);
 }
 
-Common::Point SdlGraphicsManager::getGameOutputSize() const {
+Common::Point SdlGraphicsManager::getGameOutputSize(float *density) const {
+	if (density)
+		*density = getHiDPIScreenFactor();
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 	if (!_window || !_window->getSDLWindow())
 		return Common::Point();

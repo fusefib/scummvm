@@ -864,7 +864,9 @@ void SurfaceSdlGraphicsManager::initSize(uint w, uint h, const Graphics::PixelFo
 	_transactionDetails.sizeChanged = true;
 }
 
-Common::Point SurfaceSdlGraphicsManager::getGameOutputSize() const {
+Common::Point SurfaceSdlGraphicsManager::getGameOutputSize(float *density) const {
+	if (density)
+		*density = _window ? _window->getDpiScalingFactor() : 1.0f;
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 	int width, height;
 	if (getRendererOutputSize(width, height))
