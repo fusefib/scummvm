@@ -145,6 +145,9 @@ void Comprehend::printRoomDesc(const Common::String &desc) {
 		// Get the grid width and do a word wrap
 		uint width;
 		glk_window_get_size(_roomDescWindow, &width, nullptr);
+		if (width <= 2)
+			return;
+
 		Common::String str = desc;
 		str.wordWrap(width - 2);
 		str += '\n';
