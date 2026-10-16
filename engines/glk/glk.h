@@ -35,6 +35,19 @@
 
 namespace Glk {
 
+enum AppearanceDeferral {
+	kAppearanceApplied,
+	kAppearanceFontResources,
+	kAppearanceLayout,
+	kAppearanceInterpreter
+};
+
+struct AppearanceResult {
+	AppearanceDeferral metrics;
+	bool startup;
+	AppearanceResult() : metrics(kAppearanceApplied), startup(false) {}
+};
+
 class Clipboard;
 class Blorb;
 class Conf;
@@ -107,6 +120,7 @@ protected:
 	 */
 	virtual void runGame() = 0;
 
+	// Refresh interpreter caches without replaying initialization or styles.
 	virtual void appearanceChanged(const Conf &before, const Conf &after, bool metrics) {}
 public:
 	Blorb *_blorb;
@@ -176,6 +190,9 @@ public:
 	const Common::String &getTargetName() const {
 		return _targetName;
 	}
+	// Before/after are resolved preferences, not game-modified presentation.
+	AppearanceResult applyAppearance(const Common::String &target,
+		const Conf &before, const Conf &after);
 
 	/**
 	 * Return the filename for a given save slot

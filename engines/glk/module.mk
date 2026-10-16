@@ -1,6 +1,7 @@
 MODULE := engines/glk
 
 MODULE_OBJS := \
+	appearance.o \
 	blorb.o \
 	conf.o \
 	debugger.o \

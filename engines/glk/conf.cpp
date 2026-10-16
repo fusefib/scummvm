@@ -87,6 +87,7 @@ Conf::Conf(InterpreterType interpType, bool installGlobal,
 		g_conf = this;
 	_imageW = _width;
 	_imageH = _height;
+	_leadingMin = _baseLineMin = 0;
 
 	_propInfo._morePrompt = "\207 more \207";
 	_propInfo._moreColor = 0;
@@ -175,6 +176,8 @@ void Conf::synchronize() {
 	syncAsInt("leading", _monoInfo._leading);
 	syncAsInt("leading", _propInfo._leading);
 	syncAsInt("baseline", _propInfo._baseLine);
+	_leadingMin = _monoInfo._leading;
+	_baseLineMin = _propInfo._baseLine;
 
 	if (exists("minrows"))
 		_rows = MAX(_rows, getInt("minrows"));

@@ -77,6 +77,7 @@ void FrotzScreen::loadVersion6Fonts(Common::Archive *archive) {
 	pi._spaces = 0;
 	pi._morePrompt = "[MORE]";
 	pi._lineSeparation = 0;
+	g_conf->_appearanceRequests |= kAppearancePagingPrompt | kAppearanceTypography;
 
 	// Capture the defaults before bitmap windows use transparent backgrounds.
 	g_vm->_defaultForeground = g_conf->_tStyles[style_Normal].fg;

@@ -89,12 +89,6 @@ void TextBufferWindow::rearrange(const Rect &box) {
 	}
 }
 
-void TextBufferWindow::refreshStyles() {
-	Common::copy(g_conf->_tStyles, g_conf->_tStyles + style_NUMSTYLES, _styles);
-	_needsReflow = true;
-	rearrange(Rect(_bbox.left, _bbox.top - _yAdj, _bbox.right, _bbox.bottom));
-}
-
 void TextBufferWindow::touchScroll() {
 	g_vm->_selection->clearSelection();
 	_windows->repaint(_bbox);

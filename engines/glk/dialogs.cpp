@@ -1159,8 +1159,37 @@ bool GlkOptionsWidget::validate() {
 }
 
 bool GlkOptionsWidget::save() {
-	// Accepted preferences take effect at the next interpreter startup.
-	return synchronizeDraft(true) && _settings->apply();
+	if (!synchronizeDraft(true))
+		return false;
+	GlkEngine *engine = _hostContext == kInGameOptions ? dynamic_cast<GlkEngine *>(g_engine) : nullptr;
+	if (!engine || !engine->_conf || engine->getTargetName() != _domain)
+		return _settings->apply();
+
+	// Resolve saved preferences, including temporary runtime layers, separately
+	// from the installed configuration and its game-owned styles.
+	Conf before(engine->getInterpreterType(), false, engine->_conf->_screenFormat);
+	before.load(GlkPreferences(ConfMan.getDomain(_domain), true));
+	if (!_settings->apply())
+		return false;
+	Conf after(engine->getInterpreterType(), false, engine->_conf->_screenFormat);
+	after.load(GlkPreferences(ConfMan.getDomain(_domain), true));
+	const AppearanceResult result = engine->applyAppearance(_domain, before, after);
+	switch (result.metrics) {
+	case kAppearanceFontResources:
+		warning("GLK: Saved font/layout changes deferred: font resources could not be loaded");
+		break;
+	case kAppearanceLayout:
+		warning("GLK: Saved font/layout changes deferred: the current window state cannot fit");
+		break;
+	case kAppearanceInterpreter:
+		debug(1, "GLK: Saved font/layout changes require an interpreter restart");
+		break;
+	default:
+		break;
+	}
+	if (result.startup)
+		debug(1, "GLK: Game formatting and picture changes take effect at startup");
+	return true;
 }
 
 void GlkOptionsWidget::handleCommand(GUI::CommandSender *sender, uint32 cmd, uint32 data) {

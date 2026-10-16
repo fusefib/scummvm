@@ -301,6 +301,11 @@ void WindowStyle::updatePreferences(const WindowStyle &before, const WindowStyle
 	}
 }
 
+TextWindow::TextWindow(Windows *windows, uint rock) : Window(windows, rock) {
+	for (int i = 0; i < style_NUMSTYLES; ++i)
+		_styleRequests[i] = 0;
+}
+
 void TextWindow::resolveStyles(const Conf &before, const Conf &after,
 		WindowStyle *styles, bool fonts) const {
 	const WindowStyle *old = _type == wintype_TextGrid ? before._gStyles : before._tStyles;
@@ -328,11 +333,6 @@ void Windows::updateAppearance(const Conf &before, const Conf &after, bool fonts
 			grid->resolveStyles(before, after, grid->_styles, fonts);
 		}
 	}
-}
-
-TextWindow::TextWindow(Windows *windows, uint rock) : Window(windows, rock) {
-	for (int i = 0; i < style_NUMSTYLES; ++i)
-		_styleRequests[i] = 0;
 }
 
 void Windows::inputGuessFocus() {

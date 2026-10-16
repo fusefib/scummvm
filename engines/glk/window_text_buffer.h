@@ -186,10 +186,6 @@ public:
 	 */
 	void rearrange(const Rect &box) override;
 
-	/**
-	* Use graphics styles and mono font for grid windows
-    */
-	void refreshStyles();
 	void setSpeechEnabled(bool enabled) { Speech::setSpeechEnabled(enabled); }
 
 	/**

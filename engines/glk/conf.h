@@ -35,12 +35,10 @@ enum AppearanceRequest {
 	kAppearanceWindowColor = 1 << 0,
 	kAppearanceBorderColor = 1 << 1,
 	kAppearanceCaretColor = 1 << 2,
-	kAppearanceGridCaretColor = 1 << 3,
-	kAppearanceMoreColor = 1 << 4,
-	kAppearanceLinkColor = 1 << 5,
-	kAppearanceWindowMargins = 1 << 6,
-	kAppearanceTextMarginY = 1 << 7,
-	kAppearanceWindowDefault = 1 << 8
+	kAppearanceMoreColor = 1 << 3,
+	kAppearanceLinkColor = 1 << 4,
+	kAppearancePagingPrompt = 1 << 5,
+	kAppearanceTypography = 1 << 6
 };
 
 /**
@@ -98,6 +96,7 @@ public:
 	Graphics::PixelFormat _screenFormat;
 	MonoFontInfo _monoInfo;
 	PropFontInfo _propInfo;
+	int _leadingMin, _baseLineMin;
 	int _cols, _rows;
 	int _lockCols, _lockRows;
 	int _wMarginX, _wMarginY;
