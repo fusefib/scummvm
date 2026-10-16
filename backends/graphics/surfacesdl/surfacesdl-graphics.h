@@ -78,6 +78,7 @@ public:
 	void initSize(uint w, uint h, const Graphics::PixelFormat *format = NULL) override;
 	Common::Point getGameOutputSize(float *density = nullptr) const override;
 	bool setGameRenderSize(uint width, uint height) override;
+	float getHiDPIScreenFactor() const override;
 	int getScreenChangeID() const override { return _screenChangeCount; }
 
 	void beginGFXTransaction() override;

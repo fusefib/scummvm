@@ -864,6 +864,11 @@ void SurfaceSdlGraphicsManager::initSize(uint w, uint h, const Graphics::PixelFo
 	_transactionDetails.sizeChanged = true;
 }
 
+float SurfaceSdlGraphicsManager::getHiDPIScreenFactor() const {
+	// Ordinary SDL overlays are magnified with the game surface.
+	return _renderingAtOutputResolution && _window ? _window->getDpiScalingFactor() : 1.0f;
+}
+
 Common::Point SurfaceSdlGraphicsManager::getGameOutputSize(float *density) const {
 	if (density)
 		*density = _window ? _window->getDpiScalingFactor() : 1.0f;
@@ -896,6 +901,8 @@ bool SurfaceSdlGraphicsManager::setGameRenderSize(uint width, uint height) {
 	if (width == (uint)_videoMode.screenWidth && height == (uint)_videoMode.screenHeight &&
 		_videoMode.scaleFactor == 1 && _videoMode.scalerIndex == scaler &&
 		!_videoMode.aspectRatioCorrection && _videoMode.stretchMode == STRETCH_FIT) {
+		if (!_renderingAtOutputResolution)
+			++_screenChangeCount;
 		_renderingAtOutputResolution = true;
 		return true;
 	}
