@@ -252,6 +252,31 @@ bool SdlGraphicsManager::lockMouse(bool lock) {
 	return _window->lockMouse(lock);
 }
 
+Common::Point SdlGraphicsManager::getGameOutputSize() const {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	if (!_window || !_window->getSDLWindow())
+		return Common::Point();
+	int width, height;
+	getWindowSizeFromSdl(&width, &height);
+	return gameOutputSize(width, height);
+#else
+	return Common::Point();
+#endif
+}
+
+Common::Point SdlGraphicsManager::gameOutputSize(int width, int height) const {
+	if (!_ignoreGameSafeArea) {
+		const Insets insets = getSafeAreaInsets();
+		width -= insets.left + insets.right;
+		height -= insets.top + insets.bottom;
+	}
+	if (width <= 0 || height <= 0 || width > 32767 || height > 32767)
+		return Common::Point();
+	if (_rotationMode == Common::kRotation90 || _rotationMode == Common::kRotation270)
+		SWAP(width, height);
+	return Common::Point(width, height);
+}
+
 bool SdlGraphicsManager::notifyMousePosition(Common::Point &mouse) {
 	bool showCursor = false;
 	// Currently on macOS we need to scale the events for HiDPI screen, but on

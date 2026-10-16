@@ -75,6 +75,8 @@ public:
 	virtual Common::List<Graphics::PixelFormat> getSupportedFormats() const = 0;
 #endif
 	virtual void initSize(uint width, uint height, const Graphics::PixelFormat *format = NULL) = 0;
+	virtual Common::Point getGameOutputSize() const { return Common::Point(); }
+	virtual bool setGameRenderSize(uint width, uint height) { return false; }
 	virtual void initSizeHint(const Graphics::ModeList &modes) {}
 	virtual int getScreenChangeID() const = 0;
 

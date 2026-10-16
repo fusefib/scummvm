@@ -91,6 +91,8 @@ public:
 	 */
 	virtual bool notifyMousePosition(Common::Point &mouse);
 
+	Common::Point getGameOutputSize() const override;
+
 	bool showMouse(bool visible) override;
 	bool lockMouse(bool lock) override;
 
@@ -183,6 +185,8 @@ protected:
 	}
 
 	virtual void showSystemMouseCursor(bool visible);
+
+	Common::Point gameOutputSize(int width, int height) const;
 
 	void setSystemMousePosition(const int x, const int y) override;
 

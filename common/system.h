@@ -58,6 +58,7 @@ namespace Common {
 class EventManager;
 class MutexInternal;
 struct Rect;
+struct Point;
 class SaveFileManager;
 class SearchSet;
 class String;
@@ -1127,6 +1128,29 @@ public:
 	 * @param format	New virtual screen pixel format.
 	 */
 	virtual void initSize(uint width, uint height, const Graphics::PixelFormat *format = nullptr) = 0;
+
+	/**
+	 * Return the usable physical game output size, before letterboxing, in
+	 * game orientation. Returns (0, 0) when the backend cannot report it.
+	 * The result already includes display density; it is independent of GUI zoom.
+	 */
+	virtual Common::Point getGameOutputSize() const;
+
+	/**
+	 * Replace the 2D game surface without resizing the window or changing saved
+	 * graphics preferences. Uses the current pixel format, normal 1x scaling
+	 * and fit-to-window presentation without aspect correction. Existing
+	 * screen contents are discarded.
+	 *
+	 * On success, getWidth(), getHeight(), screen operations and game mouse events
+	 * use the new render-pixel coordinates. Engines with logical coordinates
+	 * must perform their own conversion. A subsequent normal graphics setup
+	 * restores the configured scaling policy.
+	 *
+	 * Call outside a graphics transaction, with the overlay hidden. Unsupported
+	 * or rejected sizes return false without replacing the current surface.
+	 */
+	virtual bool setGameRenderSize(uint width, uint height) { return false; }
 
 	/**
 	 * Send a list of graphics modes to the backend so it can make a decision

@@ -57,6 +57,7 @@ public:
 		_screenAlign(SCREEN_ALIGN_CENTER | SCREEN_ALIGN_MIDDLE),
 		_rotationMode(Common::kRotationNormal),
 		_ignoreGameSafeArea(false),
+		_renderingAtOutputResolution(false),
 		_overlayVisible(false),
 		_overlayInGUI(false),
 		_gameScreenShakeXOffset(0),
@@ -491,6 +492,9 @@ protected:
 	 * Whether the safe area should be ignored for games
 	 */
 	bool _ignoreGameSafeArea;
+
+	/** The engine supplies render pixels instead of a surface for upscaling. */
+	bool _renderingAtOutputResolution;
 
 	/**
 	 * Whether the overlay (i.e. launcher, including the out-of-game launcher)

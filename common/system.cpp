@@ -26,6 +26,7 @@
 #include "common/fs.h"
 #include "common/file.h"
 #include "common/printman.h"
+#include "common/rect.h"
 #include "common/savefile.h"
 #include "common/str.h"
 #include "common/taskbar.h"
@@ -234,6 +235,10 @@ Common::Rect OSystem::getSafeOverlayArea(int16 *width, int16 *height) const {
 	if (width) *width = w;
 	if (height) *height = h;
 	return Common::Rect(w, h);
+}
+
+Common::Point OSystem::getGameOutputSize() const {
+	return Common::Point();
 }
 
 void OSystem::fatalError() {
