@@ -31,6 +31,7 @@ MODULE_OBJS := \
 	sound/dos_adlib.o \
 	sound/dos_driver.o \
 	sound/factory.o \
+	sound/dos_mt32.o \
 	sound/dos_pcspk.o \
 	sound/resource_entry.o \
 	sound/resources.o \
