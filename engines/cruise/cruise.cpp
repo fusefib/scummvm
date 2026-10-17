@@ -55,6 +55,7 @@ CruiseEngine::CruiseEngine(OSystem * syst, const CRUISEGameDescription *gameDesc
 	_speedFlag = false;
 	_pendingLoadSlot = -1;
 	_insideTimingWait = false;
+	resetPublishedCaption();
 	_polyStructs = nullptr;
 	_polyStruct = nullptr;
 

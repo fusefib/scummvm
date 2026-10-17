@@ -2010,8 +2010,10 @@ void CruiseEngine::mainLoop() {
 				PCFadeFlag = false;
 
 			/*if (!PCFadeFlag)*/
+			beginCaptionFrame();
 			mainDraw(userWait);
 			flipScreen();
+			finishCaptionFrame(false);
 
 			if (userWait) {
 				// Waiting for press - original wait loop has been integrated into the

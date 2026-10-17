@@ -81,6 +81,9 @@ private:
 	bool _speedFlag;
 	int _pendingLoadSlot;
 	bool _insideTimingWait;
+	byte _captionColors[256];
+	byte _nextCaptionColors[256];
+	bool _captionFramePending;
 	Common::Queue<Common::Event> _pendingInputEvents;
 	PauseToken _gamePauseToken;
 
@@ -112,6 +115,11 @@ public:
 	Common::Platform getPlatform() const;
 	PCSound &sound() { return *_sound; }
 	bool manageEvents(bool deferInput = false);
+	void resetPublishedCaption();
+	void beginCaptionFrame();
+	void noteCaptionColor(byte color);
+	void finishCaptionFrame(bool published);
+	bool hasPublishedCaption() const;
 	bool fadePalette(bool fadeIn);
 	virtual void pauseEngine(bool pause);
 	const char *langString(LangStringId langId) { return _langStrings[(int)langId].c_str(); }
