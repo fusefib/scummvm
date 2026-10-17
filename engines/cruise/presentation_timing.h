@@ -42,6 +42,36 @@ private:
 	uint16 _counter;
 };
 
+class WorkBudget {
+public:
+	WorkBudget() : _nanoseconds(0) {}
+	void reset() { _nanoseconds = 0; }
+	void add(uint32 count, uint32 nanosecondsPerUnit);
+	void addPixels(int width, int height, uint32 nanosecondsPerPixel);
+	uint32 millis() const;
+
+private:
+	uint64 _nanoseconds;
+};
+
+class DrawingWorkload {
+public:
+	DrawingWorkload();
+	void begin(bool enabled, bool captionVisible);
+	void cancel();
+	void countSprite(int width, int height, int x, int y);
+	void countText(int width, int height);
+	void countBackgroundCopy(uint32 bytes);
+	uint32 finishDrawing();
+	uint32 finishCopy(uint32 bytes);
+
+private:
+	enum Phase { kIdle, kDrawing, kCopy };
+	Phase _phase;
+	bool _captionVisible;
+	WorkBudget _work;
+};
+
 } // End of namespace Cruise
 
 #endif

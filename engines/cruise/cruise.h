@@ -75,6 +75,7 @@ private:
 	Common::StringArray _langStrings;
 	CursorType _savedCursor;
 	PresentationClock _presentationClock;
+	DrawingWorkload _drawingWorkload;
 	uint32 _presentationPauseStart;
 	uint32 _presentationPausedMillis;
 	bool _speedFlag;
@@ -118,6 +119,8 @@ public:
 	Common::Platform getPlatform() const;
 	PCSound &sound() { return *_sound; }
 	uint32 presentationMillis() const;
+	DrawingWorkload &drawingWorkload() { return _drawingWorkload; }
+	bool finishFrameCopy(uint32 start);
 	bool manageEvents(bool deferInput = false);
 	void resetPublishedCaption();
 	void beginCaptionFrame();

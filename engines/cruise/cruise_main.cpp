@@ -1856,6 +1856,11 @@ bool CruiseEngine::waitForPresentationFrame() {
 	return waitForPresentationDelay(now, bFastMode ? 0 : _presentationClock.delayToPhase(now));
 }
 
+bool CruiseEngine::finishFrameCopy(uint32 start) {
+	// Only ordinary drawing arms this copy, never palette or menu refreshes.
+	return waitForPresentationDelay(start, _drawingWorkload.finishCopy(320 * 200));
+}
+
 bool CruiseEngine::waitForPresentationPhases(uint count) {
 	while (count--) {
 		const uint32 now = presentationMillis();
@@ -1909,6 +1914,7 @@ void CruiseEngine::mainLoop() {
 		if (_pendingLoadSlot >= 0) {
 			const int slot = _pendingLoadSlot;
 			_pendingLoadSlot = -1;
+			_drawingWorkload.cancel();
 			const Common::Error loadError = loadSavegameData(slot);
 			if (loadError.getCode() != Common::kNoError)
 				GUIErrorMessage(loadError.getDesc());
@@ -2039,13 +2045,18 @@ void CruiseEngine::mainLoop() {
 				PCFadeFlag = false;
 
 			/*if (!PCFadeFlag)*/
+			const uint32 drawStart = presentationMillis();
 			beginCaptionFrame();
+			_drawingWorkload.begin(!bFastMode, hasPublishedCaption());
 			mainDraw(userWait);
-			if (!waitForPresentationFrame()) {
+			const uint32 drawMillis = _drawingWorkload.finishDrawing();
+			if (!waitForPresentationDelay(drawStart, drawMillis) || !waitForPresentationFrame()) {
+				_drawingWorkload.cancel();
 				finishCaptionFrame(false);
 				break;
 			}
 			flipScreen();
+			_drawingWorkload.cancel();
 			finishCaptionFrame(false);
 
 			if (userWait) {

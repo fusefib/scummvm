@@ -1127,6 +1127,7 @@ bool drawMessage(const gfxEntryStruct *pGfxPtr, int globalX, int globalY, int wi
 	bool drawn = false;
 
 	if (pGfxPtr) {
+		_vm->drawingWorkload().countText(pGfxPtr->width, pGfxPtr->height);
 		const uint8 *ptr = pGfxPtr->imagePtr;
 		int height = pGfxPtr->height;
 
@@ -1381,6 +1382,7 @@ void mainDraw(bool waitFl) {
 	bgPtr = backgroundScreens[masterScreen];
 
 	if (bgPtr) {
+		_vm->drawingWorkload().countBackgroundCopy(320 * 200);
 		gfxModuleData_gfxCopyScreen(bgPtr, gfxModuleData.pPage10);
 		if (backgroundChanged[masterScreen]) {
 			backgroundChanged[masterScreen] = false;
@@ -1440,6 +1442,7 @@ void mainDraw(bool waitFl) {
 					spriteHeight = filesDatabase[objZ2].height;	// height
 
 					if (filesDatabase[objZ2].subData.ptr) {
+						_vm->drawingWorkload().countSprite(objX1, spriteHeight, objX2, objY2);
 						drawSprite(objX1, spriteHeight, currentObjPtr, filesDatabase[objZ2].subData.ptr, objY2, objX2, gfxModuleData.pPage10, filesDatabase[objZ2].subData.ptrMask);
 					}
 				}

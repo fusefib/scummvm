@@ -223,7 +223,10 @@ void gfxModuleData_Init() {
 }
 
 void gfxModuleData_flipScreen() {
+	const uint32 start = _vm->presentationMillis();
 	memcpy(globalScreen, gfxModuleData.pPage00, 320 * 200);
+	if (!_vm->finishFrameCopy(start))
+		return;
 
 	flip();
 	_vm->finishCaptionFrame(true);
