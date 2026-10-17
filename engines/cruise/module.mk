@@ -28,6 +28,9 @@ MODULE_OBJS := \
 	saveload.o \
 	script.o \
 	sound.o \
+	sound/atari_host.o \
+	sound/atari_factory.o \
+	sound/atari_midi.o \
 	sound/atari_psg.o \
 	sound/dos_adlib.o \
 	sound/dos_driver.o \

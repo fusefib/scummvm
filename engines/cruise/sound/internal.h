@@ -87,12 +87,23 @@ inline int prepareAdLibMusicVolume(int volume, int fadeOut) {
 	return volume < 0x7f ? volume : 0x7f;
 }
 
-inline byte calculateH32Checksum(byte address0, byte address1, byte address2,
+inline void buildH32DT1(byte *message, byte address0, byte address1, byte address2,
 		const byte *data, uint16 length) {
+	assert(length <= kH32TimbrePayloadSize);
+	message[0] = 0x41;
+	message[1] = 0x10;
+	message[2] = 0x16;
+	message[3] = 0x12;
+	message[4] = address0;
+	message[5] = address1;
+	message[6] = address2;
 	uint32 checksum = address0 + address1 + address2;
-	for (uint16 i = 0; i < length; ++i)
+	for (uint16 i = 0; i < length; ++i) {
+		message[7 + i] = data[i];
 		checksum += data[i];
-	return (byte)(0x80 - (checksum & 0x7f));
+	}
+	// Native subtraction retains 0x80 when the sum's low seven bits are zero.
+	message[7 + length] = (byte)(0x80 - (checksum & 0x7f));
 }
 
 inline uint16 calculateSpeakerMode0Divisor(int period) {

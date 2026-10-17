@@ -68,6 +68,7 @@ public:
 	virtual bool songLoaded() const = 0;
 	virtual bool songPlayed() const = 0;
 	virtual void fadeSong() = 0;
+	virtual int16 trackPosition() const { return 0; }
 	virtual uint8 numOrders() const = 0;
 	virtual void setNumOrders(uint8 v) = 0;
 	virtual void setPattern(int offset, uint8 value) = 0;
