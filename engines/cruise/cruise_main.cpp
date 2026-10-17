@@ -1851,6 +1851,29 @@ bool CruiseEngine::waitForPresentationFrame() {
 	return true;
 }
 
+bool CruiseEngine::waitForPresentationPhases(uint count) {
+	while (count--) {
+		const uint32 now = presentationMillis();
+		if (!waitForPresentationDelay(now, _presentationClock.delayToPhase(now)))
+			return false;
+	}
+	return true;
+}
+
+bool CruiseEngine::waitForPresentationTicks(uint16 ticks) {
+	uint32 now = presentationMillis();
+	// Preserve the reference's unsigned target comparison, including wrap.
+	const uint16 target = (uint16)(_presentationClock.counter(now) + ticks);
+	uint32 delay;
+	while (!bFastMode && _pendingLoadSlot < 0 &&
+			(delay = _presentationClock.delayToBoundary(now, target)) != 0) {
+		if (!waitForPresentationDelay(now, delay))
+			return false;
+		now = presentationMillis();
+	}
+	return !_playerDontAskQuit && !shouldQuit();
+}
+
 void CruiseEngine::mainLoop() {
 	//int32 t_start,t_left;
 	//uint32 t_end;
