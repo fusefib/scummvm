@@ -35,7 +35,7 @@ void pixel(int x, int y, char color);
 void mainDraw(bool waitFl);
 void flipScreen();
 void buildPolyModel(int X, int Y, int scale, char *ptr2, char *destBuffer, char *dataPtr);
-void drawSprite(int width, int height, cellStruct *currentObjPtr, const uint8 *dataIn, int ys, int xs, uint8 *output, const uint8 *dataBuf);
+bool drawSprite(int width, int height, cellStruct *currentObjPtr, const uint8 *dataIn, int ys, int xs, uint8 *output, const uint8 *dataBuf);
 void flipPoly(int fileId, int16 *dataPtr, int scale, char** newFrame, int X, int Y, int *outX, int *outY, int *outScale);
 void getPolySize(int positionX, int positionY, int scale, int sizeTable[4], unsigned char *dataPtr);
 bool findPoly(char* dataPtr, int x, int y, int zoom, int mouseX, int mouseY);

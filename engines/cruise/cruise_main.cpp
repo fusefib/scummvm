@@ -1847,7 +1847,7 @@ bool CruiseEngine::waitForPresentationFrame() {
 	uint32 now = presentationMillis();
 	uint16 ticks = speedGame;
 	if (!flagSpeed) {
-		const uint32 minimum = MAX<byte>(8, publishedCaptionTicks());
+		const uint32 minimum = _publishedPickupPose ? 16 : MAX<byte>(8, publishedCaptionTicks());
 		ticks = MIN<uint32>(((uint32)ticks * minimum + 7) / 8, 0xffff);
 	}
 	uint32 delay;

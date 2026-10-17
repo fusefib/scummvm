@@ -255,10 +255,12 @@ void CruiseEngine::resetPublishedCaption() {
 	memset(_captionColors, 0, sizeof(_captionColors));
 	memset(_nextCaptionColors, 0, sizeof(_nextCaptionColors));
 	_captionFramePending = false;
+	_publishedPickupPose = _nextPickupPose = false;
 }
 
 void CruiseEngine::beginCaptionFrame() {
 	memset(_nextCaptionColors, 0, sizeof(_nextCaptionColors));
+	_nextPickupPose = false;
 	_captionFramePending = true;
 }
 
@@ -267,9 +269,16 @@ void CruiseEngine::noteCaptionColor(byte color, byte ticks) {
 		_nextCaptionColors[color] = MAX(_nextCaptionColors[color], ticks);
 }
 
+void CruiseEngine::notePickupPose() {
+	if (_captionFramePending)
+		_nextPickupPose = true;
+}
+
 void CruiseEngine::finishCaptionFrame(bool published) {
-	if (published && _captionFramePending)
+	if (published && _captionFramePending) {
 		memcpy(_captionColors, _nextCaptionColors, sizeof(_captionColors));
+		_publishedPickupPose = _nextPickupPose;
+	}
 	_captionFramePending = false;
 }
 

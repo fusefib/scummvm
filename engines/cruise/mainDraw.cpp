@@ -1173,9 +1173,10 @@ bool drawMessage(const gfxEntryStruct *pGfxPtr, int globalX, int globalY, int wi
 	return drawn;
 }
 
-void drawSprite(int width, int height, cellStruct *currentObjPtr, const uint8 *dataIn, int ys, int xs, uint8 *output, const uint8 *dataBuf) {
+bool drawSprite(int width, int height, cellStruct *currentObjPtr, const uint8 *dataIn, int ys, int xs, uint8 *output, const uint8 *dataBuf) {
 	int x = 0;
 	int y = 0;
+	bool drawn = false;
 
 	// Flag the given area as having been changed
 	Common::Point ps = Common::Point(MAX(MIN(xs, 320), 0), MAX(MIN(ys, 200), 0));
@@ -1221,12 +1222,14 @@ void drawSprite(int width, int height, cellStruct *currentObjPtr, const uint8 *d
 			if ((x + xs) >= 0 && (x + xs) < 320 && (y + ys) >= 0 && (y + ys) < 200) {
 				if (testMask(x, y, workBuf, width / 8)) {
 					output[320 * (y + ys) + x + xs] = color;
+					drawn = true;
 				}
 			}
 		}
 	}
 
 	MemFree(workBuf);
+	return drawn;
 }
 
 #ifdef _DEBUG
@@ -1363,6 +1366,17 @@ int getValueFromObjectQuerry(objectParamsQuery *params, int idx) {
 	return 0;
 }
 
+static bool isDocumentPickupPose(const cellStruct &cell, const objectParamsQuery &params) {
+	// WORKAROUND: I01 object 6's five document-pickup poses are too brief.
+	// Doubling the whole iteration preserves concurrent script/animation
+	// synchronization without changing the lead-in or final-pose counters.
+	// This is a presentation choice, not a recovered native duration.
+	return cell.idx == 6 && !strcmp(overlayTable[cell.overlay].overlayName, "I01") &&
+		cell.animChange == 5 && cell.animStart == 0 && cell.animEnd == 6 &&
+		cell.animStep == 1 && cell.animWait == -1 && cell.animLoop == 0 &&
+		params.nbState == 7 && params.state >= 1 && params.state <= 5 && params.state2 == 1;
+}
+
 void mainDraw(bool waitFl) {
 	uint8 *bgPtr;
 	cellStruct *currentObjPtr;
@@ -1443,7 +1457,9 @@ void mainDraw(bool waitFl) {
 
 					if (filesDatabase[objZ2].subData.ptr) {
 						_vm->drawingWorkload().countSprite(objX1, spriteHeight, objX2, objY2);
-						drawSprite(objX1, spriteHeight, currentObjPtr, filesDatabase[objZ2].subData.ptr, objY2, objX2, gfxModuleData.pPage10, filesDatabase[objZ2].subData.ptrMask);
+						if (drawSprite(objX1, spriteHeight, currentObjPtr, filesDatabase[objZ2].subData.ptr, objY2, objX2, gfxModuleData.pPage10, filesDatabase[objZ2].subData.ptrMask) &&
+								isDocumentPickupPose(*currentObjPtr, params))
+							_vm->notePickupPose();
 					}
 				}
 			}
