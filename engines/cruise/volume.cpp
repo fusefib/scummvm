@@ -166,6 +166,37 @@ int32 findFileInDisksSub1(const char *fileName) {
 	return (foundDisk);
 }
 
+bool isResourceAvailable(const char *name) {
+	// Inspect local volume directories without changing the current disk or cursor.
+	for (int i = 0; i < numOfDisks; ++i) {
+		bool listed = false;
+		for (int j = 0; j < volumeData[i].size / 13; ++j)
+			if (!scumm_stricmp(volumeData[i].ptr[j].name, name))
+				listed = true;
+		if (!listed)
+			continue;
+		Common::File volume;
+		if (!volume.open(volumeData[i].ident))
+			continue;
+		const uint count = volume.readUint16BE();
+		if (volume.readUint16BE() != 30 || 4 + count * 30 > (uint32)volume.size())
+			continue;
+		for (uint j = 0; j < count; ++j) {
+			char entryName[15];
+			volume.read(entryName, 14);
+			entryName[14] = 0;
+			const uint32 offset = volume.readUint32BE();
+			const uint32 size = volume.readUint32BE();
+			const uint32 expandedSize = volume.readUint32BE();
+			volume.readUint32BE();
+			if (!scumm_stricmp(entryName, name) && !volume.err() && size && expandedSize &&
+					offset <= (uint32)volume.size() && size <= (uint32)volume.size() - offset)
+				return true;
+		}
+	}
+	return false;
+}
+
 void freeDisk() {
 	if (_vm->_currentVolumeFile.isOpen()) {
 		_vm->_currentVolumeFile.close();

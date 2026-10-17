@@ -46,8 +46,7 @@ WARN_UNUSED_RESULT bool readSavegameHeader(Common::InSaveFile *in, CruiseSavegam
 	char saveIdentBuffer[6];
 
 	// Validate the header Id
-	in->read(saveIdentBuffer, 6);
-	if (strcmp(saveIdentBuffer, "SVMCR"))
+	if (in->read(saveIdentBuffer, 6) != 6 || memcmp(saveIdentBuffer, "SVMCR", 6))
 		return false;
 
 	header.version = in->readByte();
@@ -169,43 +168,40 @@ static void syncSoundList(Common::Serializer &s) {
 	}
 }
 
-static void syncFilesDatabase(Common::Serializer &s) {
+// Shared by save loading and resource validation. Preserve the field
+// order and sizes to maintain compatibility with version-1 saves.
+static void syncFileEntry(Common::Serializer &s, dataFileEntry &fe) {
 	uint8 dummyVal = 0;
 	uint32 tmp;
 
-	for (int i = 0; i < NUM_FILE_ENTRIES; i++) {
-		dataFileEntry &fe = filesDatabase[i];
+	s.syncAsUint16LE(fe.widthInColumn);
+	s.syncAsUint16LE(fe.width);
+	s.syncAsUint16LE(fe.resType);
+	s.syncAsUint16LE(fe.height);
 
-		s.syncAsUint16LE(fe.widthInColumn);
-		s.syncAsUint16LE(fe.width);
-		s.syncAsUint16LE(fe.resType);
-		s.syncAsUint16LE(fe.height);
+	// Remember presence so loadSavegameData can reopen the resource.
+	tmp = (fe.subData.ptr) ? 1 : 0;
+	s.syncAsUint32LE(tmp);
+	if (s.isLoading())
+		fe.subData.ptr = tmp ? (uint8 *)1 : nullptr;
 
-		// Remember whether this file database was open or not.
-		// Upon loading, loadSavegameData uses this information
-		// in order to re-open the file databases accordingly.
-		tmp = (fe.subData.ptr) ? 1 : 0;
-		s.syncAsUint32LE(tmp);
-		if (s.isLoading()) {
-			fe.subData.ptr = tmp ? (uint8 *)1 : nullptr;
-		}
+	s.syncAsSint16LE(fe.subData.index);
+	s.syncBytes((byte *)fe.subData.name, 13);
+	s.syncAsByte(dummyVal);
+	s.syncAsSint16LE(fe.subData.transparency);
 
-		s.syncAsSint16LE(fe.subData.index);
-		s.syncBytes((byte *)fe.subData.name, 13);
-		s.syncAsByte(dummyVal);
+	tmp = (fe.subData.ptrMask) ? 1 : 0;
+	s.syncAsUint32LE(tmp);
+	if (s.isLoading())
+		fe.subData.ptrMask = tmp ? (uint8 *)1 : nullptr;
 
-		s.syncAsSint16LE(fe.subData.transparency);
+	s.syncAsUint16LE(fe.subData.resourceType);
+	s.syncAsSint16LE(fe.subData.compression);
+}
 
-		// Treat fe.subData.ptrMask the same as fe.subData.ptr.
-		tmp = (fe.subData.ptrMask) ? 1 : 0;
-		s.syncAsUint32LE(tmp);
-		if (s.isLoading()) {
-			fe.subData.ptrMask = tmp ? (uint8 *)1 : nullptr;
-		}
-
-		s.syncAsUint16LE(fe.subData.resourceType);
-		s.syncAsSint16LE(fe.subData.compression);
-	}
+static void syncFilesDatabase(Common::Serializer &s) {
+	for (int i = 0; i < NUM_FILE_ENTRIES; ++i)
+		syncFileEntry(s, filesDatabase[i]);
 }
 
 static void syncPreloadData(Common::Serializer &s) {
@@ -807,6 +803,80 @@ Common::Error saveSavegameData(int saveGameIdx, const Common::String &saveName) 
 	}
 }
 
+static bool readResourceName(Common::SeekableReadStream &in, char *name, uint size) {
+	return in.read(name, size) == size && memchr(name, 0, size);
+}
+
+static Common::Error validateSavegameResources(Common::SeekableReadStream &in) {
+	// Savegame Version 1 has a fixed prefix up to the global variables and file database.
+	// Read only references here: DoSync loads music and mutates live engine state.
+	int16 basic[47];
+	for (uint i = 0; i < ARRAYSIZE(basic); ++i)
+		basic[i] = in.readSint16LE();
+	const int overlayCount = basic[29];
+	const int variableCount = basic[30];
+	if (in.err() || in.eos() || overlayCount < 0 || overlayCount > 90 ||
+			variableCount < 0 || variableCount > ARRAYSIZE(globalVars))
+		return Common::kReadingFailed;
+
+	Common::StringArray names;
+	char name[40];
+	if (!readResourceName(in, name, 33))
+		return Common::kReadingFailed;
+	if (in.readUint16LE() && name[0])
+		names.push_back(name);
+	in.skip(6 * 2); // Remaining PCSound fields, including its global volume.
+	in.skip(2 * NBCOLORS * 3); // newPal and workpal
+	if (!readResourceName(in, name, 40))
+		return Common::kReadingFailed;
+	if (name[0])
+		names.push_back(name);
+	for (uint i = 0; i < NBSCREENS; ++i) {
+		if (!readResourceName(in, name, 9))
+			return Common::kReadingFailed;
+		if (name[0])
+			names.push_back(name);
+		in.skip(6); // background extension
+	}
+	in.skip(NBSCREENS * NBCOLORS * 2); // Legacy palScreen representation
+	in.skip(4 * 3 * 2); // Sound entries
+	in.skip(variableCount * 2);
+
+	Common::Serializer s(&in, nullptr);
+	for (uint i = 0; i < NUM_FILE_ENTRIES; ++i) {
+		dataFileEntry entry;
+		memset(&entry, 0, sizeof(entry));
+		syncFileEntry(s, entry);
+		if (!memchr(entry.subData.name, 0, sizeof(entry.subData.name)))
+			return Common::kReadingFailed;
+		if (entry.subData.ptr && entry.subData.name[0])
+			names.push_back(entry.subData.name);
+	}
+	for (int i = 0; i < overlayCount; ++i) {
+		if (!readResourceName(in, name, 13))
+			return Common::kReadingFailed;
+		in.skip(5); // Padding and the obsolete pointer
+		const bool loaded = in.readUint16LE() != 0;
+		in.skip(20); // State, obsolete pointers and executeScripts
+		if (loaded && name[0])
+			names.push_back(Common::String(name) + ".OVL");
+	}
+	if (in.err() || in.eos())
+		return Common::kReadingFailed;
+	for (uint i = 0; i < names.size(); ++i) {
+		bool checked = false;
+		for (uint j = 0; j < i; ++j)
+			checked = checked || names[i] == names[j];
+		// A DOS save may reference S03PL03.SET, while the equivalent Amiga
+		// checkpoint loads S03PL.SET. More work is needed to verify whether
+		// we can map everything and substitute everything neatly. Until then:
+		if (!checked && !isResourceAvailable(names[i].c_str()))
+			return Common::Error(Common::kReadingFailed, Common::String::format(
+				"Savegame requires resource '%s', which is not available in this game version.", names[i].c_str()));
+	}
+	return Common::kNoError;
+}
+
 Common::Error loadSavegameData(int saveGameIdx) {
 	Common::String saveName;
 	cellStruct *currentcellHead;
@@ -820,17 +890,23 @@ Common::Error loadSavegameData(int saveGameIdx) {
 		return Common::kNoGameDataFoundError;
 	}
 
-	printInfoBlackBox("Loading in progress...");
-
-	initVars();
-	_vm->sound().stopMusic();
-
 	// Skip over the savegame header
 	CruiseSavegameHeader header;
 	if (!readSavegameHeader(f, header)) {
 		delete f;
 		return Common::kReadingFailed;
 	}
+
+	const int64 dataStart = f->pos();
+	const Common::Error validation = validateSavegameResources(*f);
+	if (validation.getCode() != Common::kNoError || !f->seek(dataStart)) {
+		delete f;
+		return validation.getCode() != Common::kNoError ? validation : Common::Error(Common::kReadingFailed);
+	}
+
+	printInfoBlackBox("Loading in progress...");
+	initVars();
+	_vm->sound().stopMusic();
 
 	// Synchronise the remaining data of the savegame
 	Common::Serializer s(f, nullptr);
