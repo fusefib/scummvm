@@ -243,6 +243,7 @@ void gfxModuleData_clearPages() {
 }
 
 void CruiseEngine::resetPublishedCaption() {
+	_presentationFrameStart = presentationMillis();
 	memset(_captionColors, 0, sizeof(_captionColors));
 	memset(_nextCaptionColors, 0, sizeof(_nextCaptionColors));
 	_captionFramePending = false;
@@ -259,8 +260,10 @@ void CruiseEngine::noteCaptionColor(byte color) {
 }
 
 void CruiseEngine::finishCaptionFrame(bool published) {
-	if (published && _captionFramePending)
+	if (published && _captionFramePending) {
+		_presentationFrameStart = presentationMillis();
 		memcpy(_captionColors, _nextCaptionColors, sizeof(_captionColors));
+	}
 	_captionFramePending = false;
 }
 

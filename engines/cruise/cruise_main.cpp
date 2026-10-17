@@ -563,7 +563,9 @@ void CruiseEngine::initAllData() {
 
 	Common::strcpy_s(lastOverlay, "AUTO00");
 
-	_gameSpeed = GAME_FRAME_DELAY_1;
+	_presentationClock.reset(presentationMillis());
+	speedGame = oldSpeedGame = 8;
+	flagSpeed = 0;
 	_speedFlag = false;
 
 	return;
@@ -1483,14 +1485,16 @@ int CruiseEngine::processInput() {
 		return 0;
 	}
 
-	// Handle any changes in game speed
+	// Handle any changes in game speed.
 	if (_speedFlag) {
-		if ((action == kActionIncreaseGameSpeed) && (_gameSpeed >= 30)) {
-			_gameSpeed -= 10;
+		int16 &ticks = flagSpeed ? oldSpeedGame : speedGame;
+		if (action == kActionIncreaseGameSpeed) {
+			if (ticks > 2)
+				--ticks;
 			action = kActionNone;
-		}
-		if ((action == kActionDecreaseGameSpeed) && (_gameSpeed <= 200)) {
-			_gameSpeed += 10;
+		} else if (action == kActionDecreaseGameSpeed) {
+			if (ticks < 21)
+				++ticks;
 			action = kActionNone;
 		}
 	}
@@ -1821,6 +1825,32 @@ void getMouseStatus(int16 *pMouseVar, int16 *pMouseX, int16 *pMouseButton, int16
 }
 
 
+bool CruiseEngine::waitForPresentationDelay(uint32 start, uint32 duration) {
+	const bool wasInsideWait = _insideTimingWait;
+	_insideTimingWait = true;
+	while (!_playerDontAskQuit && !shouldQuit() && !bFastMode && _pendingLoadSlot < 0) {
+		if (presentationMillis() - start >= duration)
+			break;
+		g_system->updateScreen();
+		manageEvents(true);
+		if (_playerDontAskQuit || shouldQuit() || bFastMode || _pendingLoadSlot >= 0)
+			break;
+		const uint32 elapsed = presentationMillis() - start;
+		if (elapsed < duration)
+			g_system->delayMillis(MIN<uint32>(10, duration - elapsed));
+	}
+	_insideTimingWait = wasInsideWait;
+	return !_playerDontAskQuit && !shouldQuit();
+}
+
+bool CruiseEngine::waitForPresentationFrame() {
+	const uint16 ticks = speedGame;
+	if (!waitForPresentationDelay(_presentationFrameStart, bFastMode ? 0 : (uint32)ticks * 10))
+		return false;
+	_presentationClock.resetCounter(presentationMillis());
+	return true;
+}
+
 void CruiseEngine::mainLoop() {
 	//int32 t_start,t_left;
 	//uint32 t_end;
@@ -1848,7 +1878,6 @@ void CruiseEngine::mainLoop() {
 		loadGameState(ConfMan.getInt("save_slot"));
 
 	do {
-		// Handle frame delay
 		if (_pendingLoadSlot >= 0) {
 			const int slot = _pendingLoadSlot;
 			_pendingLoadSlot = -1;
@@ -1860,70 +1889,42 @@ void CruiseEngine::mainLoop() {
 			currentMouseButton = buttonDown = 0;
 			_mouseButtonDown = false;
 			action = kActionNone;
+			_presentationClock.reset(presentationMillis());
 		}
 
-		uint32 currentTick = g_system->getMillis();
-
-		// Delay for the specified amount of time, but still respond to events
-		bool skipEvents = false;
-
-		do {
-			if (userEnabled && !userWait && !autoTrack) {
-				if (currentActiveMenu == -1) {
-					static int16 oldMouseX = -1;
-					static int16 oldMouseY = -1;
-
-					getMouseStatus(&main10, &mouseX, &mouseButton, &mouseY);
-
-					if (mouseX != oldMouseX || mouseY != oldMouseY) {
-						int objectType;
-						int newCursor1;
-						int newCursor2;
-
-						oldMouseX = mouseX;
-						oldMouseY = mouseY;
-
-						objectType = findObject(mouseX, mouseY, &newCursor1, &newCursor2);
-
-						if (objectType == 9) {
-							changeCursor(CURSOR_EXIT);
-						} else if (objectType != -1) {
-							changeCursor(CURSOR_MAGNIFYING_GLASS);
-						} else {
-							changeCursor(CURSOR_WALK);
-						}
-					}
-				} else {
-					changeCursor(CURSOR_NORMAL);
+		if (userEnabled && !userWait && !autoTrack) {
+			if (currentActiveMenu == -1) {
+				static int16 oldMouseX = -1;
+				static int16 oldMouseY = -1;
+				getMouseStatus(&main10, &mouseX, &mouseButton, &mouseY);
+				if (mouseX != oldMouseX || mouseY != oldMouseY) {
+					int newCursor1, newCursor2;
+					oldMouseX = mouseX;
+					oldMouseY = mouseY;
+					const int objectType = findObject(mouseX, mouseY, &newCursor1, &newCursor2);
+					if (objectType == 9)
+						changeCursor(CURSOR_EXIT);
+					else if (objectType != -1)
+						changeCursor(CURSOR_MAGNIFYING_GLASS);
+					else
+						changeCursor(CURSOR_WALK);
 				}
 			} else {
 				changeCursor(CURSOR_NORMAL);
 			}
-
-			g_system->updateScreen();
-
-			if (!skipEvents || bFastMode)
-				skipEvents = manageEvents();
-
-			if (!bFastMode) {
-				g_system->delayMillis(10);
-				currentTick = g_system->getMillis();
-			}
-
-			if (_playerDontAskQuit)
-				break;
-
-		} while (currentTick < _lastTick + _gameSpeed && !bFastMode);
-		if (_playerDontAskQuit)
-			break;
-
-		_lastTick = g_system->getMillis();
-
-		// Handle switchover in game speed after intro
-		if (!_speedFlag && canLoadGameStateCurrently()) {
-			_speedFlag = true;
-			_gameSpeed = GAME_FRAME_DELAY_2;
+		} else {
+			changeCursor(CURSOR_NORMAL);
 		}
+
+		g_system->updateScreen();
+		manageEvents();
+		if (_playerDontAskQuit || shouldQuit())
+			break;
+		if (_pendingLoadSlot >= 0)
+			continue;
+
+		if (!_speedFlag && canLoadGameStateCurrently())
+			_speedFlag = true;
 
 		// Handle the next frame
 
@@ -2012,6 +2013,10 @@ void CruiseEngine::mainLoop() {
 			/*if (!PCFadeFlag)*/
 			beginCaptionFrame();
 			mainDraw(userWait);
+			if (!waitForPresentationFrame()) {
+				finishCaptionFrame(false);
+				break;
+			}
 			flipScreen();
 			finishCaptionFrame(false);
 
@@ -2049,7 +2054,7 @@ void CruiseEngine::mainLoop() {
 			g_system->updateScreen();
 		}
 
-	} while (!_playerDontAskQuit);
+	} while (!_playerDontAskQuit && !shouldQuit());
 
 	// Free data
 	removeAllScripts(&relHead);

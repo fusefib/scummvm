@@ -34,6 +34,7 @@
 #include "cruise/cruise_main.h"
 #include "cruise/debugger.h"
 #include "cruise/sound.h"
+#include "cruise/presentation_timing.h"
 
 /**
  * This is the namespace of the Cruise engine.
@@ -44,9 +45,6 @@
  * - Cruise for a Corpse
  */
 namespace Cruise {
-
-#define GAME_FRAME_DELAY_1 50
-#define GAME_FRAME_DELAY_2 100
 
 #define MAX_LANGUAGE_STRINGS 25
 
@@ -76,8 +74,10 @@ private:
 	PCSound *_sound;
 	Common::StringArray _langStrings;
 	CursorType _savedCursor;
-	uint32 _lastTick;
-	int _gameSpeed;
+	PresentationClock _presentationClock;
+	uint32 _presentationFrameStart;
+	uint32 _presentationPauseStart;
+	uint32 _presentationPausedMillis;
 	bool _speedFlag;
 	int _pendingLoadSlot;
 	bool _insideTimingWait;
@@ -95,9 +95,12 @@ private:
 	void mainLoop();
 	int processInput();
 	bool publishFadePalette();
+	bool waitForPresentationDelay(uint32 start, uint32 duration);
+	bool waitForPresentationFrame();
 protected:
 	// Engine APIs
 	Common::Error run() override;
+	void pauseEngineIntern(bool pause) override;
 
 	void shutdown();
 
@@ -114,6 +117,7 @@ public:
 	Common::Language getLanguage() const;
 	Common::Platform getPlatform() const;
 	PCSound &sound() { return *_sound; }
+	uint32 presentationMillis() const;
 	bool manageEvents(bool deferInput = false);
 	void resetPublishedCaption();
 	void beginCaptionFrame();
