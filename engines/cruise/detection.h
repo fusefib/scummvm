@@ -37,6 +37,7 @@ struct CRUISEGameDescription {
 
 #define GAMEOPTION_TTS                    GUIO_GAMEOPTIONS1
 #define GAMEOPTION_ATARI_MUSIC            GUIO_GAMEOPTIONS2
+#define GAMEOPTION_AMIGA_MUSIC            GUIO_GAMEOPTIONS3
 
 } // End of namespace Cruise
 
