@@ -77,6 +77,7 @@ private:
 	uint32 _lastTick;
 	int _gameSpeed;
 	bool _speedFlag;
+	int _pendingLoadSlot;
 	PauseToken _gamePauseToken;
 
 	Common::CodePage _ttsTextEncoding;

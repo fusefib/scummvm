@@ -1814,6 +1814,15 @@ void CruiseEngine::mainLoop() {
 
 	do {
 		// Handle frame delay
+		if (_pendingLoadSlot >= 0) {
+			const int slot = _pendingLoadSlot;
+			_pendingLoadSlot = -1;
+			const Common::Error loadError = loadSavegameData(slot);
+			if (loadError.getCode() != Common::kNoError)
+				GUIErrorMessage(loadError.getDesc());
+			enableUser = 0;
+		}
+
 		uint32 currentTick = g_system->getMillis();
 
 		// Delay for the specified amount of time, but still respond to events
