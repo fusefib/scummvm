@@ -24,10 +24,15 @@
 
 namespace Cruise {
 
+enum CruiseGameFeatures {
+	GF_16COLOR = 1 << 0
+};
+
 struct CRUISEGameDescription {
 	AD_GAME_DESCRIPTION_HELPERS(desc);
 
 	ADGameDescription desc;
+	uint32 features;
 };
 
 #define GAMEOPTION_TTS                    GUIO_GAMEOPTIONS1

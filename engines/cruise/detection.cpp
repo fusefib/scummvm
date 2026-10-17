@@ -49,6 +49,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		GF_16COLOR
 	},
 	{
 		{
@@ -60,6 +61,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		GF_16COLOR
 	},
 	{
 		{
@@ -71,6 +73,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{
 		{
@@ -82,6 +85,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{
 		{
@@ -93,6 +97,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		GF_16COLOR
 	},
 	{
 		{
@@ -104,6 +109,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{
 		{
@@ -115,6 +121,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{
 		{
@@ -126,6 +133,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // Fanmade translation by old-games.ru
 		{
@@ -137,6 +145,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{
 		{
@@ -148,6 +157,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // Amiga English US GOLD edition.
 		{
@@ -159,6 +169,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // Amiga English US GOLD edition (Delphine Collection).
 		{
@@ -170,6 +181,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // Amiga Italian US GOLD edition.
 		{
@@ -181,6 +193,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // Amiga Spanish edition.
 		{
@@ -192,6 +205,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // Amiga French edition.
 		{
@@ -203,6 +217,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // Amiga French edition (alternate).
 		{
@@ -214,6 +229,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // Amiga Italian (Fanmade translation 1.0).
 		{
@@ -225,6 +241,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // AtariST English KixxXL edition.
 		{
@@ -236,6 +253,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
 	{ // AtariST French edition. Bugreport #12824
 		{
@@ -247,8 +265,9 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO1(GAMEOPTION_TTS)
 		},
+		0
 	},
-	{AD_TABLE_END_MARKER}
+	{AD_TABLE_END_MARKER, 0}
 };
 
 }

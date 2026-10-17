@@ -168,6 +168,12 @@ void gfxModuleData_setPal256(const byte *ptr) {
 	gfxModuleData_setDirtyColors(0, 16);
 }*/
 
+byte gfxModuleData_transform3BitColor(byte component, int offset) {
+	// Undo the host RGB expansion before adjusting the native 0..7 component.
+	const int value = CLIP((component * 7 + 127) / 255 + offset, 0, 7);
+	return MIN(value * 256 / 7, 255);
+}
+
 void gfxModuleData_convertOldPalColor(uint16 oldColor, uint8 *pOutput) {
 	int R;
 	int G;
@@ -294,12 +300,14 @@ bool CruiseEngine::fadePalette(bool fadeIn) {
 	else
 		g_system->getPaletteManager()->grabPalette(source, 0, 256);
 
-	const bool sixBitComponents = getPlatform() == Common::kPlatformDOS;
+	const bool sixBitComponents = isVGA();
+	const bool threeBitComponents = getPlatform() == Common::kPlatformDOS && !sixBitComponents;
 	for (uint step = 0; step < 8; ++step) {
 		const uint amount = fadeIn ? 7 - step : step + 1;
 		for (uint i = 0; i < sizeof(source); ++i) {
 			const int component = sixBitComponents ? source[i] & 0xfc : source[i];
-			workpal[i] = MAX(0, component - (int)amount * (sixBitComponents ? 36 : 32));
+			workpal[i] = threeBitComponents ? gfxModuleData_transform3BitColor(source[i], -(int)amount) :
+				MAX(0, component - (int)amount * (sixBitComponents ? 36 : 32));
 		}
 		if (!publishFadePalette() || !waitForPresentationPhases(2) || !waitForPresentationTicks(3))
 			return false;

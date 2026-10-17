@@ -60,6 +60,7 @@ void gfxModuleData_flipScreen();
 void gfxModuleData_clearPages();
 //void gfxModuleData_setPal(uint8 * ptr);
 void gfxModuleData_convertOldPalColor(uint16 oldColor, uint8 *pOutput);
+byte gfxModuleData_transform3BitColor(byte component, int offset);
 void gfxModuleData_setPalEntries(const byte *ptr, int start, int num);
 void gfxModuleData_setPal256(const byte *ptr);
 void gfxModuleData_addDirtyRect(const Common::Rect &r);

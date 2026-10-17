@@ -116,6 +116,7 @@ public:
 	int getGameType() const;
 	const char *getGameId() const;
 	uint32 getFeatures() const;
+	bool isVGA() const;
 	Common::Language getLanguage() const;
 	Common::Platform getPlatform() const;
 	PCSound &sound() { return *_sound; }
