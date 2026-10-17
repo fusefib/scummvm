@@ -35,6 +35,7 @@ MODULE_OBJS := \
 	sound/atari_psg.o \
 	sound/dos_adlib.o \
 	sound/dos_driver.o \
+	sound/dos_atari.o \
 	sound/factory.o \
 	sound/dos_mt32.o \
 	sound/dos_pcspk.o \
