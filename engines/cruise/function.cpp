@@ -28,7 +28,6 @@
 #include "cruise/sound.h"
 #include "cruise/staticres.h"
 
-#include "common/system.h"
 #include "common/textconsole.h"
 #include "common/util.h"
 
@@ -631,25 +630,7 @@ int16 Op_AniDir() {
 }
 
 int16 Op_FadeOut() {
-	for (long int i = 0; i < 256; i += 32) {
-		for (long int j = 0; j < 256; j++) {
-			int offsetTable[3];
-			offsetTable[0] = -32;
-			offsetTable[1] = -32;
-			offsetTable[2] = -32;
-			calcRGB(&workpal[3*j], &workpal[3*j], offsetTable);
-		}
-		gfxModuleData_setPal256(workpal);
-		// A palette step must not consume the next composition's dirty rectangles.
-		gfxModuleData_updatePalette();
-		g_system->updateScreen();
-	}
-
-	gfxModuleData_clearPages();
-
-	fadeFlag = 1;
-	PCFadeFlag = true;
-
+	_vm->fadePalette(false);
 	return 0;
 }
 

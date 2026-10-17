@@ -19,6 +19,7 @@
  *
  */
 
+#include "cruise/cruise.h"
 #include "cruise/cruise_main.h"
 #include "cruise/polys.h"
 #include "common/endian.h"
@@ -94,32 +95,7 @@ void calcRGB(uint8* pColorSrc, uint8* pColorDst, int* offsetTable) {
 }
 
 void fadeIn() {
-	for (long int i = 256; i >= 0; i -= 32) {
-		for (long int j = 0; j < 256; j++) {
-			int offsetTable[3];
-			offsetTable[0] = -i;
-			offsetTable[1] = -i;
-			offsetTable[2] = -i;
-			calcRGB(&palScreen[masterScreen][3*j], &workpal[3*j], offsetTable);
-		}
-		gfxModuleData_setPal256(workpal);
-
-		gfxModuleData_updatePalette();
-		gfxModuleData_updateScreen();
-	}
-
-	for (long int j = 0; j < 256; j++) {
-		int offsetTable[3];
-		offsetTable[0] = 0;
-		offsetTable[1] = 0;
-		offsetTable[2] = 0;
-		calcRGB(&palScreen[masterScreen][3*j], &workpal[3*j], offsetTable);
-	}
-
-	gfxModuleData_setPal256(workpal);
-
-	fadeFlag = 0;
-	PCFadeFlag = false;
+	_vm->fadePalette(true);
 }
 
 void flipScreen() {

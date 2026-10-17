@@ -86,6 +86,7 @@ private:
 	bool loadLanguageStrings();
 	void mainLoop();
 	int processInput();
+	bool publishFadePalette();
 protected:
 	// Engine APIs
 	Common::Error run() override;
@@ -105,6 +106,7 @@ public:
 	Common::Language getLanguage() const;
 	Common::Platform getPlatform() const;
 	PCSound &sound() { return *_sound; }
+	bool fadePalette(bool fadeIn);
 	virtual void pauseEngine(bool pause);
 	const char *langString(LangStringId langId) { return _langStrings[(int)langId].c_str(); }
 	void sayText(const Common::String &text, Common::TextToSpeechManager::Action action);
