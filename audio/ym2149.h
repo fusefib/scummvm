@@ -42,6 +42,14 @@ private:
 	static bool _hasInstance;
 
 public:
+	typedef void (*PreciseCallback)(void *ref);
+
+	enum PreciseCallbackResult {
+		kPreciseCallbackStarted,
+		kPreciseCallbackUnsupported,
+		kPreciseCallbackUnavailable
+	};
+
 	YM2149();
 	virtual ~YM2149();
 
@@ -64,6 +72,40 @@ public:
 	 * @param v		value, which will be written
 	 */
 	virtual void writeReg(int r, uint8 v) = 0;
+
+	/**
+	 * Starts callback delivery with a hardware-defined precise clock.
+	 *
+	 * This foreground-only API is mutually exclusive with Chip::start(). The
+	 * callback runs in interrupt context and must not allocate, block, log,
+	 * invoke OS services, or release resources.
+	 */
+	virtual PreciseCallbackResult startPreciseCallback(PreciseCallback callback,
+			void *ref, uint frequency) {
+		(void)callback;
+		(void)ref;
+		(void)frequency;
+		return kPreciseCallbackUnsupported;
+	}
+
+	/** Stops callback generation from interrupt context. */
+	virtual void suspendPreciseCallback() {}
+
+	/**
+	 * Releases precise callback ownership from foreground context.
+	 *
+	 * This is idempotent and also consumes outstanding update guards.
+	 */
+	virtual void stopPreciseCallback() {}
+
+	/**
+	 * Guards foreground state changes against the precise callback.
+	 *
+	 * Guards may nest. Only the outer pair changes hardware masking. They do
+	 * not affect ordinary Chip callbacks.
+	 */
+	virtual void beginPreciseUpdate() {}
+	virtual void endPreciseUpdate() {}
 };
 
 } // End of namespace YM2149

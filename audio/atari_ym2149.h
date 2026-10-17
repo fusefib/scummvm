@@ -22,6 +22,7 @@
 #ifndef AUDIO_SOFTSYNTH_YM2149_H
 #define AUDIO_SOFTSYNTH_YM2149_H
 
+#include "audio/atari_ym2149_timer.h"
 #include "audio/ym2149.h"
 
 namespace Audio {
@@ -36,9 +37,39 @@ public:
 	void reset() override;
 
 	void writeReg(int r, uint8 v) override;
+	PreciseCallbackResult startPreciseCallback(PreciseCallback callback,
+			void *ref, uint frequency) override;
+	void suspendPreciseCallback() override;
+	void stopPreciseCallback() override;
+	void beginPreciseUpdate() override;
+	void endPreciseUpdate() override;
+
+protected:
+	void startCallbacks(int timerFrequency) override;
+	void stopCallbacks() override;
 
 private:
+	class TimerDHardware;
+	typedef AtariTimerDController<TimerDHardware> TimerDController;
+	typedef AtariTimerDSerialAuthority<TimerDHardware> TimerDSerialAuthority;
+
+	static void timerDProc() __attribute__((interrupt));
+	static long acquireTimerD();
+	static long releaseTimerD();
+	static long beginTimerDUpdate();
+	static long endTimerDUpdate();
+	static long tosVersion();
+	void writeRegDirect(int r, uint8 v);
+
+	static YM2149Atari *_timerDInstance;
+
 	uint8 _savedRegs[14];
+	TimerDHardware *_timerDHardware;
+	TimerDController *_timerDController;
+	TimerDSerialAuthority *_timerDSerialAuthority;
+	PreciseCallback _pendingCallback;
+	void *_pendingCallbackRef;
+	bool _insidePreciseCallback;
 };
 
 } // End of namespace Audio

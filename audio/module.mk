@@ -106,7 +106,8 @@ endif
 
 ifeq ($(BACKEND),atari)
 MODULE_OBJS += \
-	atari_ym2149.o
+	atari_ym2149.o \
+	atari_ym2149_rsconf.o
 else
 MODULE_OBJS += \
 	softsynth/ym2149.o
