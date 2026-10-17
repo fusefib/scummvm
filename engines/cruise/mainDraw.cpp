@@ -1531,8 +1531,15 @@ void mainDraw(bool waitFl) {
 
 	while (currentObjPtr) {
 		if (currentObjPtr->type == OBJ_TYPE_MESSAGE && currentObjPtr->freeze == 0) {
-			if (drawMessage(currentObjPtr->gfxPtr, currentObjPtr->x, currentObjPtr->field_C, currentObjPtr->spriteIdx, currentObjPtr->color, gfxModuleData.pPage10))
-				_vm->noteCaptionColor((byte)currentObjPtr->color);
+			if (drawMessage(currentObjPtr->gfxPtr, currentObjPtr->x, currentObjPtr->field_C, currentObjPtr->spriteIdx, currentObjPtr->color, gfxModuleData.pPage10)) {
+				const char *overlay = overlayTable[currentObjPtr->overlay].overlayName;
+				// WORKAROUND: I01's envelope and invitation captions need more time.
+				// Their visible, published ink selects a 120 ms iteration minimum:
+				// a presentation choice, not a recovered native duration.
+				const byte ticks = !strcmp(overlay, "I01") &&
+					(currentObjPtr->idx == 1 || currentObjPtr->idx == 2) ? 12 : 8;
+				_vm->noteCaptionColor((byte)currentObjPtr->color, ticks);
+			}
 			isMessage = 1;
 		}
 		currentObjPtr = currentObjPtr->next;

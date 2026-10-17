@@ -260,9 +260,9 @@ void CruiseEngine::beginCaptionFrame() {
 	_captionFramePending = true;
 }
 
-void CruiseEngine::noteCaptionColor(byte color) {
+void CruiseEngine::noteCaptionColor(byte color, byte ticks) {
 	if (_captionFramePending)
-		_nextCaptionColors[color] = 1;
+		_nextCaptionColors[color] = MAX(_nextCaptionColors[color], ticks);
 }
 
 void CruiseEngine::finishCaptionFrame(bool published) {
@@ -273,15 +273,18 @@ void CruiseEngine::finishCaptionFrame(bool published) {
 	_captionFramePending = false;
 }
 
-bool CruiseEngine::hasPublishedCaption() const {
+byte CruiseEngine::publishedCaptionTicks() const {
 	// Message cells can be freed while their pixels survive resource loading.
-	byte palette[256 * 3];
-	g_system->getPaletteManager()->grabPalette(palette, 0, 256);
+	byte ticks = 0;
 	for (uint i = 0; i < 256; ++i) {
-		if (_captionColors[i] && (palette[i * 3] || palette[i * 3 + 1] || palette[i * 3 + 2]))
-			return true;
+		if (_captionColors[i] <= ticks)
+			continue;
+		byte color[3];
+		g_system->getPaletteManager()->grabPalette(color, i, 1);
+		if (color[0] || color[1] || color[2])
+			ticks = _captionColors[i];
 	}
-	return false;
+	return ticks;
 }
 
 bool CruiseEngine::publishFadePalette() {

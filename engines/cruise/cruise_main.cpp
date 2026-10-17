@@ -1844,7 +1844,11 @@ bool CruiseEngine::waitForPresentationDelay(uint32 start, uint32 duration) {
 }
 
 bool CruiseEngine::waitForPresentationFrame(uint32 workMillis) {
-	const uint16 ticks = speedGame;
+	uint16 ticks = speedGame;
+	if (!flagSpeed) {
+		const uint32 minimum = MAX<byte>(8, publishedCaptionTicks());
+		ticks = MIN<uint32>(((uint32)ticks * minimum + 7) / 8, 0xffff);
+	}
 	if (!waitForPresentationDelay(_presentationFrameStart, bFastMode ? 0 : MAX<uint32>((uint32)ticks * 10, workMillis)))
 		return false;
 	_presentationClock.resetCounter(presentationMillis());
@@ -1852,7 +1856,7 @@ bool CruiseEngine::waitForPresentationFrame(uint32 workMillis) {
 }
 
 uint32 CruiseEngine::beginResourceWork() {
-	_resourceWorkload.begin(!bFastMode && hasPublishedCaption());
+	_resourceWorkload.begin(!bFastMode && publishedCaptionTicks() != 0);
 	return presentationMillis();
 }
 
@@ -2046,7 +2050,7 @@ void CruiseEngine::mainLoop() {
 
 			/*if (!PCFadeFlag)*/
 			beginCaptionFrame();
-			_drawingWorkload.begin(!bFastMode && hasPublishedCaption());
+			_drawingWorkload.begin(!bFastMode && publishedCaptionTicks() != 0);
 			mainDraw(userWait);
 			const uint32 drawMillis = _drawingWorkload.finish(kSpriteWorkUnits);
 			if (!waitForPresentationFrame(drawMillis)) {
