@@ -227,6 +227,18 @@ void gfxModuleData_flipScreen() {
 	flip();
 }
 
+void gfxModuleData_clearPages() {
+	memset(gfxModuleData.pPage00, 0, 320 * 200);
+	memset(gfxModuleData.pPage10, 0, 320 * 200);
+	memset(globalScreen, 0, 320 * 200);
+	_vm->_dirtyRects.clear();
+	_vm->_priorFrameRects.clear();
+	g_system->copyRectToScreen(globalScreen, 320, 0, 0, 320, 200);
+	g_system->updateScreen();
+	// The next composition must replace the cleared display in full.
+	gfxModuleData_addDirtyRect(Common::Rect(0, 0, 320, 200));
+}
+
 void gfxModuleData_addDirtyRect(const Common::Rect &r) {
 	_vm->_dirtyRects.push_back(Common::Rect(	MAX(r.left, (int16)0), MAX(r.top, (int16)0),
 		MIN(r.right, (int16)320), MIN(r.bottom, (int16)200)));

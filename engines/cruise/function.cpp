@@ -645,8 +645,7 @@ int16 Op_FadeOut() {
 		g_system->updateScreen();
 	}
 
-	memset(globalScreen, 0, 320 * 200);
-	flip();
+	gfxModuleData_clearPages();
 
 	fadeFlag = 1;
 	PCFadeFlag = true;
