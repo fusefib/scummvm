@@ -50,8 +50,8 @@ CruiseEngine::CruiseEngine(OSystem * syst, const CRUISEGameDescription *gameDesc
 	PCFadeFlag = false;
 	_preLoad = false;
 	_savedCursor = CURSOR_NOMOUSE;
-	_lastTick = 0;
-	_gameSpeed = GAME_FRAME_DELAY_1;
+	_presentationPauseStart = 0;
+	_presentationPausedMillis = 0;
 	_speedFlag = false;
 	_pendingLoadSlot = -1;
 	_insideTimingWait = false;
@@ -198,6 +198,19 @@ bool CruiseEngine::loadLanguageStrings() {
 	}
 
 	return true;
+}
+
+uint32 CruiseEngine::presentationMillis() const {
+	const uint32 now = isPaused() ? _presentationPauseStart : g_system->getMillis();
+	return now - _presentationPausedMillis;
+}
+
+void CruiseEngine::pauseEngineIntern(bool pause) {
+	if (pause)
+		_presentationPauseStart = g_system->getMillis();
+	else
+		_presentationPausedMillis += g_system->getMillis() - _presentationPauseStart;
+	Engine::pauseEngineIntern(pause);
 }
 
 void CruiseEngine::pauseEngine(bool pause) {

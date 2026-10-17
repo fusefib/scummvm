@@ -24,6 +24,7 @@ MODULE_OBJS := \
 	overlay.o \
 	perso.o \
 	polys.o \
+	presentation_timing.o \
 	saveload.o \
 	script.o \
 	sound.o \
