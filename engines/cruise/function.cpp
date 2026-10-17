@@ -1016,6 +1016,11 @@ int16 Op_SetColor()	{
 	int endIdx = popVar();
 	int startIdx = popVar();
 
+	// DOS retains the original full-palette operand for the VGA palette.
+	const bool fullDosPalette = _vm->getPlatform() == Common::kPlatformDOS && startIdx == 0 && endIdx == 31;
+	if (fullDosPalette)
+		endIdx = 255;
+
 #define convertRatio 36.571428571428571428571428571429
 
 	for (int i = startIdx; i <= endIdx; i++) {
@@ -1025,7 +1030,7 @@ int16 Op_SetColor()	{
 		offsetTable[1] = (int)(colorG * convertRatio);
 		offsetTable[2] = (int)(colorB * convertRatio);
 
-		if (CVTLoaded) {
+		if (CVTLoaded && !fullDosPalette) {
 			int colorIdx = cvtPalette[i];
 			calcRGB(&palScreen[masterScreen][3*colorIdx], &workpal[3*colorIdx], offsetTable);
 		} else {
@@ -1033,7 +1038,7 @@ int16 Op_SetColor()	{
 		}
 	}
 
-	gfxModuleData_setPalEntries(workpal, 0, 32);
+	gfxModuleData_setPalEntries(workpal, 0, fullDosPalette ? 256 : 32);
 
 	return 0;
 }
