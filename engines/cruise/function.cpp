@@ -498,6 +498,15 @@ int16 Op_FreezeParent() {
 	return 0;
 }
 
+static bool isGraphicsResource(const char *name) {
+	if (!name)
+		return false;
+	char extension[16];
+	getFileExtension(name, extension, sizeof(extension));
+	strToUpper(extension);
+	return !strcmp(extension, ".SET") || !strcmp(extension, ".PI1") || !strcmp(extension, ".FNT");
+}
+
 int16 Op_LoadBackground() {
 	int result = 0;
 	char bgName[36] = "";
@@ -513,8 +522,8 @@ int16 Op_LoadBackground() {
 	if (bgIdx >= 0 && bgIdx < NBSCREENS) {
 		strToUpper(bgName);
 
-		gfxModuleData_gfxWaitVSync();
-		gfxModuleData_gfxWaitVSync();
+		if (!_vm->waitForPresentationPhases(2))
+			return 0;
 
 		result = loadBackground(bgName, bgIdx);
 
@@ -558,8 +567,8 @@ int16 Op_LoadFrame() {
 	if (param3 >= 0 && param3 < NUM_FILE_ENTRIES) {
 		strToUpper(name);
 
-		gfxModuleData_gfxWaitVSync();
-		gfxModuleData_gfxWaitVSync();
+		if (isGraphicsResource(name) && !_vm->waitForPresentationPhases(2))
+			return 0;
 
 		lastAni[0] = 0;
 
@@ -583,8 +592,8 @@ int16 Op_LoadAbs() {
 		Common::strlcpy(name, ptr, sizeof(name));
 		strToUpper(name);
 
-		gfxModuleData_gfxWaitVSync();
-		gfxModuleData_gfxWaitVSync();
+		if (isGraphicsResource(name) && !_vm->waitForPresentationPhases(2))
+			return 0;
 
 		result = loadFullBundle(name, slot);
 	}
@@ -823,8 +832,10 @@ int16 Op_AddMessage() {
 }
 
 int16 Op_Preload() {
-	popPtr();
+	const char *name = (const char *)popPtr();
 	popVar();
+	if (isGraphicsResource(name))
+		_vm->waitForPresentationPhases(2);
 
 	return 0;
 }
