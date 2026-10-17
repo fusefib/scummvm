@@ -239,6 +239,41 @@ void gfxModuleData_clearPages() {
 	gfxModuleData_addDirtyRect(Common::Rect(0, 0, 320, 200));
 }
 
+bool CruiseEngine::publishFadePalette() {
+	gfxModuleData_setPal256(workpal);
+	gfxModuleData_updatePalette();
+	g_system->updateScreen();
+	return true;
+}
+
+bool CruiseEngine::fadePalette(bool fadeIn) {
+	byte source[256 * 3];
+	if (fadeIn)
+		memcpy(source, palScreen[masterScreen], sizeof(source));
+	else
+		g_system->getPaletteManager()->grabPalette(source, 0, 256);
+
+	const bool sixBitComponents = getPlatform() == Common::kPlatformDOS;
+	for (uint step = 0; step < 8; ++step) {
+		const uint amount = fadeIn ? 7 - step : step + 1;
+		for (uint i = 0; i < sizeof(source); ++i) {
+			const int component = sixBitComponents ? source[i] & 0xfc : source[i];
+			workpal[i] = MAX(0, component - (int)amount * (sixBitComponents ? 36 : 32));
+		}
+		if (!publishFadePalette())
+			return false;
+	}
+	if (fadeIn) {
+		if (!publishFadePalette())
+			return false;
+	} else {
+		gfxModuleData_clearPages();
+	}
+	fadeFlag = fadeIn ? 0 : 1;
+	PCFadeFlag = !fadeIn;
+	return true;
+}
+
 void gfxModuleData_addDirtyRect(const Common::Rect &r) {
 	_vm->_dirtyRects.push_back(Common::Rect(	MAX(r.left, (int16)0), MAX(r.top, (int16)0),
 		MIN(r.right, (int16)320), MIN(r.bottom, (int16)200)));
