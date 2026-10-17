@@ -96,6 +96,7 @@ private:
 	bool publishFadePalette();
 	bool waitForPresentationDelay(uint32 start, uint32 duration);
 	bool waitForPresentationFrame();
+	bool waitForPresentationTicks(uint16 ticks);
 protected:
 	// Engine APIs
 	Common::Error run() override;
@@ -123,6 +124,7 @@ public:
 	void noteCaptionColor(byte color);
 	void finishCaptionFrame(bool published);
 	bool hasPublishedCaption() const;
+	bool waitForPresentationPhases(uint count);
 	bool fadePalette(bool fadeIn);
 	virtual void pauseEngine(bool pause);
 	const char *langString(LangStringId langId) { return _langStrings[(int)langId].c_str(); }

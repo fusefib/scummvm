@@ -276,6 +276,8 @@ bool CruiseEngine::hasPublishedCaption() const {
 }
 
 bool CruiseEngine::publishFadePalette() {
+	if (!waitForPresentationPhases(2))
+		return false;
 	gfxModuleData_setPal256(workpal);
 	gfxModuleData_updatePalette();
 	g_system->updateScreen();
@@ -296,7 +298,7 @@ bool CruiseEngine::fadePalette(bool fadeIn) {
 			const int component = sixBitComponents ? source[i] & 0xfc : source[i];
 			workpal[i] = MAX(0, component - (int)amount * (sixBitComponents ? 36 : 32));
 		}
-		if (!publishFadePalette())
+		if (!publishFadePalette() || !waitForPresentationPhases(2) || !waitForPresentationTicks(3))
 			return false;
 	}
 	if (fadeIn) {
