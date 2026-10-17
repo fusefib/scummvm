@@ -525,7 +525,9 @@ int16 Op_LoadBackground() {
 		if (!_vm->waitForPresentationPhases(2))
 			return 0;
 
+		const uint32 start = _vm->beginResourceWork();
 		result = loadBackground(bgName, bgIdx);
+		_vm->finishResourceWork(start);
 
 		gfxModuleData_addDirtyRect(Common::Rect(0, 0, 320, 200));
 	}
@@ -572,7 +574,11 @@ int16 Op_LoadFrame() {
 
 		lastAni[0] = 0;
 
+		const bool graphics = isGraphicsResource(name);
+		const uint32 start = graphics ? _vm->beginResourceWork() : 0;
 		loadFileRange(name, param2, param3, param1);
+		if (graphics)
+			_vm->finishResourceWork(start);
 
 		lastAni[0] = 0;
 	}
@@ -595,7 +601,11 @@ int16 Op_LoadAbs() {
 		if (isGraphicsResource(name) && !_vm->waitForPresentationPhases(2))
 			return 0;
 
+		const bool graphics = isGraphicsResource(name);
+		const uint32 start = graphics ? _vm->beginResourceWork() : 0;
 		result = loadFullBundle(name, slot);
+		if (graphics)
+			_vm->finishResourceWork(start);
 	}
 
 	changeCursor(CURSOR_NORMAL);

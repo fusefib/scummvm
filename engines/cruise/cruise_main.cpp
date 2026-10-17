@@ -1851,6 +1851,15 @@ bool CruiseEngine::waitForPresentationFrame(uint32 workMillis) {
 	return true;
 }
 
+uint32 CruiseEngine::beginResourceWork() {
+	_resourceWorkload.begin(!bFastMode && hasPublishedCaption());
+	return presentationMillis();
+}
+
+bool CruiseEngine::finishResourceWork(uint32 start) {
+	return waitForPresentationDelay(start, _resourceWorkload.finish(kPreparationWorkUnits));
+}
+
 bool CruiseEngine::waitForPresentationPhases(uint count) {
 	while (count--) {
 		const uint32 now = presentationMillis();
@@ -1905,6 +1914,7 @@ void CruiseEngine::mainLoop() {
 			const int slot = _pendingLoadSlot;
 			_pendingLoadSlot = -1;
 			_drawingWorkload.begin(false);
+			_resourceWorkload.begin(false);
 			const Common::Error loadError = loadSavegameData(slot);
 			if (loadError.getCode() != Common::kNoError)
 				GUIErrorMessage(loadError.getDesc());

@@ -44,7 +44,8 @@ private:
 
 // Approximate 80% presentation costs, in units of 5/32768 ms per pixel.
 enum {
-	kSpriteWorkUnits = 29
+	kSpriteWorkUnits = 29,
+	kPreparationWorkUnits = 40
 };
 
 class PixelWorkload {

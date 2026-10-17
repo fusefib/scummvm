@@ -19,6 +19,7 @@
  *
  */
 
+#include "cruise/cruise.h"
 #include "cruise/cruise_main.h"
 #include "common/endian.h"
 #include "common/memstream.h"
@@ -535,6 +536,9 @@ int loadSetEntry(const char *name, uint8 *ptr, int currentEntryIdx, int currentD
 		default:
 			break;
 	}
+
+	if (filesDatabase[fileIndex].subData.resourceType == OBJ_TYPE_SPRITE)
+		_vm->resourceWorkload().countBitmap(filesDatabase[fileIndex].width, filesDatabase[fileIndex].height);
 
 	// TODO: free
 

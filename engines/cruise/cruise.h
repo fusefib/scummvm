@@ -76,6 +76,7 @@ private:
 	CursorType _savedCursor;
 	PresentationClock _presentationClock;
 	PixelWorkload _drawingWorkload;
+	PixelWorkload _resourceWorkload;
 	uint32 _presentationFrameStart;
 	uint32 _presentationPauseStart;
 	uint32 _presentationPausedMillis;
@@ -121,6 +122,9 @@ public:
 	PCSound &sound() { return *_sound; }
 	uint32 presentationMillis() const;
 	PixelWorkload &drawingWorkload() { return _drawingWorkload; }
+	PixelWorkload &resourceWorkload() { return _resourceWorkload; }
+	uint32 beginResourceWork();
+	bool finishResourceWork(uint32 start);
 	bool manageEvents(bool deferInput = false);
 	void resetPublishedCaption();
 	void beginCaptionFrame();

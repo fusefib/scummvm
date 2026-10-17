@@ -211,6 +211,7 @@ int loadBackground(const char *name, int idx) {
 
 		loadMEN(&ptr2);
 		loadCVT(&ptr2);
+		_vm->resourceWorkload().countBitmap(320, 200);
 	}
 
 	MemFree(ptrToFree);
