@@ -64,6 +64,18 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 		}
 	},
 
+	{
+		GAMEOPTION_AMIGA_MUSIC,
+		{
+			_s("Use Amiga music"),
+			_s("Use original Amiga D volumes directly in this game's Extra Path, taking priority over Atari ST music. DOS effects keep the selected audio device. Requires restarting the game."),
+			"amiga_music",
+			false,
+			0,
+			0
+		}
+	},
+
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 

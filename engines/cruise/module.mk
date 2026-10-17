@@ -29,12 +29,14 @@ MODULE_OBJS := \
 	script.o \
 	sound.o \
 	sound/amiga_paula.o \
+	sound/amiga_resources.o \
 	sound/atari_host.o \
 	sound/atari_factory.o \
 	sound/atari_midi.o \
 	sound/atari_psg.o \
 	sound/dos_adlib.o \
 	sound/dos_driver.o \
+	sound/dos_amiga.o \
 	sound/dos_atari.o \
 	sound/factory.o \
 	sound/dos_mt32.o \

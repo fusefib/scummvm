@@ -26,10 +26,13 @@
 #include "cruise/cruise.h"
 #include "cruise/cruise_main.h"
 #include "cruise/sound.h"
+#include "cruise/sound/amiga_resources.h"
 #include "cruise/sound/dos_driver.h"
 #include "cruise/sound/dos_player.h"
 #include "cruise/sound/resources.h"
 #include "cruise/sound/state.h"
+#include "cruise/vars.h"
+#include "cruise/volume.h"
 
 #include "audio/mididrv.h"
 
@@ -119,6 +122,43 @@ Sound *createSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 		return createAmigaSound(mixer, vm);
 	if (vm->getPlatform() == Common::kPlatformAtariST)
 		return createAtariSound(mixer, vm);
+	if (vm->getPlatform() == Common::kPlatformDOS &&
+			ConfMan.hasKey("amiga_music") && ConfMan.getBool("amiga_music")) {
+		Common::StringArray modules;
+		for (int disk = 0; disk < numOfDisks; ++disk) {
+			for (int i = 0; i < volumeData[disk].size / 13; ++i) {
+				char name[14];
+				memcpy(name, volumeData[disk].ptr[i].name, 13);
+				name[13] = 0;
+				Common::String module(name);
+				module.toUppercase();
+				if (!AmigaMusicResources::isModuleName(module))
+					continue;
+				bool known = false;
+				for (uint j = 0; j < modules.size(); ++j)
+					known = known || modules[j] == module;
+				if (!known)
+					modules.push_back(module);
+			}
+		}
+		AmigaMusicResources *resources = new AmigaMusicResources();
+		const Common::ConfigManager::Domain *target = ConfMan.getActiveDomain();
+		Common::String extra, reason;
+		if (target && target->tryGetVal("extrapath", extra) && !extra.empty()) {
+			const Common::Path directory = Common::Path::fromConfig(extra);
+			if (resources->open(directory, modules, reason)) {
+				debug(1, "Cruise: using Amiga music from %s", directory.toString().c_str());
+				return createDosAmigaSound(mixer, vm, resources);
+			}
+			reason = Common::String::format("%s: %s", directory.toString().c_str(), reason.c_str());
+		} else {
+			reason = "no Extra Path configured for this game target";
+		}
+		delete resources;
+		const bool atari = ConfMan.hasKey("atari_music") && ConfMan.getBool("atari_music");
+		warning("Cruise: cannot use Amiga music (%s); using %s music with DOS effects",
+				reason.c_str(), atari ? "Atari ST" : "DOS");
+	}
 	if (vm->getPlatform() == Common::kPlatformDOS &&
 			ConfMan.hasKey("atari_music") && ConfMan.getBool("atari_music"))
 		return createDosAtariSound(mixer, vm);
