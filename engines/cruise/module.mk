@@ -28,6 +28,7 @@ MODULE_OBJS := \
 	saveload.o \
 	script.o \
 	sound.o \
+	sound/amiga_paula.o \
 	sound/atari_host.o \
 	sound/atari_factory.o \
 	sound/atari_midi.o \
