@@ -1122,8 +1122,9 @@ void mainDrawPolygons(int fileIndex, cellStruct *plWork, int X, int scale, int Y
 	buildPolyModel(newX, newY, newScale, (char *)polygonMask, destBuffer, newFrame);
 }
 
-void drawMessage(const gfxEntryStruct *pGfxPtr, int globalX, int globalY, int width, int newColor, uint8 *ouputPtr) {
+bool drawMessage(const gfxEntryStruct *pGfxPtr, int globalX, int globalY, int width, int newColor, uint8 *ouputPtr) {
 	// this is used for font only
+	bool drawn = false;
 
 	if (pGfxPtr) {
 		const uint8 *ptr = pGfxPtr->imagePtr;
@@ -1160,6 +1161,7 @@ void drawMessage(const gfxEntryStruct *pGfxPtr, int globalX, int globalY, int wi
 							*output = (uint8) 0;
 						} else {
 							*output = (uint8) newColor;
+							drawn = true;
 						}
 					}
 				}
@@ -1167,6 +1169,7 @@ void drawMessage(const gfxEntryStruct *pGfxPtr, int globalX, int globalY, int wi
 			}
 		}
 	}
+	return drawn;
 }
 
 void drawSprite(int width, int height, cellStruct *currentObjPtr, const uint8 *dataIn, int ys, int xs, uint8 *output, const uint8 *dataBuf) {
@@ -1527,7 +1530,8 @@ void mainDraw(bool waitFl) {
 
 	while (currentObjPtr) {
 		if (currentObjPtr->type == OBJ_TYPE_MESSAGE && currentObjPtr->freeze == 0) {
-			drawMessage(currentObjPtr->gfxPtr, currentObjPtr->x, currentObjPtr->field_C, currentObjPtr->spriteIdx, currentObjPtr->color, gfxModuleData.pPage10);
+			if (drawMessage(currentObjPtr->gfxPtr, currentObjPtr->x, currentObjPtr->field_C, currentObjPtr->spriteIdx, currentObjPtr->color, gfxModuleData.pPage10))
+				_vm->noteCaptionColor((byte)currentObjPtr->color);
 			isMessage = 1;
 		}
 		currentObjPtr = currentObjPtr->next;

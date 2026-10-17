@@ -660,6 +660,7 @@ void unloadOverlay(const char*name, int overlayNumber) {
 }
 
 void initVars() {
+	_vm->resetPublishedCaption();
 	closeAllMenu();
 	resetFileEntryRange(0, NUM_FILE_ENTRIES);
 

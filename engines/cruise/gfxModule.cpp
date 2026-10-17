@@ -216,6 +216,7 @@ void gfxCopyRect(const uint8 *sourceBuffer, int width, int height, byte *dest, i
 }
 
 void gfxModuleData_Init() {
+	_vm->resetPublishedCaption();
 	memset(globalScreen, 0, 320 * 200);
 	memset(page00, 0, 320 * 200);
 	memset(page10, 0, 320 * 200);
@@ -225,9 +226,11 @@ void gfxModuleData_flipScreen() {
 	memcpy(globalScreen, gfxModuleData.pPage00, 320 * 200);
 
 	flip();
+	_vm->finishCaptionFrame(true);
 }
 
 void gfxModuleData_clearPages() {
+	_vm->resetPublishedCaption();
 	memset(gfxModuleData.pPage00, 0, 320 * 200);
 	memset(gfxModuleData.pPage10, 0, 320 * 200);
 	memset(globalScreen, 0, 320 * 200);
@@ -237,6 +240,39 @@ void gfxModuleData_clearPages() {
 	g_system->updateScreen();
 	// The next composition must replace the cleared display in full.
 	gfxModuleData_addDirtyRect(Common::Rect(0, 0, 320, 200));
+}
+
+void CruiseEngine::resetPublishedCaption() {
+	memset(_captionColors, 0, sizeof(_captionColors));
+	memset(_nextCaptionColors, 0, sizeof(_nextCaptionColors));
+	_captionFramePending = false;
+}
+
+void CruiseEngine::beginCaptionFrame() {
+	memset(_nextCaptionColors, 0, sizeof(_nextCaptionColors));
+	_captionFramePending = true;
+}
+
+void CruiseEngine::noteCaptionColor(byte color) {
+	if (_captionFramePending)
+		_nextCaptionColors[color] = 1;
+}
+
+void CruiseEngine::finishCaptionFrame(bool published) {
+	if (published && _captionFramePending)
+		memcpy(_captionColors, _nextCaptionColors, sizeof(_captionColors));
+	_captionFramePending = false;
+}
+
+bool CruiseEngine::hasPublishedCaption() const {
+	// Message cells can be freed while their pixels survive resource loading.
+	byte palette[256 * 3];
+	g_system->getPaletteManager()->grabPalette(palette, 0, 256);
+	for (uint i = 0; i < 256; ++i) {
+		if (_captionColors[i] && (palette[i * 3] || palette[i * 3 + 1] || palette[i * 3 + 2]))
+			return true;
+	}
+	return false;
 }
 
 bool CruiseEngine::publishFadePalette() {
