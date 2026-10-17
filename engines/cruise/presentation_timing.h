@@ -72,6 +72,18 @@ private:
 	WorkBudget _work;
 };
 
+class ResourceWorkload {
+public:
+	ResourceWorkload() : _active(false) {}
+	void begin(bool enabled);
+	void countBitmap(int width, int height);
+	uint32 finish();
+
+private:
+	bool _active;
+	WorkBudget _work;
+};
+
 } // End of namespace Cruise
 
 #endif

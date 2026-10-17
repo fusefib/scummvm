@@ -76,6 +76,7 @@ private:
 	CursorType _savedCursor;
 	PresentationClock _presentationClock;
 	DrawingWorkload _drawingWorkload;
+	ResourceWorkload _resourceWorkload;
 	uint32 _presentationPauseStart;
 	uint32 _presentationPausedMillis;
 	bool _speedFlag;
@@ -121,6 +122,9 @@ public:
 	uint32 presentationMillis() const;
 	DrawingWorkload &drawingWorkload() { return _drawingWorkload; }
 	bool finishFrameCopy(uint32 start);
+	ResourceWorkload &resourceWorkload() { return _resourceWorkload; }
+	uint32 beginResourceWork();
+	bool finishResourceWork(uint32 start);
 	bool manageEvents(bool deferInput = false);
 	void resetPublishedCaption();
 	void beginCaptionFrame();

@@ -67,6 +67,8 @@ static const uint kSpritePrepareNsPerPixel = 3450;
 static const uint kSpriteBlitNsPerPixel = 2050;
 static const uint kTextNsPerPixel = 2650;
 static const uint kCopyNsPerByte = 168;
+// 1609.694 ms of reference preparation / 209728 installed bitmap pixels.
+static const uint kPrepareNsPerPixel = 7675;
 
 void WorkBudget::add(uint32 count, uint32 nanosecondsPerUnit) {
 	const uint64 limit = (uint64)0x7fffffffU * 1000000;
@@ -140,6 +142,22 @@ uint32 DrawingWorkload::finishCopy(uint32 bytes) {
 	WorkBudget work;
 	work.add(bytes, kCopyNsPerByte);
 	return work.millis();
+}
+
+void ResourceWorkload::begin(bool enabled) {
+	_active = enabled && kWorkloadPercent;
+	_work.reset();
+}
+
+void ResourceWorkload::countBitmap(int width, int height) {
+	if (_active)
+		_work.addPixels(width, height, kPrepareNsPerPixel);
+}
+
+uint32 ResourceWorkload::finish() {
+	const uint32 millis = _work.millis();
+	begin(false);
+	return millis;
 }
 
 } // End of namespace Cruise
