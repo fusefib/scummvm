@@ -28,6 +28,7 @@
 #include "cruise/sound.h"
 #include "cruise/staticres.h"
 
+#include "common/system.h"
 #include "common/textconsole.h"
 #include "common/util.h"
 
@@ -639,7 +640,9 @@ int16 Op_FadeOut() {
 			calcRGB(&workpal[3*j], &workpal[3*j], offsetTable);
 		}
 		gfxModuleData_setPal256(workpal);
-		gfxModuleData_flipScreen();
+		// A palette step must not consume the next composition's dirty rectangles.
+		gfxModuleData_updatePalette();
+		g_system->updateScreen();
 	}
 
 	memset(globalScreen, 0, 320 * 200);
