@@ -20,6 +20,7 @@
  */
 
 #include "base/plugins.h"
+#include "common/config-manager.h"
 #include "common/savefile.h"
 #include "common/system.h"
 #include "engines/advancedDetector.h"
@@ -196,6 +197,15 @@ Common::KeymapArray CruiseMetaEngine::initKeymaps(const char *target) const {
 	act->addDefaultInputMapping("C+f");
 	act->addDefaultInputMapping("JOY_CENTER");
 	gameKeyMap->addAction(act);
+
+	const Platform platform = parsePlatform(ConfMan.get("platform", target));
+	if (platform == kPlatformDOS || platform == kPlatformUnknown) {
+		act = new Action("TOGGLESOUND", _("Toggle sound"));
+		act->setCustomEngineActionEvent(kActionToggleSound);
+		act->addDefaultInputMapping("C+s");
+		act->allowKbdRepeats();
+		gameKeyMap->addAction(act);
+	}
 
 	act = new Action("INVENTORY", _("Inventory"));
 	act->setCustomEngineActionEvent(kActionInventory);

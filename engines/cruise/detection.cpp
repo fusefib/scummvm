@@ -47,7 +47,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::EN_GRB,
 			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO3(GAMEOPTION_TTS, GUIO_MIDIADLIB, GUIO_MIDIPCSPK)
 		},
 		GF_16COLOR
 	},
@@ -59,7 +59,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::FR_FRA,
 			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO3(GAMEOPTION_TTS, GUIO_MIDIADLIB, GUIO_MIDIPCSPK)
 		},
 		GF_16COLOR
 	},
@@ -71,7 +71,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::EN_ANY,
 			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO3(GAMEOPTION_TTS, GUIO_MIDIADLIB, GUIO_MIDIPCSPK)
 		},
 		0
 	},
@@ -83,7 +83,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::FR_FRA,
 			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO3(GAMEOPTION_TTS, GUIO_MIDIADLIB, GUIO_MIDIPCSPK)
 		},
 		0
 	},
@@ -95,7 +95,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::DE_DEU,
 			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO3(GAMEOPTION_TTS, GUIO_MIDIADLIB, GUIO_MIDIPCSPK)
 		},
 		GF_16COLOR
 	},
@@ -107,7 +107,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::DE_DEU,
 			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO3(GAMEOPTION_TTS, GUIO_MIDIADLIB, GUIO_MIDIPCSPK)
 		},
 		0
 	},
@@ -119,7 +119,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::IT_ITA,
 			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO3(GAMEOPTION_TTS, GUIO_MIDIADLIB, GUIO_MIDIPCSPK)
 		},
 		0
 	},
@@ -131,7 +131,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::ES_ESP,
 			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO3(GAMEOPTION_TTS, GUIO_MIDIADLIB, GUIO_MIDIPCSPK)
 		},
 		0
 	},
@@ -143,7 +143,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::RU_RUS,
 			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO3(GAMEOPTION_TTS, GUIO_MIDIADLIB, GUIO_MIDIPCSPK)
 		},
 		0
 	},
@@ -155,7 +155,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::DE_DEU,
 			Common::kPlatformAmiga,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -167,7 +167,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::EN_ANY,
 			Common::kPlatformAmiga,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -179,7 +179,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::EN_ANY,
 			Common::kPlatformAmiga,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -191,7 +191,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::IT_ITA,
 			Common::kPlatformAmiga,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -203,7 +203,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::ES_ESP,
 			Common::kPlatformAmiga,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -215,7 +215,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::FR_FRA,
 			Common::kPlatformAmiga,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -227,7 +227,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::FR_FRA,
 			Common::kPlatformAmiga,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -239,7 +239,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::IT_ITA,
 			Common::kPlatformAmiga,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -251,7 +251,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::EN_ANY,
 			Common::kPlatformAtariST,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -263,7 +263,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::FR_FRA,
 			Common::kPlatformAtariST,
 			ADGF_NO_FLAGS,
-			GUIO1(GAMEOPTION_TTS)
+			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
 		},
 		0
 	},
@@ -275,7 +275,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 class CruiseMetaEngineDetection : public AdvancedMetaEngineDetection<Cruise::CRUISEGameDescription> {
 public:
 	CruiseMetaEngineDetection() : AdvancedMetaEngineDetection(Cruise::gameDescriptions, cruiseGames) {
-		_guiOptions = GUIO2(GUIO_NOSPEECH, GUIO_NOMIDI);
+		_guiOptions = GUIO1(GUIO_NOSPEECH);
 	}
 
 	const char *getName() const override {

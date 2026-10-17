@@ -37,6 +37,15 @@ uint32 Period(uint32 hz) {
 	return ((uint32)(100000000L / ((uint32)hz * 28L)));
 }
 
+static int effectPeriod(int speed) {
+	if (speed <= 0)
+		return -1;
+	uint32 rate = (uint32)speed * 1000;
+	if (_vm->getPlatform() == Common::kPlatformAmiga)
+		rate = (uint16)rate;
+	return rate != 0 ? Period(rate) : -1;
+}
+
 //#define FUNCTION_DEBUG
 
 int16 Op_LoadOverlay() {
@@ -198,69 +207,39 @@ int16 Op_Random() {
 
 int16 Op_PlayFX() {
 	int volume = popVar();
-
-#if 0
 	int speed = popVar();
 	int channelNum = popVar();
-#else
-	popVar();
-	popVar();
-#endif
-
 	int sampleNum = popVar();
 
-	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && (filesDatabase[sampleNum].subData.ptr)) {
-#if 0
+	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && filesDatabase[sampleNum].subData.ptr) {
 		if (speed == -1)
 			speed = filesDatabase[sampleNum].subData.transparency;
-#endif
-
-		_vm->sound().playSound(filesDatabase[sampleNum].subData.ptr,
-			filesDatabase[sampleNum].width, volume);
+		const int period = _vm->getPlatform() == Common::kPlatformDOS ?
+				-1 : effectPeriod(speed);
+		_vm->sound().playEffect(sampleNum, channelNum, period, volume);
 	}
 
-	return (0);
+	return 0;
 }
 
 int16 Op_LoopFX() {
 	int volume = popVar();
-
-#if 0
 	int speed = popVar();
 	int channelNum = popVar();
-#else
-	popVar();
-	popVar();
-#endif
-
 	int sampleNum = popVar();
 
-	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && (filesDatabase[sampleNum].subData.ptr)) {
-
-#if 0
+	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && filesDatabase[sampleNum].subData.ptr) {
 		if (speed == -1)
 			speed = filesDatabase[sampleNum].subData.transparency;
-#endif
-
-		_vm->sound().playSound(filesDatabase[sampleNum].subData.ptr,
-			filesDatabase[sampleNum].width, volume);
+		const int period = effectPeriod(speed);
+		_vm->sound().loopEffect(sampleNum, channelNum, period, volume);
 	}
 
-	return (0);
+	return 0;
 }
 
 int16 Op_StopFX() {
-	int channelNum = popVar();
-
-	if (channelNum == -1) {
-		_vm->sound().stopChannel(0);
-		_vm->sound().stopChannel(1);
-		_vm->sound().stopChannel(2);
-		_vm->sound().stopChannel(3);
-	} else {
-		_vm->sound().stopChannel(channelNum);
-	}
-
+	_vm->sound().stopEffect(popVar());
 	return 0;
 }
 
@@ -270,13 +249,12 @@ int16 Op_FreqFX() {
 	int channelNum = popVar();
 	int sampleNum = popVar();
 
-	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && (filesDatabase[sampleNum].subData.ptr)) {
-		int freq = Period(freq2 * 1000);
-
-		_vm->sound().startNote(channelNum, volume, freq);
+	if ((sampleNum >= 0) && (sampleNum < NUM_FILE_ENTRIES) && filesDatabase[sampleNum].subData.ptr) {
+		const int period = freq2 == -1 ? -1 : effectPeriod(freq2);
+		_vm->sound().updateEffect(sampleNum, channelNum, period, volume);
 	}
 
-	return (0);
+	return 0;
 }
 
 int16 Op_FreeCT() {
@@ -1382,7 +1360,7 @@ int16 Op_LoadSong() {
 	const char *ptr = (const char *)popPtr();
 	char buffer[33];
 
-	Common::strlcpy(buffer, ptr, sizeof(buffer));
+	Common::strlcpy(buffer, ptr ? ptr : "", sizeof(buffer));
 	strToUpper(buffer);
 	_vm->sound().loadMusic(buffer);
 
@@ -1398,8 +1376,8 @@ int16 Op_PlaySong() {
 }
 
 int16 Op_StopSong() {
-	if (_vm->sound().isPlaying())
-		_vm->sound().stopMusic();
+	// Explicit stop also cancels a completed fade awaiting foreground cleanup.
+	_vm->sound().stopMusic();
 
 	return 0;
 }
@@ -1411,6 +1389,10 @@ int16 Op_RestoreSong() {
 }
 
 int16 Op_SongSize() {
+	if (_vm->getPlatform() == Common::kPlatformAtariST) {
+		popVar();
+		return _vm->sound().songLoaded() ? _vm->sound().numOrders() : 0;
+	}
 	int oldSize;
 	if (_vm->sound().songLoaded()) {
 		oldSize = _vm->sound().numOrders();
@@ -1448,8 +1430,8 @@ int16 Op_FreeSong() {
 }
 
 int16 Op_SongLoop() {
-	bool oldLooping = _vm->sound().musicLooping();
-	_vm->sound().musicLoop(popVar() != 0);
+	int16 oldLooping = _vm->sound().musicLooping();
+	_vm->sound().musicLoop(popVar());
 
 	return oldLooping;
 }
@@ -1670,7 +1652,7 @@ int16 Op_SetVolume() {
 		_vm->sound().setVolume(volume);
 	}
 
-	return oldVolume >> 2;
+	return oldVolume;
 }
 
 int16 Op_SongExist() {

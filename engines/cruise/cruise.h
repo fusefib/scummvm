@@ -60,7 +60,8 @@ enum CRUISEAction {
 	kActionInventory,
 	kActionEndUserWaiting,
 	kActionIncreaseGameSpeed,
-	kActionDecreaseGameSpeed
+	kActionDecreaseGameSpeed,
+	kActionToggleSound
 };
 
 enum LangStringId { ID_PAUSED = 0, ID_INVENTORY = 5, ID_SPEAK_ABOUT = 6, ID_PLAYER_MENU = 7,
@@ -71,7 +72,7 @@ struct CRUISEGameDescription;
 class CruiseEngine: public Engine {
 private:
 	bool _preLoad;
-	PCSound *_sound;
+	Sound *_sound;
 	Common::StringArray _langStrings;
 	CursorType _savedCursor;
 	PresentationClock _presentationClock;
@@ -122,7 +123,10 @@ public:
 	bool isVGA() const;
 	Common::Language getLanguage() const;
 	Common::Platform getPlatform() const;
-	PCSound &sound() { return *_sound; }
+	Sound &sound() {
+		assert(_sound);
+		return *_sound;
+	}
 	uint32 presentationMillis() const;
 	DrawingWorkload &drawingWorkload() { return _drawingWorkload; }
 	bool finishFrameCopy(uint32 start);
@@ -130,6 +134,8 @@ public:
 	uint32 beginResourceWork();
 	bool finishResourceWork(uint32 start);
 	bool manageEvents(bool deferInput = false);
+	bool waitForSound(uint32 duration);
+	bool soundWaitCancelled() const;
 	void resetPublishedCaption();
 	void beginCaptionFrame();
 	void noteCaptionColor(byte color, byte ticks);
@@ -151,6 +157,7 @@ public:
 	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
 	Common::String getSaveStateName(int slot) const override { return getSavegameFile(slot); }
 	void syncSoundSettings() override;
+	void resetSoundForGame();
 
 	const CRUISEGameDescription *_gameDescription;
 	void initAllData();

@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/file.h"
 #include "common/debug-channels.h"
 #include "common/textconsole.h"
@@ -41,11 +42,10 @@ namespace Cruise {
 CruiseEngine *_vm;
 
 CruiseEngine::CruiseEngine(OSystem * syst, const CRUISEGameDescription *gameDesc)
-	: Engine(syst), _gameDescription(gameDesc), _rnd("cruise") {
+	: Engine(syst), _sound(nullptr), _gameDescription(gameDesc), _rnd("cruise") {
 
 	_vm = this;
 	setDebugger(new Debugger());
-	_sound = new PCSound(_mixer, this);
 
 	PCFadeFlag = false;
 	_preLoad = false;
@@ -62,8 +62,6 @@ CruiseEngine::CruiseEngine(OSystem * syst, const CRUISEGameDescription *gameDesc
 	_mouseButtonDown = false;
 	_menuJustOpened = false;
 
-	// Setup mixer
-	syncSoundSettings();
 }
 
 extern void listMemory();
@@ -108,6 +106,8 @@ Common::Error CruiseEngine::run() {
 	}
 
 	initialize();
+	_sound = createSound(_mixer, this);
+	syncSoundSettings();
 
 	Cruise::changeCursor(Cruise::CURSOR_NORMAL);
 	CursorMan.showMouse(true);
@@ -206,11 +206,15 @@ uint32 CruiseEngine::presentationMillis() const {
 }
 
 void CruiseEngine::pauseEngineIntern(bool pause) {
-	if (pause)
+	if (pause) {
 		_presentationPauseStart = g_system->getMillis();
-	else
+		if (_sound)
+			_sound->pause(true);
+	} else
 		_presentationPausedMillis += g_system->getMillis() - _presentationPauseStart;
 	Engine::pauseEngineIntern(pause);
+	if (!pause && _sound)
+		_sound->pause(false);
 }
 
 void CruiseEngine::pauseEngine(bool pause) {
@@ -291,7 +295,13 @@ const char *CruiseEngine::getSavegameFile(int saveGameIdx) {
 void CruiseEngine::syncSoundSettings() {
 	Engine::syncSoundSettings();
 
-	_sound->syncSounds();
+	if (_sound)
+		_sound->syncSounds();
+}
+
+void CruiseEngine::resetSoundForGame() {
+	if (_sound)
+		_sound->resetForGame();
 }
 
 } // End of namespace Cruise

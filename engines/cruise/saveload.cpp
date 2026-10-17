@@ -20,6 +20,7 @@
  */
 
 #include "cruise/cruise_main.h"
+#include "cruise/sound/resources.h"
 #include "cruise/cruise.h"
 #include "cruise/vars.h"
 
@@ -731,6 +732,7 @@ void initVars() {
 	resetBackgroundIncrustList(&backgroundIncrustHead);
 
 	vblLimit = 0;
+	_vm->resetSoundForGame();
 	remdo = false;
 	songLoaded = 0;
 	songPlayed = 0;
@@ -823,8 +825,9 @@ static Common::Error validateSavegameResources(Common::SeekableReadStream &in) {
 	char name[40];
 	if (!readResourceName(in, name, 33))
 		return Common::kReadingFailed;
-	if (in.readUint16LE() && name[0])
-		names.push_back(name);
+	if (in.readUint16LE() && name[0] && !_vm->sound().isMusicAvailable(name))
+		return Common::Error(Common::kReadingFailed, Common::String::format(
+				"Savegame requires music '%s', which is not available in the selected music source.", name));
 	in.skip(6 * 2); // Remaining PCSound fields, including its global volume.
 	in.skip(2 * NBCOLORS * 3); // newPal and workpal
 	if (!readResourceName(in, name, 40))
@@ -867,10 +870,13 @@ static Common::Error validateSavegameResources(Common::SeekableReadStream &in) {
 		bool checked = false;
 		for (uint j = 0; j < i; ++j)
 			checked = checked || names[i] == names[j];
+		const Common::String resolved = resolveSoundResourceName(names[i].c_str(),
+				_vm->sound().soundEffectExtension());
+
 		// A DOS save may reference S03PL03.SET, while the equivalent Amiga
 		// checkpoint loads S03PL.SET. More work is needed to verify whether
 		// we can map everything and substitute everything neatly. Until then:
-		if (!checked && !isResourceAvailable(names[i].c_str()))
+		if (!checked && !isResourceAvailable(resolved.c_str(), names[i].c_str()))
 			return Common::Error(Common::kReadingFailed, Common::String::format(
 				"Savegame requires resource '%s', which is not available in this game version.", names[i].c_str()));
 	}
@@ -905,8 +911,8 @@ Common::Error loadSavegameData(int saveGameIdx) {
 	}
 
 	printInfoBlackBox("Loading in progress...");
+	_vm->sound().prepareLoad();
 	initVars();
-	_vm->sound().stopMusic();
 
 	// Synchronise the remaining data of the savegame
 	Common::Serializer s(f, nullptr);
@@ -988,6 +994,10 @@ Common::Error loadSavegameData(int saveGameIdx) {
 	}
 
 	lastAni[0] = 0;
+
+	// soundList[] is already serialized. Re-dispatch its active effects only
+	// after the files database has been rebuilt, as in the DOS load path.
+	_vm->sound().finalizeLoad();
 
 	currentcellHead = cellHead.next;
 
