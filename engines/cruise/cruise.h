@@ -25,6 +25,8 @@
 #include "common/scummsys.h"
 #include "common/util.h"
 #include "common/random.h"
+#include "common/events.h"
+#include "common/queue.h"
 #include "common/text-to-speech.h"
 
 #include "engines/engine.h"
@@ -78,6 +80,8 @@ private:
 	int _gameSpeed;
 	bool _speedFlag;
 	int _pendingLoadSlot;
+	bool _insideTimingWait;
+	Common::Queue<Common::Event> _pendingInputEvents;
 	PauseToken _gamePauseToken;
 
 	Common::CodePage _ttsTextEncoding;
@@ -107,6 +111,7 @@ public:
 	Common::Language getLanguage() const;
 	Common::Platform getPlatform() const;
 	PCSound &sound() { return *_sound; }
+	bool manageEvents(bool deferInput = false);
 	bool fadePalette(bool fadeIn);
 	virtual void pauseEngine(bool pause);
 	const char *langString(LangStringId langId) { return _langStrings[(int)langId].c_str(); }

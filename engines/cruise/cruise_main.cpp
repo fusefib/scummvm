@@ -1709,10 +1709,45 @@ int currentMouseButton = 0;
 bool bFastMode = false;
 
 bool manageEvents() {
+	return _vm->manageEvents();
+}
+
+bool CruiseEngine::manageEvents(bool deferInput) {
 	Common::Event event;
 
 	Common::EventManager * eventMan = g_system->getEventManager();
-	while (eventMan->pollEvent(event)) {
+	while (true) {
+		if (!deferInput && !_pendingInputEvents.empty())
+			event = _pendingInputEvents.pop();
+		else if (!eventMan->pollEvent(event))
+			break;
+
+		if (deferInput) {
+			if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START &&
+					event.customType == kActionFastMode) {
+				bFastMode = !bFastMode;
+				return true;
+			}
+			if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START &&
+					event.customType == kActionExit) {
+				_playerDontAskQuit = true;
+				return true;
+			}
+			if (event.type == Common::EVENT_MOUSEMOVE ||
+					event.type == Common::EVENT_LBUTTONDOWN || event.type == Common::EVENT_LBUTTONUP ||
+					event.type == Common::EVENT_RBUTTONDOWN || event.type == Common::EVENT_RBUTTONUP ||
+					event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START ||
+					event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_END ||
+					event.type == Common::EVENT_KEYDOWN || event.type == Common::EVENT_JOYBUTTON_DOWN) {
+				// Preserve releases and action order; only coalesce uninterrupted motion.
+				if (event.type == Common::EVENT_MOUSEMOVE && !_pendingInputEvents.empty() &&
+						_pendingInputEvents.back().type == Common::EVENT_MOUSEMOVE)
+					_pendingInputEvents.back() = event;
+				else
+					_pendingInputEvents.push(event);
+				continue;
+			}
+		}
 		bool abortFlag = true;
 
 		switch (event.type) {
@@ -1821,6 +1856,10 @@ void CruiseEngine::mainLoop() {
 			if (loadError.getCode() != Common::kNoError)
 				GUIErrorMessage(loadError.getDesc());
 			enableUser = 0;
+			_pendingInputEvents.clear();
+			currentMouseButton = buttonDown = 0;
+			_mouseButtonDown = false;
+			action = kActionNone;
 		}
 
 		uint32 currentTick = g_system->getMillis();
