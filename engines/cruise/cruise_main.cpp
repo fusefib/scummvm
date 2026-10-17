@@ -1845,9 +1845,14 @@ bool CruiseEngine::waitForPresentationDelay(uint32 start, uint32 duration) {
 
 bool CruiseEngine::waitForPresentationFrame() {
 	uint32 now = presentationMillis();
+	uint16 ticks = speedGame;
+	if (!flagSpeed) {
+		const uint32 minimum = MAX<byte>(8, publishedCaptionTicks());
+		ticks = MIN<uint32>(((uint32)ticks * minimum + 7) / 8, 0xffff);
+	}
 	uint32 delay;
 	while (!bFastMode && _pendingLoadSlot < 0 &&
-			(delay = _presentationClock.delayToBoundary(now, speedGame)) != 0) {
+			(delay = _presentationClock.delayToBoundary(now, ticks)) != 0) {
 		if (!waitForPresentationDelay(now, delay))
 			return false;
 		now = presentationMillis();
@@ -1857,7 +1862,7 @@ bool CruiseEngine::waitForPresentationFrame() {
 }
 
 uint32 CruiseEngine::beginResourceWork() {
-	_resourceWorkload.begin(!bFastMode && hasPublishedCaption());
+	_resourceWorkload.begin(!bFastMode && publishedCaptionTicks() != 0);
 	return presentationMillis();
 }
 
@@ -2057,7 +2062,7 @@ void CruiseEngine::mainLoop() {
 			/*if (!PCFadeFlag)*/
 			const uint32 drawStart = presentationMillis();
 			beginCaptionFrame();
-			_drawingWorkload.begin(!bFastMode, hasPublishedCaption());
+			_drawingWorkload.begin(!bFastMode, publishedCaptionTicks() != 0);
 			mainDraw(userWait);
 			const uint32 drawMillis = _drawingWorkload.finishDrawing();
 			if (!waitForPresentationDelay(drawStart, drawMillis) || !waitForPresentationFrame()) {

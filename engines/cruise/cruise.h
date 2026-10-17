@@ -82,6 +82,7 @@ private:
 	bool _speedFlag;
 	int _pendingLoadSlot;
 	bool _insideTimingWait;
+	// Per-color minimum: zero without caption ink, eight normally, twelve for I01.
 	byte _captionColors[256];
 	byte _nextCaptionColors[256];
 	bool _captionFramePending;
@@ -129,9 +130,9 @@ public:
 	bool manageEvents(bool deferInput = false);
 	void resetPublishedCaption();
 	void beginCaptionFrame();
-	void noteCaptionColor(byte color);
+	void noteCaptionColor(byte color, byte ticks);
 	void finishCaptionFrame(bool published);
-	bool hasPublishedCaption() const;
+	byte publishedCaptionTicks() const;
 	bool waitForPresentationPhases(uint count);
 	bool fadePalette(bool fadeIn);
 	virtual void pauseEngine(bool pause);
