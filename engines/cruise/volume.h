@@ -27,7 +27,7 @@ namespace Cruise {
 int16 readVolCnf();
 int closeCnf();
 int16 findFileInDisks(const char *name);
-bool isResourceAvailable(const char *name);
+bool isResourceAvailable(const char *name, const char *logicalName = nullptr);
 void freeDisk();
 int16 findFileInList(const char *fileName);
 

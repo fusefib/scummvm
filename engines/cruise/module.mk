@@ -28,6 +28,13 @@ MODULE_OBJS := \
 	saveload.o \
 	script.o \
 	sound.o \
+	sound/dos_adlib.o \
+	sound/dos_driver.o \
+	sound/factory.o \
+	sound/dos_pcspk.o \
+	sound/resource_entry.o \
+	sound/resources.o \
+	sound/state.o \
 	stack.o \
 	staticres.o \
 	various.o \

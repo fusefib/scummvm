@@ -23,6 +23,7 @@
 #include "cruise/cruise_main.h"
 #include "common/endian.h"
 #include "common/memstream.h"
+#include "common/str.h"
 #include "common/textconsole.h"
 
 namespace Cruise {
@@ -239,11 +240,12 @@ int getNumMaxEntiresInSet(uint8 *ptr) {
 
 int loadFile(const char* name, int idx, int destIdx) {
 	uint8 *ptr = nullptr;
+	uint32 decodedSize = 0;
 	fileTypeEnum fileType;
 
 	fileType = getFileType(name);
 
-	loadFileSub1(&ptr, name, nullptr);
+	loadFileSub1(&ptr, name, nullptr, &decodedSize);
 
 	switch (fileType) {
 	case type_SET: {
@@ -267,7 +269,7 @@ int loadFile(const char* name, int idx, int destIdx) {
 	}
 	case type_SPL: {
 		// Sound file
-		loadSPLSub(ptr, idx);
+		loadSPLSub(ptr, decodedSize, name, 0, idx, _vm->getPlatform());
 		break;
 	}
 	default:
@@ -281,11 +283,12 @@ int loadFile(const char* name, int idx, int destIdx) {
 
 int loadFileRange(const char *name, int startIdx, int currentEntryIdx, int numIdx) {
 	uint8 *ptr = nullptr;
+	uint32 decodedSize = 0;
 	fileTypeEnum fileType;
 
 	fileType = getFileType(name);
 
-	loadFileSub1(&ptr, name, nullptr);
+	loadFileSub1(&ptr, name, nullptr, &decodedSize);
 
 	switch (fileType) {
 	case type_SET: {
@@ -307,7 +310,8 @@ int loadFileRange(const char *name, int startIdx, int currentEntryIdx, int numId
 	}
 	case type_SPL: {
 		// Sound file
-		loadSPLSub(ptr, startIdx);
+		loadSPLSub(ptr, decodedSize, name, 0, currentEntryIdx,
+				_vm->getPlatform());
 		break;
 	}
 	default:
@@ -321,11 +325,12 @@ int loadFileRange(const char *name, int startIdx, int currentEntryIdx, int numId
 
 int loadFullBundle(const char *name, int startIdx) {
 	uint8 *ptr = nullptr;
+	uint32 decodedSize = 0;
 	fileTypeEnum fileType;
 
 	fileType = getFileType(name);
 
-	loadFileSub1(&ptr, name, nullptr);
+	loadFileSub1(&ptr, name, nullptr, &decodedSize);
 
 	if (ptr == nullptr)
 		return 0;
@@ -348,7 +353,7 @@ int loadFullBundle(const char *name, int startIdx) {
 	}
 	case type_SPL: {
 		// Sound file
-		loadSPLSub(ptr, startIdx);
+		loadSPLSub(ptr, decodedSize, name, 0, startIdx, _vm->getPlatform());
 		break;
 	}
 	default:
@@ -397,24 +402,6 @@ int loadFNTSub(uint8 *ptr, int destIdx) {
 
 	return 1;
 }
-
-int loadSPLSub(uint8 *ptr, int destIdx) {
-	int fileIndex;
-
-	if (destIdx == -1)
-		fileIndex = createResFileEntry(loadFileVar1, 1, loadFileVar1, 1);
-	else
-		fileIndex = updateResFileEntry(loadFileVar1, 1, loadFileVar1, destIdx, 1);
-
-	if (fileIndex < 0)
-		error("Unable to load SPL resource");
-
-	uint8* destPtr = filesDatabase[fileIndex].subData.ptr;
-	memcpy(destPtr, ptr, loadFileVar1);
-
-	return 1;
-}
-
 
 int loadSetEntry(const char *name, uint8 *ptr, int currentEntryIdx, int currentDestEntry) {
 	uint8 *ptr3;

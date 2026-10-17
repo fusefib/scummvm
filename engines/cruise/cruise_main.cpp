@@ -29,6 +29,7 @@
 #include "cruise/cruise_main.h"
 #include "cruise/cell.h"
 #include "cruise/staticres.h"
+#include "cruise/sound/resources.h"
 
 namespace Cruise {
 
@@ -328,11 +329,15 @@ void removeExtension(const char *name, char *buffer, size_t ln) {	// not like in
 
 int lastFileSize;
 
-int loadFileSub1(uint8 **ptr, const char *name, uint8 *ptr2) {
+int loadFileSub1(uint8 **ptr, const char *name, uint8 *ptr2,
+		uint32 *decodedSize) {
 	char buffer[256];
 	int fileIdx;
 	int unpackedSize;
 	uint8 *unpackedBuffer;
+
+	if (decodedSize)
+		*decodedSize = 0;
 
 	for (int i = 0; i < 64; i++) {
 		if (preloadData[i].ptr) {
@@ -342,34 +347,20 @@ int loadFileSub1(uint8 **ptr, const char *name, uint8 *ptr2) {
 		}
 	}
 
-	getFileExtension(name, buffer, sizeof(buffer));
-
-	if (!strcmp(buffer, ".SPL")) {
-		removeExtension(name, buffer, sizeof(buffer));
-
-		/* if (useH32)
-		 *{
-		 *	Common::strcat_s(buffer,".H32");
-		 *}
-		 * else
-		 * if (useAdLib)
-		 * { */
-		Common::strcat_s(buffer,".ADL");
-		/* }
-		 * else
-		 * {
-		 * strcatuint8(buffer,".HP");
-		 * } */
-	} else {
-		Common::strlcpy(buffer, name, sizeof(buffer));
-	}
+	const Common::String resolved = resolveSoundResourceName(name, _vm->sound().soundEffectExtension());
+	Common::strlcpy(buffer, resolved.c_str(), sizeof(buffer));
 
 	fileIdx = findFileInDisks(buffer);
+	// DOS16's volume index can list only the logical SPL name.
+	if (fileIdx < 0 && resolved != name && findFileInDisks(name) >= 0)
+		fileIdx = findFileInDisks(buffer);
 
 	if (fileIdx < 0)
 		return (-18);
 
 	unpackedSize = loadFileVar1 = volumePtrToFileDescriptor[fileIdx].extSize + 2;
+	if (decodedSize)
+		*decodedSize = volumePtrToFileDescriptor[fileIdx].extSize;
 
 	unpackedBuffer = (uint8 *)mallocAndZero(unpackedSize);
 
@@ -1726,6 +1717,15 @@ bool CruiseEngine::manageEvents(bool deferInput) {
 		else if (!eventMan->pollEvent(event))
 			break;
 
+		if ((event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START ||
+				event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_END) &&
+				event.customType == kActionToggleSound) {
+			if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START &&
+					getPlatform() == Common::kPlatformDOS)
+				_sound->toggleSound();
+			continue;
+		}
+
 		if (deferInput) {
 			if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START &&
 					event.customType == kActionFastMode) {
@@ -1831,6 +1831,8 @@ bool CruiseEngine::waitForPresentationDelay(uint32 start, uint32 duration) {
 	while (!_playerDontAskQuit && !shouldQuit() && !bFastMode && _pendingLoadSlot < 0) {
 		if (presentationMillis() - start >= duration)
 			break;
+		if (_sound)
+			_sound->service();
 		g_system->updateScreen();
 		manageEvents(true);
 		if (_playerDontAskQuit || shouldQuit() || bFastMode || _pendingLoadSlot >= 0)
@@ -1841,6 +1843,15 @@ bool CruiseEngine::waitForPresentationDelay(uint32 start, uint32 duration) {
 	}
 	_insideTimingWait = wasInsideWait;
 	return !_playerDontAskQuit && !shouldQuit();
+}
+
+bool CruiseEngine::soundWaitCancelled() const {
+	return _playerDontAskQuit || shouldQuit() || _pendingLoadSlot >= 0;
+}
+
+bool CruiseEngine::waitForSound(uint32 duration) {
+	return waitForPresentationDelay(presentationMillis(), duration) &&
+			!bFastMode && _pendingLoadSlot < 0;
 }
 
 bool CruiseEngine::waitForPresentationFrame(uint32 workMillis) {
@@ -1929,6 +1940,7 @@ void CruiseEngine::mainLoop() {
 			action = kActionNone;
 			_presentationClock.reset(presentationMillis());
 		}
+		_sound->service();
 
 		if (userEnabled && !userWait && !autoTrack) {
 			if (currentActiveMenu == -1) {
@@ -2025,6 +2037,8 @@ void CruiseEngine::mainLoop() {
 		}
 
 		processAnimation();
+		if (_pendingLoadSlot < 0)
+			_sound->retireMusic();
 
 		if (remdo) {
 			// assert(0);

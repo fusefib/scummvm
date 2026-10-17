@@ -166,12 +166,13 @@ int32 findFileInDisksSub1(const char *fileName) {
 	return (foundDisk);
 }
 
-bool isResourceAvailable(const char *name) {
+bool isResourceAvailable(const char *name, const char *logicalName) {
 	// Inspect local volume directories without changing the current disk or cursor.
 	for (int i = 0; i < numOfDisks; ++i) {
 		bool listed = false;
 		for (int j = 0; j < volumeData[i].size / 13; ++j)
-			if (!scumm_stricmp(volumeData[i].ptr[j].name, name))
+			if (!scumm_stricmp(volumeData[i].ptr[j].name, name) ||
+					(logicalName && !scumm_stricmp(volumeData[i].ptr[j].name, logicalName)))
 				listed = true;
 		if (!listed)
 			continue;
