@@ -99,7 +99,12 @@ void fadeIn() {
 }
 
 void flipScreen() {
-	if (switchPal) {
+	if (doFade) {
+		// The incoming composition must be published under black first.
+		memset(workpal, 0, sizeof(workpal));
+		switchPal = 0;
+		gfxModuleData_setPal256(workpal);
+	} else if (switchPal) {
 		for (unsigned long int i = 0; i < 256*3; i++) {
 			workpal[i] = palScreen[masterScreen][i];
 		}
