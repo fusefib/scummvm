@@ -1671,8 +1671,9 @@ int16 Op_SongExist() {
 }
 
 int16 Op_TrackPos() {
-	// This function returns a variable that never seems to change from 0
-	return 0;
+	// No calls were found in the inspected English Amiga or Atari scripts.
+	// The native result differs by platform; DOS music replacements keep DOS controls.
+	return _vm->sound().trackPosition();
 }
 
 int16 Op_SetNodeState() {

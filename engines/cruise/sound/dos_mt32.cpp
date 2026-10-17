@@ -133,18 +133,7 @@ void MT32SoundDriverH32::setUpdateCallback(UpdateCallback upCb, void *ref) {
 
 void MT32SoundDriverH32::sendDT1(byte address0, byte address1, byte address2, const byte *data, uint16 length) {
 	byte message[SoundInternal::kH32TimbrePayloadSize + 8];
-	assert(length <= (uint16)(sizeof(message) - 8));
-	message[0] = 0x41;
-	message[1] = 0x10;
-	message[2] = 0x16;
-	message[3] = 0x12;
-	message[4] = address0;
-	message[5] = address1;
-	message[6] = address2;
-	Common::copy(data, data + length, message + 7);
-
-	message[7 + length] = SoundInternal::calculateH32Checksum(
-			address0, address1, address2, data, length);
+	SoundInternal::buildH32DT1(message, address0, address1, address2, data, length);
 	_midi->sysEx(message, length + 8);
 }
 

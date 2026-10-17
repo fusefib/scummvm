@@ -251,7 +251,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::EN_ANY,
 			Common::kPlatformAtariST,
 			ADGF_NO_FLAGS,
-			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
+			GUIO2(GAMEOPTION_TTS, GUIO_MIDIMT32)
 		},
 		0
 	},
@@ -263,7 +263,7 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			Common::FR_FRA,
 			Common::kPlatformAtariST,
 			ADGF_NO_FLAGS,
-			GUIO2(GAMEOPTION_TTS, GUIO_NOMIDI)
+			GUIO2(GAMEOPTION_TTS, GUIO_MIDIMT32)
 		},
 		0
 	},

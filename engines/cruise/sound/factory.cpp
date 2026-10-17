@@ -115,6 +115,8 @@ PCSound::~PCSound() {
 }
 
 Sound *createSound(Audio::Mixer *mixer, CruiseEngine *vm) {
+	if (vm->getPlatform() == Common::kPlatformAtariST)
+		return createAtariSound(mixer, vm);
 	return new PCSound(mixer, vm);
 }
 
