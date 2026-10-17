@@ -70,7 +70,6 @@ PCSound::PCSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 
 		switch (musicType) {
 		case MT_PCSPK:
-			debugC(1, kCruiseDebugSound, "Using original Cruise PC speaker backend");
 			_soundDriver = createPCSpeakerSoundDriver(_mixer);
 			break;
 		case MT_MT32:
@@ -79,7 +78,6 @@ PCSound::PCSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 				MidiDriver *midi = MidiDriver::createMidi(device);
 				const int result = midi ? midi->open() : MidiDriver::MERR_DEVICE_NOT_AVAILABLE;
 				if (result == 0) {
-					debugC(1, kCruiseDebugSound, "Using original Cruise MT-32/H32 backend");
 					_soundDriver = createMT32SoundDriver(midi);
 				} else {
 					warning("Unable to open MT-32 output (%s); falling back to AdLib",
@@ -95,10 +93,8 @@ PCSound::PCSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 		}
 	}
 
-	if (!_soundDriver) {
-		debugC(1, kCruiseDebugSound, "Using original Cruise AdLib/ADL backend");
+	if (!_soundDriver)
 		_soundDriver = createAdLibSoundDriver(_mixer);
-	}
 
 	_player = new HostedPCSoundFxPlayer(_soundDriver, vm);
 	_genVolume = 0;
@@ -117,13 +113,28 @@ PCSound::~PCSound() {
 	delete _soundDriver;
 }
 
+MusicReplacement getMusicReplacement(const Common::String &domain) {
+	// Use the same named-domain lookup in the launcher and at startup.
+	const Common::String &music = ConfMan.get("music_replacement", domain);
+	if (music.equalsIgnoreCase("atari"))
+		return kAtariMusic;
+	if (music.equalsIgnoreCase("amiga"))
+		return kAmigaMusic;
+	return kNoReplacement;
+}
+
 Sound *createSound(Audio::Mixer *mixer, CruiseEngine *vm) {
-	if (vm->getPlatform() == Common::kPlatformAmiga)
+	if (vm->getPlatform() == Common::kPlatformAmiga) {
+		warning("Cruise: using Amiga Paula music and effects");
 		return createAmigaSound(mixer, vm);
+	}
 	if (vm->getPlatform() == Common::kPlatformAtariST)
 		return createAtariSound(mixer, vm);
-	if (vm->getPlatform() == Common::kPlatformDOS &&
-			ConfMan.hasKey("amiga_music") && ConfMan.getBool("amiga_music")) {
+	const MusicReplacement music = getMusicReplacement(ConfMan.getActiveDomainName());
+	Sound *sound = nullptr;
+	const char *musicBackend = nullptr;
+	Common::String detail;
+	if (vm->getPlatform() == Common::kPlatformDOS && music == kAmigaMusic) {
 		Common::StringArray modules;
 		for (int disk = 0; disk < numOfDisks; ++disk) {
 			for (int i = 0; i < volumeData[disk].size / 13; ++i) {
@@ -147,22 +158,32 @@ Sound *createSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 		if (target && target->tryGetVal("extrapath", extra) && !extra.empty()) {
 			const Common::Path directory = Common::Path::fromConfig(extra);
 			if (resources->open(directory, modules, reason)) {
-				debug(1, "Cruise: using Amiga music from %s", directory.toString().c_str());
-				return createDosAmigaSound(mixer, vm, resources);
+				sound = createDosAmigaSound(mixer, vm, resources);
+				musicBackend = "Amiga Paula";
+				detail = Common::String::format("; source: %s", directory.toString().c_str());
+			} else {
+				reason = Common::String::format("%s: %s", directory.toString().c_str(), reason.c_str());
 			}
-			reason = Common::String::format("%s: %s", directory.toString().c_str(), reason.c_str());
 		} else {
 			reason = "no Extra Path configured for this game target";
 		}
-		delete resources;
-		const bool atari = ConfMan.hasKey("atari_music") && ConfMan.getBool("atari_music");
-		warning("Cruise: cannot use Amiga music (%s); using %s music with DOS effects",
-				reason.c_str(), atari ? "Atari ST" : "DOS");
+		if (!sound) {
+			delete resources;
+			detail = Common::String::format("; cannot use Amiga music: %s", reason.c_str());
+		}
 	}
-	if (vm->getPlatform() == Common::kPlatformDOS &&
-			ConfMan.hasKey("atari_music") && ConfMan.getBool("atari_music"))
-		return createDosAtariSound(mixer, vm);
-	return new PCSound(mixer, vm);
+	if (vm->getPlatform() == Common::kPlatformDOS && music == kAtariMusic) {
+		sound = createDosAtariSound(mixer, vm);
+		musicBackend = "Atari ST PSG";
+	}
+	if (!sound)
+		sound = new PCSound(mixer, vm);
+	const char *extension = sound->soundEffectExtension();
+	const char *effectsBackend = !strcmp(extension, ".HP") ? "DOS PC speaker" :
+		!strcmp(extension, ".H32") ? "DOS MT-32" : "DOS AdLib";
+	warning("Cruise: using %s music and %s effects%s",
+		musicBackend ? musicBackend : effectsBackend, effectsBackend, detail.c_str());
+	return sound;
 }
 
 void PCSound::loadMusic(const char *name) {

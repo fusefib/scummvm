@@ -23,6 +23,7 @@
 #define CRUISE_SOUND_H
 
 #include "common/serializer.h"
+#include "common/str.h"
 
 namespace Audio {
 class Mixer;
@@ -34,6 +35,14 @@ class CruiseEngine;
 class PCSoundDriver;
 class PCSoundFxPlayer;
 class AmigaMusicResources;
+
+enum MusicReplacement {
+	kNoReplacement,
+	kAtariMusic,
+	kAmigaMusic
+};
+
+MusicReplacement getMusicReplacement(const Common::String &domain);
 
 class Sound {
 protected:
