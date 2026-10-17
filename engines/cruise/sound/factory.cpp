@@ -119,6 +119,9 @@ Sound *createSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 		return createAmigaSound(mixer, vm);
 	if (vm->getPlatform() == Common::kPlatformAtariST)
 		return createAtariSound(mixer, vm);
+	if (vm->getPlatform() == Common::kPlatformDOS &&
+			ConfMan.hasKey("atari_music") && ConfMan.getBool("atari_music"))
+		return createDosAtariSound(mixer, vm);
 	return new PCSound(mixer, vm);
 }
 

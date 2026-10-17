@@ -37,9 +37,8 @@
 
 namespace Cruise {
 
-#ifdef USE_TTS
-
 static const ADExtraGuiOptionsMap optionsList[] = {
+#ifdef USE_TTS
 	{
 		GAMEOPTION_TTS,
 		{
@@ -52,10 +51,21 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 		}
 	},
 
+#endif
+	{
+		GAMEOPTION_ATARI_MUSIC,
+		{
+			_s("Use Atari ST music"),
+			_s("Play Atari ST music with DOS sound effects. The selected audio device controls effects. Requires restarting the game."),
+			"atari_music",
+			false,
+			0,
+			0
+		}
+	},
+
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
-
-#endif
 
 const char *CruiseEngine::getGameId() const {
 	return _gameDescription->desc.gameId;
@@ -84,11 +94,9 @@ public:
 		return "cruise";
 	}
 
-#ifdef USE_TTS
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
 		return Cruise::optionsList;
 	}
-#endif
 
 	bool hasFeature(MetaEngineFeature f) const override;
 	int getMaximumSaveSlot() const override { return 99; }

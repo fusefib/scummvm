@@ -1663,6 +1663,20 @@ int16 Op_SongExist() {
 		Common::strlcpy(name, songName, sizeof(name));
 		strToUpper(name);
 
+		if (_vm->getPlatform() == Common::kPlatformDOS && !strcmp(name, "CORP2") &&
+				currentScriptPtr && currentScriptPtr->type == scriptType_PROC) {
+			const char *overlay = overlayTable[currentScriptPtr->overlayNumber].overlayName;
+			const int procedure = currentScriptPtr->scriptNumber;
+			// WORKAROUND: DOS alley scripts reuse CORP2 by name, but alternate
+			// music can still be fading on return from S25 and then go silent.
+			// Reject fading/pending music here so the scripts reload it; other
+			// name queries, including the S27 gramophone, keep their semantics.
+			if ((procedure == 1 && (!strcmp(overlay, "S18") || !strcmp(overlay, "S19") ||
+					!strcmp(overlay, "S21") || !strcmp(overlay, "S22") || !strcmp(overlay, "S23"))) ||
+					(procedure == 3 && !strcmp(overlay, "S20")))
+				return _vm->sound().canReuseMusic(name);
+		}
+
 		if (!strcmp(_vm->sound().musicName(), name))
 			return 1;
 	}
