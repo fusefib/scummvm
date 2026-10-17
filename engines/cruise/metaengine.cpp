@@ -67,6 +67,14 @@ Common::Platform CruiseEngine::getPlatform() const {
 	return _gameDescription->desc.platform;
 }
 
+uint32 CruiseEngine::getFeatures() const {
+	return _gameDescription->features;
+}
+
+bool CruiseEngine::isVGA() const {
+	return getPlatform() == Common::kPlatformDOS && !(getFeatures() & GF_16COLOR);
+}
+
 } // End of namespace Cruise
 
 class CruiseMetaEngine : public AdvancedMetaEngine<Cruise::CRUISEGameDescription> {

@@ -1020,8 +1020,9 @@ int16 Op_SetColor()	{
 	int endIdx = popVar();
 	int startIdx = popVar();
 
-	// DOS retains the original full-palette operand for the VGA palette.
-	const bool fullDosPalette = _vm->getPlatform() == Common::kPlatformDOS && startIdx == 0 && endIdx == 31;
+	// Only the VGA executable expands this original 32-color operand.
+	const bool fullDosPalette = _vm->isVGA() && startIdx == 0 && endIdx == 31;
+	const bool threeBitComponents = _vm->getPlatform() == Common::kPlatformDOS && !_vm->isVGA();
 	if (fullDosPalette)
 		endIdx = 255;
 
@@ -1034,15 +1035,21 @@ int16 Op_SetColor()	{
 		offsetTable[1] = (int)(colorG * convertRatio);
 		offsetTable[2] = (int)(colorB * convertRatio);
 
-		if (CVTLoaded && !fullDosPalette) {
-			int colorIdx = cvtPalette[i];
-			calcRGB(&palScreen[masterScreen][3*colorIdx], &workpal[3*colorIdx], offsetTable);
-		} else {
-			calcRGB(&palScreen[masterScreen][3*i], &workpal[3*i], offsetTable);
-		}
+		const int colorIdx = CVTLoaded && !fullDosPalette ? cvtPalette[i] : i;
+		if (threeBitComponents) {
+			workpal[3 * colorIdx] = gfxModuleData_transform3BitColor(palScreen[masterScreen][3 * colorIdx], colorR);
+			workpal[3 * colorIdx + 1] = gfxModuleData_transform3BitColor(palScreen[masterScreen][3 * colorIdx + 1], colorG);
+			workpal[3 * colorIdx + 2] = gfxModuleData_transform3BitColor(palScreen[masterScreen][3 * colorIdx + 2], colorB);
+		} else
+			calcRGB(&palScreen[masterScreen][3 * colorIdx], &workpal[3 * colorIdx], offsetTable);
 	}
 
-	gfxModuleData_setPalEntries(workpal, 0, fullDosPalette ? 256 : 32);
+	if (threeBitComponents) {
+		// The four-plane driver publishes only the first sixteen entries.
+		for (int i = 16; i < 256; ++i)
+			memcpy(workpal + 3 * i, workpal + 3 * (i & 15), 3);
+	}
+	gfxModuleData_setPalEntries(workpal, 0, fullDosPalette || threeBitComponents ? 256 : 32);
 
 	return 0;
 }
