@@ -53,6 +53,7 @@ CruiseEngine::CruiseEngine(OSystem * syst, const CRUISEGameDescription *gameDesc
 	_lastTick = 0;
 	_gameSpeed = GAME_FRAME_DELAY_1;
 	_speedFlag = false;
+	_pendingLoadSlot = -1;
 	_polyStructs = nullptr;
 	_polyStruct = nullptr;
 
@@ -249,7 +250,9 @@ void CruiseEngine::stopTextToSpeech() {
 }
 
 Common::Error CruiseEngine::loadGameState(int slot) {
-	return loadSavegameData(slot);
+	// The global menu can run while a drawing or resource operation is suspended.
+	_pendingLoadSlot = slot;
+	return Common::kNoError;
 }
 
 bool CruiseEngine::canLoadGameStateCurrently(Common::U32String *msg) {
