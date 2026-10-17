@@ -60,8 +60,10 @@ PCSound::PCSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 
 	if (_vm->getPlatform() == Common::kPlatformDOS) {
 		const MidiDriver::DeviceHandle device = MidiDriver::detectDevice(
-				MDT_PCSPK | MDT_ADLIB);
+				MDT_PCSPK | MDT_ADLIB | MDT_MIDI | MDT_PREFER_MT32);
 		const MusicType musicType = MidiDriver::getMusicType(device);
+		const bool useMT32 = SoundInternal::shouldUseNativeMT32(
+				musicType, ConfMan.getBool("native_mt32"));
 
 		switch (musicType) {
 		case MT_PCSPK:
@@ -70,6 +72,19 @@ PCSound::PCSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 			break;
 		case MT_MT32:
 		case MT_GM:
+			if (useMT32) {
+				MidiDriver *midi = MidiDriver::createMidi(device);
+				const int result = midi ? midi->open() : MidiDriver::MERR_DEVICE_NOT_AVAILABLE;
+				if (result == 0) {
+					debugC(1, kCruiseDebugSound, "Using original Cruise MT-32/H32 backend");
+					_soundDriver = createMT32SoundDriver(midi);
+				} else {
+					warning("Unable to open MT-32 output (%s); falling back to AdLib",
+							MidiDriver::getErrorName(result));
+					delete midi;
+				}
+			}
+			break;
 		case MT_GS:
 		case MT_ADLIB:
 		default:
