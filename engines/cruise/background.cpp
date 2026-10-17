@@ -141,20 +141,15 @@ int loadBackground(const char *name, int idx) {
 		switch (mode) {
 		case 0:
 		case 4: { // color on 3 bit
-			uint16 oldPalette[32];
+			uint16 oldPalette[16];
 
 			memcpy(oldPalette, ptr2, 0x20);
 			ptr2 += 0x20;
 			flipGen(oldPalette, 0x20);
 
-			for (unsigned long int i = 0; i < 32; i++) {
-				gfxModuleData_convertOldPalColor(oldPalette[i], &palScreen[idx][i*3]);
-			}
-
-			// duplicate the palette
-			for (unsigned long int i = 1; i < 8; i++) {
-				memcpy(&palScreen[idx][32*i*3], &palScreen[idx][0], 32*3);
-			}
+			// Four-plane backgrounds only supply sixteen palette entries.
+			for (unsigned long int i = 0; i < 256; i++)
+				gfxModuleData_convertOldPalColor(oldPalette[i & 15], &palScreen[idx][i*3]);
 
 			break;
 		}
