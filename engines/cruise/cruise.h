@@ -87,6 +87,8 @@ private:
 	byte _captionColors[256];
 	byte _nextCaptionColors[256];
 	bool _captionFramePending;
+	bool _publishedPickupPose;
+	bool _nextPickupPose;
 	Common::Queue<Common::Event> _pendingInputEvents;
 	PauseToken _gamePauseToken;
 
@@ -131,6 +133,7 @@ public:
 	void resetPublishedCaption();
 	void beginCaptionFrame();
 	void noteCaptionColor(byte color, byte ticks);
+	void notePickupPose();
 	void finishCaptionFrame(bool published);
 	byte publishedCaptionTicks() const;
 	bool waitForPresentationPhases(uint count);
