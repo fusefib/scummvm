@@ -20,6 +20,7 @@
  */
 
 #include "cruise/cruise_main.h"
+#include "cruise/cruise.h"
 #include "cruise/staticres.h"
 
 #include "common/system.h"
@@ -55,6 +56,7 @@ static const byte cursorPalette[] = {
 void changeCursor(CursorType eType) {
 	assert(eType >= 0 && eType < CURSOR_MAX);
 	if (currentCursor != eType) {
+		const bool vga = _vm->isVGA();
 		byte mouseCursor[16 * 16];
 		const MouseCursor *mc = &mouseCursors[eType];
 		const byte *src = mc->bitmap;
@@ -62,7 +64,7 @@ void changeCursor(CursorType eType) {
 			int offs = i * 8;
 			for (byte mask = 0x80; mask != 0; mask >>= 1) {
 				if (src[0] & mask) {
-					mouseCursor[offs] = 1;
+					mouseCursor[offs] = vga ? 2 : 1;
 				} else if (src[32] & mask) {
 					mouseCursor[offs] = 0;
 				} else {
@@ -73,7 +75,11 @@ void changeCursor(CursorType eType) {
 			++src;
 		}
 		CursorMan.replaceCursor(mouseCursor, 16, 16, mc->hotspotX, mc->hotspotY, 0xFF);
-		CursorMan.replaceCursorPalette(cursorPalette, 0, 2);
+		// The native VGA software cursor uses the displayed palette, including fades.
+		if (vga)
+			CursorMan.replaceCursorPalette(nullptr, 0, 0);
+		else
+			CursorMan.replaceCursorPalette(cursorPalette, 0, 2);
 		currentCursor = eType;
 	}
 }
