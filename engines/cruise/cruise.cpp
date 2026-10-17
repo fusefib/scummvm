@@ -54,6 +54,7 @@ CruiseEngine::CruiseEngine(OSystem * syst, const CRUISEGameDescription *gameDesc
 	_gameSpeed = GAME_FRAME_DELAY_1;
 	_speedFlag = false;
 	_pendingLoadSlot = -1;
+	_insideTimingWait = false;
 	_polyStructs = nullptr;
 	_polyStruct = nullptr;
 
@@ -264,7 +265,7 @@ Common::Error CruiseEngine::saveGameState(int slot, const Common::String &desc, 
 }
 
 bool CruiseEngine::canSaveGameStateCurrently(Common::U32String *msg) {
-	return (playerMenuEnabled != 0) && (userEnabled != 0);
+	return !_insideTimingWait && (playerMenuEnabled != 0) && (userEnabled != 0);
 }
 
 const char *CruiseEngine::getSavegameFile(int saveGameIdx) {
