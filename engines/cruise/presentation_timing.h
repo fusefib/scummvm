@@ -42,6 +42,23 @@ private:
 	uint16 _counter;
 };
 
+// Approximate 80% presentation costs, in units of 5/32768 ms per pixel.
+enum {
+	kSpriteWorkUnits = 29
+};
+
+class PixelWorkload {
+public:
+	PixelWorkload() : _pixels(0), _active(false) {}
+	void begin(bool enabled);
+	void countBitmap(int width, int height);
+	uint32 finish(uint32 unitsPerPixel);
+
+private:
+	uint32 _pixels;
+	bool _active;
+};
+
 } // End of namespace Cruise
 
 #endif

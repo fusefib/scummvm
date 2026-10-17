@@ -20,6 +20,7 @@
  */
 
 #include "cruise/presentation_timing.h"
+#include "common/util.h"
 
 namespace Cruise {
 
@@ -58,6 +59,27 @@ uint32 PresentationClock::delayToPhase(uint32 now) {
 	_phase = (_phase + ((now - _phaseTime) % 1000) * 70) % 1000;
 	_phaseTime = now;
 	return (1000 - _phase + 69) / 70;
+}
+
+void PixelWorkload::begin(bool enabled) {
+	_active = enabled;
+	_pixels = 0;
+}
+
+void PixelWorkload::countBitmap(int width, int height) {
+	if (!_active || width <= 0 || height <= 0)
+		return;
+	// Installed dimensions are words; larger inputs saturate the estimate.
+	const uint32 pixels = width > 0xffff || height > 0xffff ? 0xffffffffU : (uint32)width * height;
+	_pixels += MIN(pixels, 0xffffffffU - _pixels);
+}
+
+uint32 PixelWorkload::finish(uint32 unitsPerPixel) {
+	uint32 units = 0;
+	if (unitsPerPixel)
+		units = MIN(_pixels, 0xffffffffU / unitsPerPixel) * unitsPerPixel;
+	begin(false);
+	return 5 * ((units >> 15) + ((units & 0x7fff) >= 0x4000));
 }
 
 } // End of namespace Cruise

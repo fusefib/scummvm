@@ -75,6 +75,7 @@ private:
 	Common::StringArray _langStrings;
 	CursorType _savedCursor;
 	PresentationClock _presentationClock;
+	PixelWorkload _drawingWorkload;
 	uint32 _presentationFrameStart;
 	uint32 _presentationPauseStart;
 	uint32 _presentationPausedMillis;
@@ -96,7 +97,7 @@ private:
 	int processInput();
 	bool publishFadePalette();
 	bool waitForPresentationDelay(uint32 start, uint32 duration);
-	bool waitForPresentationFrame();
+	bool waitForPresentationFrame(uint32 workMillis);
 	bool waitForPresentationTicks(uint16 ticks);
 protected:
 	// Engine APIs
@@ -119,6 +120,7 @@ public:
 	Common::Platform getPlatform() const;
 	PCSound &sound() { return *_sound; }
 	uint32 presentationMillis() const;
+	PixelWorkload &drawingWorkload() { return _drawingWorkload; }
 	bool manageEvents(bool deferInput = false);
 	void resetPublishedCaption();
 	void beginCaptionFrame();
