@@ -448,6 +448,12 @@ protected:
 private:
 	void setFullscreenMode(bool enable);
 	void handleScalerHotkeys(uint mode, int factor);
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	// Window coordinates, independent of the native render surface and DPI.
+	Common::Point _nativeWindowedSize;
+	bool _nativeWindowedMaximized;
+	void rememberNativeWindowSize();
+#endif
 
 	/**
 	 * Converts the given point from the overlay's coordinate space to the

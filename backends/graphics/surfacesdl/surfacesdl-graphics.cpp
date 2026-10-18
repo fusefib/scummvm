@@ -190,6 +190,9 @@ SurfaceSdlGraphicsManager::SurfaceSdlGraphicsManager(SdlEventSource *sdlEventSou
 #endif
 	_transactionMode(kTransactionNone),
 	_scalerPlugins(ScalerMan.getPlugins()), _scalerPlugin(nullptr), _scaler(nullptr),
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	_nativeWindowedMaximized(false),
+#endif
 	_needRestoreAfterOverlay(false), _isInOverlayPalette(false), _isDoubleBuf(false), _prevForceRedraw(false), _numPrevDirtyRects(0),
 	_prevCursorNeedsRedraw(false),
 	_mouseKeyColor(0), _disableMouseKeyColor(false) {
@@ -3141,6 +3144,7 @@ bool SurfaceSdlGraphicsManager::getRendererOutputSize(int &width, int &height) c
 void SurfaceSdlGraphicsManager::notifyResize(const int width, const int height) {
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 	if (_renderingAtOutputResolution) {
+		rememberNativeWindowSize();
 		int outputWidth = width;
 		int outputHeight = height;
 		getRendererOutputSize(outputWidth, outputHeight);
@@ -3187,6 +3191,19 @@ void SurfaceSdlGraphicsManager::recreateScreenTexture() {
 		_screenTexture = oldTexture;
 }
 
+void SurfaceSdlGraphicsManager::rememberNativeWindowSize() {
+	SDL_Window *window = _window ? _window->getSDLWindow() : nullptr;
+	if (!window || (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN))
+		return;
+
+	_nativeWindowedMaximized = (SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED) != 0;
+	if (!_nativeWindowedMaximized) {
+		int width, height;
+		SDL_GetWindowSize(window, &width, &height);
+		_nativeWindowedSize = Common::Point(width, height);
+	}
+}
+
 SDL_Surface *SurfaceSdlGraphicsManager::SDL_SetVideoMode(int width, int height, int bpp, Uint32 flags) {
 	deinitializeRenderer();
 
@@ -3199,7 +3216,23 @@ SDL_Surface *SurfaceSdlGraphicsManager::SDL_SetVideoMode(int width, int height, 
 #endif
 	}
 
-	if (!createOrUpdateWindow(width, height, createWindowFlags)) {
+	int windowWidth = width;
+	int windowHeight = height;
+	if (_renderingAtOutputResolution) {
+		rememberNativeWindowSize();
+		if (!(flags & SDL_FULLSCREEN)) {
+			windowWidth = _nativeWindowedSize.x;
+			windowHeight = _nativeWindowedSize.y;
+			if (_nativeWindowedMaximized)
+				createWindowFlags |= SDL_WINDOW_MAXIMIZED;
+		}
+	} else {
+		// Also supplies a windowed size when a game starts in fullscreen.
+		_nativeWindowedSize = Common::Point(width, height);
+		_nativeWindowedMaximized = false;
+	}
+
+	if (!createOrUpdateWindow(windowWidth, windowHeight, createWindowFlags)) {
 		return nullptr;
 	}
 
