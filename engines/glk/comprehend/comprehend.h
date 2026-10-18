@@ -49,6 +49,7 @@ private:
 	int _saveSlot; ///< Save slot when loading savegame from launcher
 	bool _graphicsEnabled;
 	bool _disableSaves;
+	Common::String _roomDescription;
 public:
 	GraphicsWindow *_topWindow;
 	TextGridWindow *_roomDescWindow;
@@ -78,6 +79,8 @@ private:
 	 * Creates the appropriate game class
 	 */
 	void createGame();
+	void drawRoomDescription(bool redraw);
+	void handleDisplayEvent(EvType type);
 
 public:
 	/**

@@ -139,6 +139,11 @@ void Comprehend::print_u32_internal(const Common::U32String *fmt, ...) {
 }
 
 void Comprehend::printRoomDesc(const Common::String &desc) {
+	_roomDescription = desc;
+	drawRoomDescription(false);
+}
+
+void Comprehend::drawRoomDescription(bool redraw) {
 	if (_roomDescWindow) {
 		glk_window_clear(_roomDescWindow);
 
@@ -148,19 +153,34 @@ void Comprehend::printRoomDesc(const Common::String &desc) {
 		if (width <= 2)
 			return;
 
-		Common::String str = desc;
+		Common::String str = _roomDescription;
 		str.wordWrap(width - 2);
 		str += '\n';
 
 		// Display the room description
+		int row = 0;
 		while (!str.empty()) {
 			size_t idx = str.findFirstOf('\n');
 			Common::String line = Common::String::format(" %s", Common::String(str.c_str(), str.c_str() + idx + 1).c_str());
-			glk_put_string_stream(glk_window_get_stream(_roomDescWindow), line.c_str());
+			if (!redraw) {
+				glk_put_string_stream(glk_window_get_stream(_roomDescWindow), line.c_str());
+			} else if (row < _roomDescWindow->_height) {
+				// Repaint cells without repeating stream output or speech.
+				for (uint col = 0; col + 1 < line.size() && col < width; ++col) {
+					_roomDescWindow->_lines[row]._chars[col] = (byte)line[col];
+					_roomDescWindow->_lines[row]._attrs[col] = _roomDescWindow->_attr;
+				}
+			}
 
+			++row;
 			str = Common::String(str.c_str() + idx + 1);
 		}
 	}
+}
+
+void Comprehend::handleDisplayEvent(EvType type) {
+	if (type == evtype_Arrange)
+		drawRoomDescription(true);
 }
 
 void Comprehend::readLine(char *buffer, size_t maxLen) {
@@ -175,6 +195,7 @@ void Comprehend::readLine(char *buffer, size_t maxLen) {
 			return;
 		} else if (ev.type == evtype_LineInput)
 			break;
+		handleDisplayEvent(ev.type);
 	}
 
 	buffer[ev.val1] = 0;
@@ -193,6 +214,7 @@ int Comprehend::readChar() {
 			glk_cancel_char_event(_bottomWindow);
 			return -1;
 		}
+		handleDisplayEvent(ev.type);
 	}
 
 	setDisableSaves(false);
