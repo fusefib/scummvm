@@ -91,7 +91,7 @@ public:
 	 * Returns the running interpreter type
 	 */
 	InterpreterType getInterpreterType() const override {
-		return INTERPRETER_SCOTT;
+		return INTERPRETER_COMPREHEND;
 	}
 
 	/**
