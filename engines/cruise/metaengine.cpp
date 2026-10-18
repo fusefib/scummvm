@@ -21,9 +21,14 @@
 
 #include "base/plugins.h"
 #include "common/config-manager.h"
+#include "common/gui_options.h"
 #include "common/savefile.h"
 #include "common/system.h"
 #include "engines/advancedDetector.h"
+#include "engines/dialogs.h"
+#include "gui/ThemeEval.h"
+#include "gui/widget.h"
+#include "gui/widgets/popup.h"
 
 #include "common/translation.h"
 #include "backends/keymapper/action.h"
@@ -52,32 +57,52 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 	},
 
 #endif
-	{
-		GAMEOPTION_ATARI_MUSIC,
-		{
-			_s("Use Atari ST music"),
-			_s("Play Atari ST music with DOS sound effects. The selected audio device controls effects. Requires restarting the game."),
-			"atari_music",
-			false,
-			0,
-			0
-		}
-	},
-
-	{
-		GAMEOPTION_AMIGA_MUSIC,
-		{
-			_s("Use Amiga music"),
-			_s("Use original Amiga D volumes directly in this game's Extra Path, taking priority over Atari ST music. DOS effects keep the selected audio device. Requires restarting the game."),
-			"amiga_music",
-			false,
-			0,
-			0
-		}
-	},
-
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
+
+class OptionsWidget : public GUI::ExtraGuiOptionsWidget {
+public:
+	OptionsWidget(GUI::GuiObject *boss, const Common::String &name, const Common::String &domain, const ExtraGuiOptions &options);
+	void load() override;
+	bool save() override;
+
+private:
+	void defineLayout(GUI::ThemeEval &layouts, const Common::String &layoutName, const Common::String &overlayedLayout) const override;
+	GUI::PopUpWidget *_music;
+};
+
+OptionsWidget::OptionsWidget(GUI::GuiObject *boss, const Common::String &name, const Common::String &domain, const ExtraGuiOptions &options) :
+		ExtraGuiOptionsWidget(boss, name, domain, options) {
+	new GUI::StaticTextWidget(widgetsBoss(), _dialogLayout + ".MusicLabel", _("Replace DOS music with:"));
+	_music = new GUI::PopUpWidget(widgetsBoss(), _dialogLayout + ".Music",
+		_("DOS sound effects keep the selected audio device. Amiga music requires original Amiga D volumes directly in this game's Extra Path."));
+	_music->appendEntry(_("No replacement"), kNoReplacement);
+	_music->appendEntry(_("Atari ST"), kAtariMusic);
+	_music->appendEntry(_("Amiga (requires game in Extra Path)"), kAmigaMusic);
+}
+
+void OptionsWidget::defineLayout(GUI::ThemeEval &layouts, const Common::String &layoutName, const Common::String &overlayedLayout) const {
+	ExtraGuiOptionsWidget::defineLayout(layouts, layoutName + "Checkboxes", overlayedLayout);
+	layouts.addDialog(layoutName, overlayedLayout)
+		.addLayout(GUI::ThemeLayout::kLayoutVertical).addPadding(0, 0, 0, 0)
+		.addImportedLayout("Dialog." + layoutName + "Checkboxes")
+		.addWidget("MusicLabel", "", -1, layouts.getVar("Globals.Line.Height"))
+		.addWidget("Music", "PopUp")
+		.closeLayout().closeDialog();
+}
+
+void OptionsWidget::load() {
+	ExtraGuiOptionsWidget::load();
+
+	_music->setSelectedTag(getMusicReplacement(_domain));
+}
+
+bool OptionsWidget::save() {
+	ExtraGuiOptionsWidget::save();
+	const uint32 music = _music->getSelectedTag();
+	ConfMan.set("music_replacement", music == kAtariMusic ? "atari" : music == kAmigaMusic ? "amiga" : "dos", _domain);
+	return true;
+}
 
 const char *CruiseEngine::getGameId() const {
 	return _gameDescription->desc.gameId;
@@ -108,6 +133,14 @@ public:
 
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
 		return Cruise::optionsList;
+	}
+
+	GUI::OptionsContainerWidget *buildEngineOptionsWidget(GUI::GuiObject *boss, const Common::String &name, const Common::String &target) const override {
+		const Common::Platform platform = Common::parsePlatform(ConfMan.get("platform", target));
+		if (platform == Common::kPlatformDOS ||
+				(platform == Common::kPlatformUnknown && Common::parseGameGUIOptions(ConfMan.get("guioptions", target)).contains(GUIO_PLATFORM(kPlatformDOS))))
+			return new Cruise::OptionsWidget(boss, name, target, getExtraGuiOptions(target));
+		return MetaEngine::buildEngineOptionsWidget(boss, name, target);
 	}
 
 	bool hasFeature(MetaEngineFeature f) const override;

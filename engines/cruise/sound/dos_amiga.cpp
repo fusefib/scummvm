@@ -22,7 +22,6 @@
 #include "audio/mixer.h"
 #include "common/algorithm.h"
 #include "common/config-manager.h"
-#include "common/debug.h"
 #include "common/str.h"
 #include "common/textconsole.h"
 
@@ -89,8 +88,6 @@ DosAmigaSound::DosAmigaSound(Audio::Mixer *mixer, CruiseEngine *vm,
 	_mixer->playStream(Audio::Mixer::kPlainSoundType, &_handle, _music, -1,
 			Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
 	syncSounds();
-	debugC(1, kCruiseDebugSound, "Using Amiga Paula music with DOS %s effects",
-			soundEffectExtension());
 }
 
 DosAmigaSound::~DosAmigaSound() {

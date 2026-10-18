@@ -24,7 +24,6 @@
 #include "common/config-manager.h"
 #include "common/textconsole.h"
 
-#include "cruise/cruise.h"
 #include "cruise/sound.h"
 #include "cruise/sound/atari_players.h"
 
@@ -80,10 +79,8 @@ Sound *createAtariSound(Audio::Mixer *mixer, CruiseEngine *vm) {
 		}
 	}
 
-	if (sink)
-		debugC(1, kCruiseDebugSound, "Using original Atari Cruise MT-32/H32 backend");
-	else
-		debugC(1, kCruiseDebugSound, "Using original Atari Cruise YM2149 backend");
+	warning("Cruise: using Atari ST %s music and Atari ST YM2149 effects",
+		sink ? "MT-32" : "YM2149");
 	return createAtariSound(mixer, vm, sink);
 }
 
