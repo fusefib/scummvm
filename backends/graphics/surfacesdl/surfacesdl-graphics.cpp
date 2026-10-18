@@ -1057,6 +1057,11 @@ void SurfaceSdlGraphicsManager::setupHardwareSize() {
 		_videoMode.overlayHeight = real2Aspect(_videoMode.overlayHeight);
 		_videoMode.hardwareHeight = real2Aspect(_videoMode.hardwareHeight);
 	}
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	if (!_renderingAtOutputResolution)
+		_nativeResizeStep = Common::Point(_videoMode.screenWidth,
+			_videoMode.aspectRatioCorrection ? real2Aspect(_videoMode.screenHeight) : _videoMode.screenHeight);
+#endif
 }
 
 void SurfaceSdlGraphicsManager::initGraphicsSurface() {
@@ -3092,10 +3097,22 @@ bool SurfaceSdlGraphicsManager::notifyEvent(const Common::Event &event) {
 #endif
 
 	case kActionIncreaseScaleFactor:
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+		if (_renderingAtOutputResolution) {
+			resizeNativeWindow(1);
+			return true;
+		}
+#endif
 		handleScalerHotkeys(_videoMode.scalerIndex, _scaler->increaseFactor());
 		return true;
 
 	case kActionDecreaseScaleFactor:
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+		if (_renderingAtOutputResolution) {
+			resizeNativeWindow(-1);
+			return true;
+		}
+#endif
 		handleScalerHotkeys(_videoMode.scalerIndex, _scaler->decreaseFactor());
 		return true;
 
@@ -3130,6 +3147,39 @@ void SurfaceSdlGraphicsManager::notifyVideoExpose() {
 }
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
+void SurfaceSdlGraphicsManager::resizeNativeWindow(int direction) {
+	SDL_Window *window = _window ? _window->getSDLWindow() : nullptr;
+	if (!window || (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN))
+		return;
+
+	// Use the original canvas and the current client size, not a render
+	// surface that follows the window or a scale counter stale after dragging.
+	int width, height;
+	SDL_GetWindowSize(window, &width, &height);
+	int scale;
+	if (direction > 0)
+		scale = MAX(width / _nativeResizeStep.x, height / _nativeResizeStep.y);
+	else
+		scale = 1 + MIN((width - 1) / _nativeResizeStep.x, (height - 1) / _nativeResizeStep.y);
+	scale = MAX(scale + direction, 1);
+
+	if (SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED) {
+		SDL_RestoreWindow(window);
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+		SDL_SyncWindow(window);
+#endif
+	}
+	if (!_window->createOrUpdateWindow(_nativeResizeStep.x * scale, _nativeResizeStep.y * scale,
+			_window->getWindowFlags() & ~SDL_WINDOW_MAXIMIZED)) {
+		warning("SDL native window resize failed: %s", SDL_GetError());
+		return;
+	}
+#ifdef USE_OSD
+	getWindowSizeFromSdl(&width, &height);
+	displayMessageOnOSD(Common::U32String::format(_("Resolution: %dx%d"), width, height));
+#endif
+}
+
 bool SurfaceSdlGraphicsManager::getRendererOutputSize(int &width, int &height) const {
 	if (!_renderer)
 		return false;

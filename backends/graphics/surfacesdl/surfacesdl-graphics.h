@@ -451,8 +451,10 @@ private:
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 	// Window coordinates, independent of the native render surface and DPI.
 	Common::Point _nativeWindowedSize;
+	Common::Point _nativeResizeStep;
 	bool _nativeWindowedMaximized;
 	void rememberNativeWindowSize();
+	void resizeNativeWindow(int direction);
 #endif
 
 	/**
