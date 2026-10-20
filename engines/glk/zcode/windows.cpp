@@ -134,10 +134,11 @@ void Window::updateMeasurements() {
 	int cellW = (g_vm->h_version < V5) ? g_vm->h_font_width : 1;
 	int cellH = (g_vm->h_version < V5) ? g_vm->h_font_height : 1;
 
-	_properties[X_POS] = _win->_bbox.left / cellW + 1;
-	_properties[Y_POS] = _win->_bbox.top / cellH + 1;
-	_properties[X_SIZE] = _win->_bbox.width() / cellW;
-	_properties[Y_SIZE] = _win->_bbox.height() / cellH;
+	const Rect bounds = getBounds();
+	_properties[X_POS] = bounds.left / cellW + 1;
+	_properties[Y_POS] = bounds.top / cellH + 1;
+	_properties[X_SIZE] = bounds.width() / cellW;
+	_properties[Y_SIZE] = bounds.height() / cellH;
 
 	TextBufferWindow *win = dynamic_cast<TextBufferWindow *>(_win);
 	_properties[LEFT_MARGIN] = (win ? win->_ladjw : 0) / cellW;
@@ -400,8 +401,15 @@ void Window::updateStyle() {
 }
 
 Rect Window::getBounds() const {
-	if (_win)
-		return _win->_bbox;
+	if (_win) {
+		Rect bounds = _win->_bbox;
+		if (g_vm->h_version == V6) {
+			const TextBufferWindow *buffer = dynamic_cast<const TextBufferWindow *>(_win);
+			if (buffer)
+				bounds.top -= buffer->_yAdj;
+		}
+		return bounds;
+	}
 
 	if (g_vm->h_version < V5)
 		return Rect((_properties[X_POS] - 1) * g_vm->h_font_width, (_properties[Y_POS] - 1) * g_vm->h_font_height,
