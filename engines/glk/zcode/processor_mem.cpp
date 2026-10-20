@@ -117,17 +117,22 @@ int Processor::restore_undo(void) {
 	return 2;
 }
 
-/**
- * TOR: glkify -- this is for V6 only
- */
-static zword get_max_width(zword win) { return 80; }
-
 void Processor::memory_open(zword table, zword xsize, bool buffering) {
 	if (_redirect.size() < MAX_NESTING) {
-		if (!buffering)
+		if (!buffering) {
 			xsize = 0xffff;
-		if (buffering && (short)xsize <= 0)
-			xsize = get_max_width((zword)(-(short)xsize));
+		} else if ((int16)xsize < 0) {
+			xsize = -(int16)xsize;
+		} else {
+			if (xsize >= _wp.size()) {
+				runtimeError(ERR_ILL_WIN);
+				return;
+			}
+			Window &window = _wp[xsize];
+			const int width = window[X_SIZE];
+			const int margins = window[LEFT_MARGIN] + window[RIGHT_MARGIN];
+			xsize = MAX(0, width - margins);
+		}
 
 		storew(table, 0);
 
