@@ -513,6 +513,8 @@ int GlkInterface::os_peek_color() {
 }
 
 zchar GlkInterface::os_read_key(int timeout, bool show_cursor) {
+	if (h_version == V6)
+		_wp.currWin().ensureTextWindow();
 	Window &win = _wp.currWin() ? _wp.currWin() : _wp._lower;
 	uint key;
 
@@ -570,6 +572,8 @@ zchar GlkInterface::os_read_key(int timeout, bool show_cursor) {
 
 zchar GlkInterface::os_read_line(int max, zchar *buf, int timeout, int width, int continued) {
 	event_t ev;
+	if (h_version == V6)
+		_wp.currWin().ensureTextWindow();
 	winid_t win = _wp.currWin() ? _wp.currWin() : _wp._lower;
 
 	if (!continued && gos_linepending)

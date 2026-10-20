@@ -270,13 +270,23 @@ void Window::setCursor() {
 }
 
 void Window::clear() {
-	if (_win)
-		g_vm->glk_window_clear(_win);
+	if (g_vm->h_version == V6 && _properties[TRUE_BG_COLOR] == zcolor_Transparent)
+		return;
 
-	if (_windows->_background) {
-		Rect r = getBounds();
-		_windows->_background->fillRect(g_conf->_windowColor, r);
+	const Rect bounds = getBounds();
+	if (_win) {
+		g_vm->glk_window_clear(_win);
+		if (g_vm->h_version == V6 && _win->_type == wintype_TextGrid &&
+				!_win->_lineRequest && !_win->_lineRequestUni && !_win->_charRequest && !_win->_charRequestUni) {
+			// A cleared V6 drawing region must not keep covering other windows.
+			update();
+			g_vm->glk_window_close(_win);
+			_win = nullptr;
+		}
 	}
+
+	if (_windows->_background)
+		_windows->_background->fillRect(g_conf->_windowColor, bounds);
 }
 
 void Window::updateColors() {
