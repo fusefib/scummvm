@@ -845,11 +845,11 @@ turn:
 		g_comprehend->print("\n");
 
 	beforePrompt();
+	g_comprehend->print("> ");
 
 	for (;;) {
 		_redoLine = REDO_NONE;
-		g_comprehend->print("> ");
-		g_comprehend->readLine(_inputLine, INPUT_LINE_SIZE);
+		g_comprehend->readLine(_inputLine, INPUT_LINE_SIZE, false);
 		if (g_comprehend->shouldQuit())
 			return;
 
@@ -872,6 +872,7 @@ turn:
 			break;
 		else if (_redoLine == REDO_TURN)
 			goto turn;
+		g_comprehend->print("> ");
 	}
 
 	for (;;) {

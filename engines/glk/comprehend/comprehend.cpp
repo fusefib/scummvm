@@ -186,21 +186,24 @@ void Comprehend::handleDisplayEvent(EvType type) {
 		redrawPicture();
 }
 
-void Comprehend::readLine(char *buffer, size_t maxLen) {
+void Comprehend::readLine(char *buffer, size_t maxLen, bool echoEmptyLine) {
 	event_t ev;
 
+	_bottomWindow->setEchoEmptyLine(echoEmptyLine);
 	glk_request_line_event(_bottomWindow, buffer, maxLen - 1, 0);
 
 	for (;;) {
 		glk_select(&ev);
 		if (ev.type == evtype_Quit) {
 			glk_cancel_line_event(_bottomWindow, &ev);
+			_bottomWindow->setEchoEmptyLine(true);
 			return;
 		} else if (ev.type == evtype_LineInput)
 			break;
 		handleDisplayEvent(ev.type);
 	}
 
+	_bottomWindow->setEchoEmptyLine(true);
 	buffer[ev.val1] = 0;
 	debug(1, "\n> %s", buffer);
 }

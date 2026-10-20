@@ -56,6 +56,7 @@ class TextBufferWindow : public TextWindow, Speech {
 private:
 	PropFontInfo &_font;
 	bool _needsReflow;
+	bool _echoEmptyLine;
 private:
 	void touchScroll();
 	bool putPicture(Picture *pic, uint align, uint linkval);
@@ -249,6 +250,9 @@ public:
 	void requestCharEvent() override;
 
 	void requestCharEventUni() override;
+
+	// Internal command prompts may consume empty input without echoing it.
+	void setEchoEmptyLine(bool enabled);
 
 	void setEchoLineEvent(uint val) override {
 		_echoLineInputBase = val != 0;

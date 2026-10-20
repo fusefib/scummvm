@@ -144,7 +144,7 @@ public:
 	/**
 	 * Read an input line
 	 */
-	void readLine(char *buffer, size_t maxLen);
+	void readLine(char *buffer, size_t maxLen, bool echoEmptyLine = true);
 
 	/**
 	 * Read in a character

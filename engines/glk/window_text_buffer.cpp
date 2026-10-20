@@ -36,7 +36,7 @@ namespace Glk {
 
 
 TextBufferWindow::TextBufferWindow(Windows *windows, uint rock) : TextWindow(windows, rock),
-		_font(g_conf->_propInfo), _needsReflow(true), _historyPos(0), _historyFirst(0), _historyPresent(0),
+		_font(g_conf->_propInfo), _needsReflow(true), _echoEmptyLine(true), _historyPos(0), _historyFirst(0), _historyPresent(0),
 		_lastSeen(0), _scrollPos(0), _scrollMax(0), _scrollBack(SCROLLBACK), _width(-1), _height(-1),
 		_inBuf(nullptr), _inMax(0), _inFence(0), _inCurs(0),
 		_lineTerminators(nullptr), _echoLineInput(true), _ladjw(0), _radjw(0),
@@ -587,6 +587,10 @@ void TextBufferWindow::requestCharEventUni() {
 	_windows->inputGuessFocus();
 }
 
+void TextBufferWindow::setEchoEmptyLine(bool enabled) {
+	_echoEmptyLine = enabled;
+}
+
 void TextBufferWindow::cancelLineEvent(Event *ev) {
 	gidispatch_rock_t inarrayrock;
 	int ix;
@@ -612,7 +616,8 @@ void TextBufferWindow::cancelLineEvent(Event *ev) {
 	inarrayrock = _inArrayRock;
 
 	len = _numChars - _inFence;
-	if (_echoStream)
+	const bool echo = len || _echoEmptyLine;
+	if (_echoStream && echo)
 		_echoStream->echoLineUni(_chars + _inFence, len);
 
 	if (len > inmax)
@@ -647,7 +652,7 @@ void TextBufferWindow::cancelLineEvent(Event *ev) {
 	_inBuf = nullptr;
 	_inMax = 0;
 
-	if (_echoLineInput) {
+	if (_echoLineInput && echo) {
 		putCharUni('\n');
 	} else {
 		_numChars = _inFence;
@@ -1275,11 +1280,13 @@ void TextBufferWindow::acceptLine(uint32 keycode) {
 	inarrayrock = _inArrayRock;
 
 	len = _numChars - _inFence;
-	if (_echoStream)
+	const bool echo = len || _echoEmptyLine;
+	if (_echoStream && echo)
 		_echoStream->echoLineUni(_chars + _inFence, len);
 
-	gli_tts_purge();
-	if (g_conf->_speakInput) {
+	if (echo)
+		gli_tts_purge();
+	if (g_conf->_speakInput && echo) {
 		const uint32 NEWLINE = '\n';
 		gli_tts_speak(_chars + _inFence, len);
 		gli_tts_speak((const uint32 *)&NEWLINE, 1);
@@ -1353,7 +1360,7 @@ void TextBufferWindow::acceptLine(uint32 keycode) {
 	_inBuf = nullptr;
 	_inMax = 0;
 
-	if (_echoLineInput) {
+	if (_echoLineInput && echo) {
 		putCharUni('\n');
 	} else {
 		_numChars = _inFence;
