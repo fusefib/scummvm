@@ -298,16 +298,22 @@ void Processor::z_print_table() {
 }
 
 void Processor::z_set_true_colour() {
-	int zfore = zargs[0];
-	int zback = zargs[1];
-
-	if (!(zfore < 0))
-		zfore = zRGB(zargs[0]);
-
-	if (!(zback < 0))
-		zback = zRGB(zargs[1]);
-
-	_wp.setColors(_wp._cwin, zfore, zback);
+	flush_buffer();
+	uint colors[2];
+	for (int i = 0; i < 2; ++i) {
+		const int color = (int16)zargs[i];
+		if (color >= 0)
+			colors[i] = zRGB(color);
+		else if (color == -1)
+			colors[i] = zcolor_Default;
+		else if (color == -3 && h_version == V6)
+			colors[i] = os_peek_color();
+		else if (color == -4 && h_version == V6 && i == 1)
+			colors[i] = zcolor_Transparent;
+		else
+			colors[i] = zcolor_Current;
+	}
+	_wp.setColors(h_version == V6 ? winarg2() : _wp._cwin, colors[0], colors[1]);
 }
 
 void Processor::z_set_colour() {
