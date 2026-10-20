@@ -82,6 +82,7 @@ void Comprehend::initialize() {
 
 	showGraphics();
 	_topWindow->fillRect(0, Rect(0, 0, _topWindow->_w, _topWindow->_h));
+	_pictureSurface.clear(0);
 
 	// Initialize drawing surface, and the archive that abstracts
 	// the room and item graphics as as individual files
@@ -181,6 +182,8 @@ void Comprehend::drawRoomDescription(bool redraw) {
 void Comprehend::handleDisplayEvent(EvType type) {
 	if (type == evtype_Arrange)
 		drawRoomDescription(true);
+	else if (type == evtype_Redraw)
+		redrawPicture();
 }
 
 void Comprehend::readLine(char *buffer, size_t maxLen) {
@@ -254,15 +257,37 @@ bool Comprehend::loadLauncherSavegameIfNeeded() {
 }
 
 void Comprehend::drawPicture(uint pictureNum) {
-	if (_topWindow) {
+	if (_topWindow && _conf->_graphics) {
 		// Clear the picture cache before each drawing in OO-Topos. Wearing the goggles
 		// can producing different versions of the same scene, so we can't cache it
 		if (_gameDescription._gameId == "ootopos")
 			_pictures->clear();
 
-		glk_image_draw_scaled(_topWindow, pictureNum,
-			20 * SCALE_FACTOR, 0, G_RENDER_WIDTH * SCALE_FACTOR, G_RENDER_HEIGHT * SCALE_FACTOR);
+		Picture *picture = _pictures->load(Common::String::format("%u", pictureNum));
+		if (!picture)
+			return;
+		if (!_topWindow->_imageLoaded) {
+			_pictures->increment();
+			_topWindow->_imageLoaded = true;
+		}
+		if (picture->w != _pictureSurface.w || picture->h != _pictureSurface.h)
+			picture = _pictures->scale(picture, _pictureSurface.w, _pictureSurface.h);
+		if (!picture)
+			return;
+
+		// Keep the complete composition, including pixels outside the window.
+		_pictureSurface.transBlitFrom(*picture, Point(0, 0), picture->getTransparentColor());
+		redrawPicture();
 	}
+}
+
+void Comprehend::redrawPicture() {
+	if (!_topWindow || !_topWindow->_surface)
+		return;
+
+	_topWindow->_surface->blitFrom(_pictureSurface, Point(20 * SCALE_FACTOR, 0));
+	_topWindow->_dirty = true;
+	_windows->repaint(_topWindow->_bbox);
 }
 
 void Comprehend::drawLocationPicture(int pictureNum, bool clearBg) {
@@ -282,6 +307,7 @@ bool Comprehend::toggleGraphics() {
 		// Remove the picture window
 		glk_window_close(_topWindow);
 		_topWindow = nullptr;
+		_pictureSurface.free();
 		_graphicsEnabled = false;
 
 		// Add the room description window
@@ -304,6 +330,9 @@ void Comprehend::showGraphics() {
 		_topWindow = (GraphicsWindow *)glk_window_open(_bottomWindow,
 			winmethod_Above | winmethod_Fixed,
 			160 * SCALE_FACTOR, wintype_Graphics, 2);
+		_pictureSurface.create(G_RENDER_WIDTH * SCALE_FACTOR, G_RENDER_HEIGHT * SCALE_FACTOR,
+			_conf->_screenFormat);
+		_pictureSurface.clear(_topWindow->_bgnd);
 		_graphicsEnabled = true;
 	}
 }

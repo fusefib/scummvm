@@ -21,6 +21,7 @@
 
 #include "glk/comprehend/game.h"
 #include "common/debug-channels.h"
+#include "common/system.h"
 #include "common/translation.h"
 #include "glk/comprehend/comprehend.h"
 #include "glk/comprehend/debugger.h"
@@ -855,12 +856,13 @@ turn:
 		_inputLineIndex = 0;
 		if (strlen(_inputLine) == 0) {
 			// Empty line, so toggle picture window visibility
-			if (!g_comprehend->toggleGraphics())
+			const bool picturesShown = g_comprehend->toggleGraphics();
+			if (!picturesShown)
 				updateRoomDesc();
-			g_comprehend->print(_("Picture window toggled\n"));
 
 			_updateFlags |= UPDATE_GRAPHICS;
 			update_graphics();
+			g_system->displayMessageOnOSD(picturesShown ? _("Pictures shown") : _("Pictures hidden"));
 			continue;
 		}
 

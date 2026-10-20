@@ -50,6 +50,7 @@ private:
 	bool _graphicsEnabled;
 	bool _disableSaves;
 	Common::String _roomDescription;
+	Graphics::ManagedSurface _pictureSurface;
 public:
 	GraphicsWindow *_topWindow;
 	TextGridWindow *_roomDescWindow;
@@ -80,6 +81,7 @@ private:
 	 */
 	void createGame();
 	void drawRoomDescription(bool redraw);
+	void redrawPicture();
 	void handleDisplayEvent(EvType type);
 
 public:
