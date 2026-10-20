@@ -1167,11 +1167,11 @@ bool GlkOptionsWidget::save() {
 
 	// Resolve saved preferences, including temporary runtime layers, separately
 	// from the installed configuration and its game-owned styles.
-	Conf before(engine->getInterpreterType(), false, engine->_conf->_screenFormat);
+	Conf before = engine->_conf->defaults();
 	before.load(GlkPreferences(ConfMan.getDomain(_domain), true));
 	if (!_settings->apply())
 		return false;
-	Conf after(engine->getInterpreterType(), false, engine->_conf->_screenFormat);
+	Conf after = engine->_conf->defaults();
 	after.load(GlkPreferences(ConfMan.getDomain(_domain), true));
 	const AppearanceResult result = engine->applyAppearance(_domain, before, after);
 	switch (result.metrics) {

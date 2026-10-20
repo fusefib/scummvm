@@ -70,6 +70,8 @@ Screen *ZCode::createScreen() {
 void ZCode::appearanceChanged(const Conf &before, const Conf &after, bool metrics) {
 	if (h_version == V6)
 		return;
+	_defaultForeground = after._tStyles[style_Normal].fg;
+	_defaultBackground = after._tStyles[style_Normal].bg;
 	if (metrics) {
 		h_font_width = _conf->_monoInfo._cellW;
 		h_font_height = _conf->_monoInfo._cellH;
