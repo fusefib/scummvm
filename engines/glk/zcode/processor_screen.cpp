@@ -307,7 +307,7 @@ void Processor::z_set_true_colour() {
 	if (!(zback < 0))
 		zback = zRGB(zargs[1]);
 
-	_wp[_wp._cwin].updateColors(zfore, zback);
+	_wp.setColors(_wp._cwin, zfore, zback);
 }
 
 void Processor::z_set_colour() {
@@ -358,11 +358,7 @@ void Processor::z_set_colour() {
 		}
 	}
 
-	_wp[win][TRUE_FG_COLOR] = fg;
-	_wp[win][TRUE_BG_COLOR] = bg;
-
-	if (win == _wp._cwin || h_version != V6)
-		_wp.currWin().updateColors(fg, bg);
+	_wp.setColors(win, fg, bg);
 }
 
 void Processor::z_set_font() {

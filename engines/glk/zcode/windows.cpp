@@ -85,6 +85,15 @@ void Windows::setWindow(int win) {
 		g_vm->glk_set_window(_windows[_cwin]._win);
 }
 
+void Windows::setColors(uint win, uint fore, uint back) {
+	if (g_vm->h_version == V6) {
+		_windows[win].updateColors(fore, back);
+	} else {
+		_lower.updateColors(fore, back);
+		_upper.updateColors(fore, back);
+	}
+}
+
 void Windows::showTextWindows() {
 	// For v6, drawing graphics brings them to the front (such for title screens). So check for it
 	const PairWindow *pairWin = dynamic_cast<const PairWindow *>(g_vm->glk_window_get_root());

@@ -270,6 +270,9 @@ public:
 	 * Set current window
 	 */
 	void setWindow(int win);
+
+	/** Set global colors before V6, or the specified window's colors in V6. */
+	void setColors(uint win, uint fore, uint back);
 	void updateAppearance(const Conf &before, const Conf &after, bool metrics);
 
 	/**
