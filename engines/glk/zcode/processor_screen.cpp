@@ -128,7 +128,7 @@ void Processor::screen_char(zchar c) {
 		fixforced = false;
 	}
 
-	if (_wp._upper && _wp.currWin() == _wp._upper) {
+	if (h_version != V6 && _wp._upper && w == _wp._upper) {
 		if (c == '\n' || c == ZC_RETURN) {
 			glk_put_char('\n');
 			_wp._upper.setCursor(Point(1, _wp._upper[Y_CURSOR] + 1));
@@ -161,7 +161,7 @@ void Processor::screen_char(zchar c) {
 				curx++;
 			}
 		}
-	} else if (w == _wp._lower) {
+	} else if (h_version == V6 || w == _wp._lower) {
 		if (c == ZC_RETURN)
 			glk_put_char('\n');
 		else {
