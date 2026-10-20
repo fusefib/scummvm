@@ -30,6 +30,7 @@
 #include "glk/comprehend/game_tr1.h"
 #include "glk/comprehend/game_tr2.h"
 #include "glk/comprehend/pics.h"
+#include "glk/presentation.h"
 #include "glk/quetzal.h"
 #include "common/config-manager.h"
 #include "common/ustr.h"
@@ -288,7 +289,11 @@ void Comprehend::redrawPicture() {
 	if (!_topWindow || !_topWindow->_surface)
 		return;
 
-	_topWindow->_surface->blitFrom(_pictureSurface, Point(20 * SCALE_FACTOR, 0));
+	int x = 20 * SCALE_FACTOR;
+	if (_conf->_presentationMode == kPresentationReflow || _conf->_presentationMode == kPresentationAdaptiveReflow)
+		x = MAX(0, (_topWindow->_surface->w - _pictureSurface.w) / 2);
+	_topWindow->_surface->clear(_topWindow->_bgnd);
+	_topWindow->_surface->blitFrom(_pictureSurface, Point(x, 0));
 	_topWindow->_dirty = true;
 	_windows->repaint(_topWindow->_bbox);
 }
