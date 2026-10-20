@@ -112,9 +112,6 @@ void GlkInterface::initialize() {
 			h_default_foreground = BLACK_COLOUR;
 			h_default_background = WHITE_COLOUR;
 		}
-
-		zcolors[h_default_foreground] = _defaultForeground;
-		zcolors[h_default_background] = _defaultBackground;
 	} else {
 		if (h_flags & COLOUR_FLAG)
 			h_flags &= ~COLOUR_FLAG;
