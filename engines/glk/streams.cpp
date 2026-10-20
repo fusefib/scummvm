@@ -138,8 +138,8 @@ void WindowStream::putBuffer(const char *buf, size_t len) {
 		}
 	}
 
-	for (size_t lx = 0; lx < len; lx++, buf++)
-		_window->putCharUni(*buf);
+	for (size_t lx = 0; lx < len; lx++)
+		_window->putCharUni(buf[lx]);
 	if (_window->_echoStream)
 		_window->_echoStream->putBuffer(buf, len);
 }
@@ -158,8 +158,8 @@ void WindowStream::putBufferUni(const uint32 *buf, size_t len) {
 		}
 	}
 
-	for (size_t lx = 0; lx < len; lx++, buf++)
-		_window->putCharUni(*buf);
+	for (size_t lx = 0; lx < len; lx++)
+		_window->putCharUni(buf[lx]);
 	if (_window->_echoStream)
 		_window->_echoStream->putBufferUni(buf, len);
 }
