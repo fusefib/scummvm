@@ -20,6 +20,7 @@
  */
 
 #include "glk/screen.h"
+#include "glk/accurate_managed_surface.h"
 #include "glk/conf.h"
 #include "common/compression/unzip.h"
 #include "graphics/fonts/ttf.h"
@@ -173,7 +174,8 @@ void Screen::vLine(int x, int y, int y2, uint color) {
 
 void Screen::drawImage(const Graphics::ManagedSurface &image, const Point &position) {
 	const Common::Rect destination(position.x, position.y, position.x + image.w, position.y + image.h);
-	Graphics::Screen::blitFrom(image, image.getBounds(), _presentation.toRender(destination));
+	AccurateManagedSurface target(*this, getBounds());
+	target.accurateBlitFrom(image, image.getBounds(), _presentation.toRender(destination));
 }
 
 void Screen::drawPicture(const Graphics::ManagedSurface &image, const Point &position,
@@ -188,12 +190,12 @@ void Screen::drawPicture(const Graphics::ManagedSurface &image, const Point &pos
 	bounds.clip(getBounds());
 	if (bounds.isEmpty())
 		return;
-	Graphics::ManagedSurface destination(*this, bounds);
+	AccurateManagedSurface destination(*this, bounds);
 	// Clip in logical coordinates before scaling beyond Rect's signed range.
 	Common::Rect area = _presentation.toRender(Common::Rect(position.x + left, position.y + top,
 		position.x + right, position.y + bottom));
 	area.translate(-bounds.left, -bounds.top);
-	destination.transBlitFrom(image, Common::Rect(left, top, right, bottom), area, transparent);
+	destination.accurateTransBlitFrom(image, Common::Rect(left, top, right, bottom), area, transparent);
 }
 
 void Screen::measureFont(FontInfo &info, const Graphics::Font &font,

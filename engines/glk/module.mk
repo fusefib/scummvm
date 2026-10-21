@@ -1,6 +1,7 @@
 MODULE := engines/glk
 
 MODULE_OBJS := \
+	accurate_managed_surface.o \
 	presentation.o \
 	appearance.o \
 	blorb.o \

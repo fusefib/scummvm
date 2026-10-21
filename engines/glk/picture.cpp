@@ -226,7 +226,7 @@ Picture *Pictures::scale(Picture *src, size_t sx, size_t sy) {
 	dst = new Picture(sx, sy, src->format);
 	dst->_name = src->_name;
 	dst->_scaled = true;
-	dst->transBlitFrom(*src, src->getBounds(), dst->getBounds(), (uint)0x8888);
+	dst->accurateTransBlitFrom(*src, src->getBounds(), dst->getBounds(), (uint)0x8888);
 
 	storeScaled(dst);
 	return dst;
@@ -235,7 +235,7 @@ Picture *Pictures::scale(Picture *src, size_t sx, size_t sy) {
 /*--------------------------------------------------------------------------*/
 
 Picture::Picture(int width, int height, const Graphics::PixelFormat &fmt) :
-		Graphics::ManagedSurface(width, height, fmt), _refCount(0), _scaled(false) {
+		AccurateManagedSurface(width, height, fmt), _refCount(0), _scaled(false) {
 
 	// Default transparent color chosen at random
 	_transColor = format.RGBToColor(0x77, 0x77, 0x77);

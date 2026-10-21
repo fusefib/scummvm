@@ -23,14 +23,14 @@
 #define GLK_PICTURE_H
 
 #include "common/array.h"
-#include "graphics/managed_surface.h"
+#include "glk/accurate_managed_surface.h"
 
 namespace Glk {
 
 /**
  * Picture/image class
  */
-struct Picture : Graphics::ManagedSurface {
+struct Picture : AccurateManagedSurface {
 private:
 	int _transColor;
 public:
@@ -41,7 +41,7 @@ public:
 	/**
 	 * Constructor
 	 */
-	Picture() : Graphics::ManagedSurface(), _refCount(0), _scaled(false), _transColor(0x7777) {}
+	Picture() : AccurateManagedSurface(), _refCount(0), _scaled(false), _transColor(0x7777) {}
 
 	/**
 	 * Constructor

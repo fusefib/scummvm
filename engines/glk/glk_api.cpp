@@ -965,9 +965,9 @@ bool GlkAPI::glk_image_draw_scaled(winid_t win, const Graphics::Surface &image, 
 		} else {
 			GraphicsWindow *gfxWin = dynamic_cast<GraphicsWindow *>(win);
 
-			Graphics::ManagedSurface s(width, height, image.format);
-			s.transBlitFrom(image, Common::Rect(0, 0, image.w, image.h),
-				Common::Rect(0, 0, width, height));
+			AccurateManagedSurface s(width, height, image.format);
+			s.accurateTransBlitFrom(image, Common::Rect(0, 0, image.w, image.h),
+				Common::Rect(0, 0, width, height), 0);
 
 			if (gfxWin)
 				gfxWin->drawPicture(s, transColor, xp, yp, s.w, s.h);
