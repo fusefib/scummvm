@@ -211,6 +211,11 @@ void GlkEngine::retryPresentation() {
 
 void GlkEngine::applyGameSettings() {
 	// The game menu has hidden its overlay and restored backend preferences.
+	if (_screen && _screen->refreshPictureScaler()) {
+		Windows::_forceRedraw = true;
+		if (_events)
+			_events->redraw();
+	}
 	if (_nativePresentation)
 		_savedAspectCorrection = ConfMan.getBool("aspect_ratio");
 	updatePresentation(true);

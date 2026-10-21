@@ -151,9 +151,11 @@ public:
 	void hLine(int x, int y, int x2, uint color);
 	void vLine(int x, int y, int y2, uint color);
 	bool integerPictures() const;
-	PicturePlacement picturePlacement(const PictureSurface &image, const Point &position, bool centered, bool rightAligned = false) const;
+	bool refreshPictureScaler();
+	PicturePlacement picturePlacement(const PictureSurface &image, const Point &position, bool centered,
+		bool rightAligned = false, const uint32 *transparent = nullptr) const;
 	void drawImage(PictureSurface &image, const Point &position, uint background);
-	void drawInlinePicture(PictureSurface &image, const Point &position, const Common::Rect &clip, uint transparent, bool rightAligned);
+	PicturePlacement drawInlinePicture(PictureSurface &image, const Point &position, const Common::Rect &clip, uint transparent, bool rightAligned);
 	void drawPicture(const Graphics::ManagedSurface &image, const Point &position,
 		const Common::Rect &clip, uint transparent);
 

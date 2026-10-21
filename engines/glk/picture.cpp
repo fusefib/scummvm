@@ -257,8 +257,8 @@ void Picture::setTransparentColor(uint color) {
 	invalidate();
 }
 
-void Picture::drawPicture(const Common::Point &destPos, const Common::Rect &box, bool rightAligned) {
-	g_vm->_screen->drawInlinePicture(*this, destPos, box, _transColor, rightAligned);
+PicturePlacement Picture::drawPicture(const Common::Point &destPos, const Common::Rect &box, bool rightAligned) {
+	return g_vm->_screen->drawInlinePicture(*this, destPos, box, _transColor, rightAligned);
 }
 
 } // End of namespace Glk

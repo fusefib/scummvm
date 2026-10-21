@@ -445,7 +445,8 @@ uint TextBufferWindow::pictureHyperlink(const Point &renderPos, uint textLink) c
 			const int rightEdge = screen.presentation().renderX(position.x + picture->w);
 			const int bottom = screen.presentation().renderY(position.y + picture->h);
 			if (renderPos.x >= left && renderPos.x < rightEdge && renderPos.y >= top && renderPos.y < bottom) {
-				const PicturePlacement placement = screen.picturePlacement(*picture, position, false, right != 0);
+				const uint32 transparent = picture->getTransparentColor();
+				const PicturePlacement placement = screen.picturePlacement(*picture, position, false, right != 0, &transparent);
 				textLink = placement.contains(renderPos) ? (right ? _lines[i]._rHyper : _lines[i]._lHyper) : 0;
 			}
 		}
@@ -996,22 +997,22 @@ void TextBufferWindow::redraw() {
 	/*
 	 * draw the images
 	 */
+	const Rect viewport = pictureViewport();
+	const Common::Rect renderViewport = screen.presentation().toRender(viewport);
 	for (i = 0; i < _scrollBack; i++) {
 		TextBufferRow ln(_lines[i]);
 
 		y = y0 + (_height - (i - _scrollPos) - 1) * _font._leading;
-		const Rect viewport = pictureViewport();
 		for (int right = 0; right < 2; ++right) {
 			Picture *picture = right ? ln._rPic : ln._lPic;
 			if (!picture || y >= y1 || y + picture->h <= y0)
 				continue;
 			const Point position(right ? viewport.right - picture->w : viewport.left, y);
-			picture->drawPicture(position, viewport, right != 0);
+			const PicturePlacement placement = picture->drawPicture(position, viewport, right != 0);
 			Rect slot(position.x, MAX(y, y0), position.x + picture->w, MIN(y + picture->h, y1));
 			slot.clip(viewport);
 			g_vm->_selection->putHyperlink(0, slot.left, slot.top, slot.right, slot.bottom);
-			const PicturePlacement placement = screen.picturePlacement(*picture, position, false, right != 0);
-			const Common::Rect visible = placement.clipped(screen.presentation().toRender(viewport));
+			const Common::Rect visible = placement.clipped(renderViewport);
 			if (!visible.isEmpty()) {
 				const Point first = screen.presentation().toLogical(Point(visible.left, visible.top));
 				const Point last = screen.presentation().toLogical(Point(visible.right - 1, visible.bottom - 1));

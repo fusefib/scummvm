@@ -30,6 +30,7 @@ namespace Glk {
 struct PicturePlacement {
 	int x, y, width, height;
 	uint factor;
+	bool filtered;
 
 	Common::Rect clipped(const Common::Rect &bounds) const;
 	bool contains(const Common::Point &point) const;
@@ -38,17 +39,27 @@ struct PicturePlacement {
 
 class PictureScaler {
 	NormalScaler _normal;
+	Graphics::PixelFormat _hqFormat;
+	Scaler *_hq;
+	PictureScaler(const PictureScaler &);
+	PictureScaler &operator=(const PictureScaler &);
 public:
 	explicit PictureScaler(const Graphics::PixelFormat &format);
-	uint factor(int available) const;
-	void scale(const Graphics::Surface &source, Graphics::Surface &dest, uint factor);
+	~PictureScaler();
+	bool select(const Common::String &name);
+	bool hasHQ() const;
+	uint factor(int available, bool filtered = false) const;
+	bool fits(const Graphics::Surface &source, uint factor, bool filtered) const;
+	void scale(const Graphics::Surface &source, Graphics::ManagedSurface &dest, uint factor, bool filtered);
 };
 
 // Pixel changes invalidate preparation, including writes through existing surface callers.
 class PictureSurface : public AccurateManagedSurface {
 	Graphics::ManagedSurface _prepared;
 	uint _factor;
-	bool _valid;
+	bool _valid, _filtered;
+	mutable bool _opacityKnown, _opaque, _keyed;
+	mutable uint32 _key;
 	PictureSurface(const PictureSurface &);
 	PictureSurface &operator=(const PictureSurface &);
 public:
@@ -56,7 +67,8 @@ public:
 	PictureSurface(int width, int height, const Graphics::PixelFormat &pixelFormat);
 	void addDirtyRect(const Common::Rect &rect) override;
 	void invalidate();
-	const Graphics::Surface &prepare(PictureScaler &scaler, uint factor);
+	bool opaque(const uint32 *transparent) const;
+	const Graphics::Surface &prepare(PictureScaler &scaler, uint factor, bool filtered = false);
 };
 
 } // End of namespace Glk

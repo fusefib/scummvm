@@ -60,7 +60,7 @@ public:
 	/**
 	 * Draw the picture
 	 */
-	void drawPicture(const Common::Point &destPos, const Common::Rect &box, bool rightAligned = false);
+	PicturePlacement drawPicture(const Common::Point &destPos, const Common::Rect &box, bool rightAligned = false);
 
 	/**
 	 * Get the transparency color

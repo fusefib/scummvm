@@ -215,9 +215,12 @@ AppearanceResult GlkEngine::applyAppearance(const Common::String &target,
 	}
 	const bool modeChanged = updatePreference(_conf->_presentationMode, before._presentationMode, after._presentationMode);
 	const bool scaleChanged = updatePreference(_conf->_reflowScale, before._reflowScale, after._reflowScale);
+	const bool picturesChanged = updatePreference(_conf->_reflowIntegerPictures, before._reflowIntegerPictures, after._reflowIntegerPictures);
+	if (modeChanged || picturesChanged)
+		_screen->refreshPictureScaler();
 	if (modeChanged || scaleChanged)
 		updatePresentation();
-	if (updatePreference(_conf->_reflowIntegerPictures, before._reflowIntegerPictures, after._reflowIntegerPictures)) {
+	if (picturesChanged) {
 		Windows::_forceRedraw = true;
 		_events->redraw();
 	}
