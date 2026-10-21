@@ -189,8 +189,6 @@ void Window::ensureTextWindow() {
 	} else {
 		createGlkWindow();
 	}
-
-	_windows->showTextWindows();
 }
 
 void Window::setSize(const Point &newSize) {
@@ -435,8 +433,10 @@ void Window::setReverseVideo(bool reverse) {
 }
 
 void Window::createGlkWindow() {
-	if (g_vm->h_version == V6)
-		_windows->showTextWindows();
+	winid_t front = g_vm->glk_window_get_root();
+	const PairWindow *pair = dynamic_cast<const PairWindow *>(front);
+	if (pair)
+		front = pair->_children.back();
 
 	// Create a new window
 	if (_index != 0 || (_currStyle & FIXED_WIDTH_STYLE)) {
@@ -456,6 +456,10 @@ void Window::createGlkWindow() {
 	updateColors();
 
 	g_vm->glk_set_window(_win);
+
+	// Input can need a text window while a full-screen picture stays in front.
+	if (front && front == _windows->_background)
+		front->bringToFront();
 }
 
 uint Window::getProperty(WindowProperty propType) {
@@ -500,11 +504,13 @@ void Window::checkRepositionLower() {
 
 bool Window::imageDraw(uint image, ImageAlign align, int val) {
 	ensureTextWindow();
+	_windows->showTextWindows();
 	return g_vm->glk_image_draw(_win, image, align, val);
 }
 
 bool Window::imageDrawScaled(uint image, int val1, int val2, uint width, uint height) {
 	ensureTextWindow();
+	_windows->showTextWindows();
 	return g_vm->glk_image_draw_scaled(_win, image, val1, val2, width, height);
 }
 
