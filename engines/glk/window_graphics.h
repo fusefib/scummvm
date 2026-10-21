@@ -39,7 +39,7 @@ public:
 	uint _bgnd;
 	bool _dirty;
 	uint _w, _h;
-	Graphics::ManagedSurface *_surface;
+	PictureSurface *_surface;
 public:
 	/**
 	 * Constructor
@@ -73,7 +73,7 @@ public:
 	/**
 	 * Click the window
 	 */
-	void click(const Point &newPos) override;
+	void click(const Point &newPos, const Point *renderPos = nullptr) override;
 
 	/**
 	 * Cancel a mouse event

@@ -28,6 +28,7 @@
 #include "graphics/font.h"
 #include "glk/fonts.h"
 #include "glk/presentation.h"
+#include "glk/picture_presentation.h"
 #include "glk/utils.h"
 
 namespace Glk {
@@ -72,6 +73,7 @@ class Screen : public Graphics::Screen {
 private:
 	Common::Point _canvasSize;
 	PresentationGeometry _presentation;
+	PictureScaler _pictureScaler;
 	Common::Array<const Graphics::Font *> _renderFonts;
 	bool loadRenderFonts(Common::Archive *archive, const Conf &settings, const PresentationGeometry &geometry,
 		Common::Array<const Graphics::Font *> &fonts);
@@ -148,7 +150,10 @@ public:
 	void fillRect(const Rect &box, uint color);
 	void hLine(int x, int y, int x2, uint color);
 	void vLine(int x, int y, int y2, uint color);
-	void drawImage(const Graphics::ManagedSurface &image, const Point &position);
+	bool integerPictures() const;
+	PicturePlacement picturePlacement(const PictureSurface &image, const Point &position, bool centered, bool rightAligned = false) const;
+	void drawImage(PictureSurface &image, const Point &position, uint background);
+	void drawInlinePicture(PictureSurface &image, const Point &position, const Common::Rect &clip, uint transparent, bool rightAligned);
 	void drawPicture(const Graphics::ManagedSurface &image, const Point &position,
 		const Common::Rect &clip, uint transparent);
 

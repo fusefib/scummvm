@@ -217,6 +217,10 @@ AppearanceResult GlkEngine::applyAppearance(const Common::String &target,
 	const bool scaleChanged = updatePreference(_conf->_reflowScale, before._reflowScale, after._reflowScale);
 	if (modeChanged || scaleChanged)
 		updatePresentation();
+	if (updatePreference(_conf->_reflowIntegerPictures, before._reflowIntegerPictures, after._reflowIntegerPictures)) {
+		Windows::_forceRedraw = true;
+		_events->redraw();
+	}
 	return result;
 }
 

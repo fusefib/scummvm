@@ -447,9 +447,9 @@ void Windows::inputHandleKey(uint key) {
 		g_vm->quitGame();
 }
 
-void Windows::inputHandleClick(const Point &pos) {
+void Windows::inputHandleClick(const Point &pos, const Point *renderPos) {
 	if (_rootWin)
-		_rootWin->click(pos);
+		_rootWin->click(pos, renderPos);
 }
 
 void Windows::selectionChanged() {

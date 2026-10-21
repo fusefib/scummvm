@@ -23,14 +23,14 @@
 #define GLK_PICTURE_H
 
 #include "common/array.h"
-#include "glk/accurate_managed_surface.h"
+#include "glk/picture_presentation.h"
 
 namespace Glk {
 
 /**
  * Picture/image class
  */
-struct Picture : AccurateManagedSurface {
+struct Picture : PictureSurface {
 private:
 	int _transColor;
 public:
@@ -41,7 +41,7 @@ public:
 	/**
 	 * Constructor
 	 */
-	Picture() : AccurateManagedSurface(), _refCount(0), _scaled(false), _transColor(0x7777) {}
+	Picture() : PictureSurface(), _refCount(0), _scaled(false), _transColor(0x7777) {}
 
 	/**
 	 * Constructor
@@ -60,7 +60,7 @@ public:
 	/**
 	 * Draw the picture
 	 */
-	void drawPicture(const Common::Point &destPos, const Common::Rect &box);
+	void drawPicture(const Common::Point &destPos, const Common::Rect &box, bool rightAligned = false);
 
 	/**
 	 * Get the transparency color
@@ -70,7 +70,7 @@ public:
 	/**
 	 * Set the transparency color
 	 */
-	void setTransparentColor(uint color) { _transColor = color; }
+	void setTransparentColor(uint color);
 };
 
 /**

@@ -60,6 +60,8 @@ private:
 private:
 	void touchScroll();
 	bool putPicture(Picture *pic, uint align, uint linkval);
+	Rect pictureViewport() const;
+	uint pictureHyperlink(const Point &renderPos, uint textLink) const;
 
 	/**
 	 * @remarks Only for input text
@@ -212,7 +214,7 @@ public:
 	/**
 	 * Click the window
 	 */
-	void click(const Point &newPos) override;
+	void click(const Point &newPos, const Point *renderPos = nullptr) override;
 
 	/**
 	 * Prepare for inputing a line

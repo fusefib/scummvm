@@ -145,7 +145,7 @@ public:
 	/**
 	 * Click the window
 	 */
-	void click(const Point &newPos) override;
+	void click(const Point &newPos, const Point *renderPos = nullptr) override;
 
 	/**
 	 * Cancel a hyperlink event

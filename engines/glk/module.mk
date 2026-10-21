@@ -19,6 +19,7 @@ MODULE_OBJS := \
 	preview.o \
 	pc_speaker.o \
 	picture.o \
+	picture_presentation.o \
 	quetzal.o \
 	raw_decoder.o \
 	screen.o \

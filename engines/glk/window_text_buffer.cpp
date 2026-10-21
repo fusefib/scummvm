@@ -420,7 +420,40 @@ void TextBufferWindow::clear() {
 		touch(i);
 }
 
-void TextBufferWindow::click(const Point &newPos) {
+Rect TextBufferWindow::pictureViewport() const {
+	const int top = _bbox.top + g_conf->_tMarginY;
+	const int rows = _height - (_scrollPos && _height > 1 ? 1 : 0);
+	return Rect(_bbox.left + g_conf->_tMarginX, top,
+		_bbox.right - g_conf->_tMarginX - g_conf->_scrollWidth, top + rows * _font._leading);
+}
+
+uint TextBufferWindow::pictureHyperlink(const Point &renderPos, uint textLink) const {
+	const Screen &screen = *g_vm->_screen;
+	const Rect viewport = pictureViewport();
+	const Common::Rect renderViewport = screen.presentation().toRender(viewport);
+	if (!renderViewport.contains(renderPos))
+		return textLink;
+	for (int i = 0; i < _scrollBack; ++i) {
+		const int y = viewport.top + (_height - (i - _scrollPos) - 1) * _font._leading;
+		for (int right = 0; right < 2; ++right) {
+			const Picture *picture = right ? _lines[i]._rPic : _lines[i]._lPic;
+			if (!picture || y >= viewport.bottom || y + picture->h <= viewport.top)
+				continue;
+			const Point position(right ? viewport.right - picture->w : viewport.left, y);
+			// Test the reserved slot first, so its padding cannot inherit a text link.
+			const int left = screen.presentation().renderX(position.x), top = screen.presentation().renderY(position.y);
+			const int rightEdge = screen.presentation().renderX(position.x + picture->w);
+			const int bottom = screen.presentation().renderY(position.y + picture->h);
+			if (renderPos.x >= left && renderPos.x < rightEdge && renderPos.y >= top && renderPos.y < bottom) {
+				const PicturePlacement placement = screen.picturePlacement(*picture, position, false, right != 0);
+				textLink = placement.contains(renderPos) ? (right ? _lines[i]._rHyper : _lines[i]._lHyper) : 0;
+			}
+		}
+	}
+	return textLink;
+}
+
+void TextBufferWindow::click(const Point &newPos, const Point *renderPos) {
 	int gh = false;
 	int gs = false;
 
@@ -431,6 +464,11 @@ void TextBufferWindow::click(const Point &newPos) {
 
 	if (_hyperRequest) {
 		uint linkval = g_vm->_selection->getHyperlink(newPos);
+		if (g_vm->_screen->integerPictures()) {
+			const PresentationGeometry &geometry = g_vm->_screen->presentation();
+			const Point point = renderPos ? *renderPos : Point(geometry.renderX(newPos.x), geometry.renderY(newPos.y));
+			linkval = pictureHyperlink(point, linkval);
+		}
 		if (linkval) {
 			g_vm->_events->store(evtype_Hyperlink, this, linkval, 0);
 			_hyperRequest = false;
@@ -674,7 +712,6 @@ void TextBufferWindow::redraw() {
 	int font;
 	uint color;
 	int i;
-	int hx0, hx1, hy0, hy1;
 	int selrow, selchar, sx0, sx1, selleft, selright;
 	bool selBuf;
 	int tx, tsc, tsw, lsc, rsc;
@@ -963,34 +1000,22 @@ void TextBufferWindow::redraw() {
 		TextBufferRow ln(_lines[i]);
 
 		y = y0 + (_height - (i - _scrollPos) - 1) * _font._leading;
-
-		if (ln._lPic) {
-			if (y < y1 && y + ln._lPic->h > y0) {
-				ln._lPic->drawPicture(Point(x0 / GLI_SUBPIX, y),
-					Rect(x0 / GLI_SUBPIX, y0, x1 / GLI_SUBPIX, y1));
-				link = ln._lHyper;
-				hy0 = y > y0 ? y : y0;
-				hy1 = y + ln._lPic->h < y1 ? y + ln._lPic->h : y1;
-				hx0 = x0 / GLI_SUBPIX;
-				hx1 = x0 / GLI_SUBPIX + ln._lPic->w < x1 / GLI_SUBPIX
-					  ? x0 / GLI_SUBPIX + ln._lPic->w
-					  : x1 / GLI_SUBPIX;
-				g_vm->_selection->putHyperlink(link, hx0, hy0, hx1, hy1);
-			}
-		}
-
-		if (ln._rPic) {
-			if (y < y1 && y + ln._rPic->h > y0) {
-				ln._rPic->drawPicture(Point(x1 / GLI_SUBPIX - ln._rPic->w, y),
-					Rect(x0 / GLI_SUBPIX, y0, x1 / GLI_SUBPIX, y1));
-				link = ln._rHyper;
-				hy0 = y > y0 ? y : y0;
-				hy1 = y + ln._rPic->h < y1 ? y + ln._rPic->h : y1;
-				hx0 = x1 / GLI_SUBPIX - ln._rPic->w > x0 / GLI_SUBPIX
-					  ? x1 / GLI_SUBPIX - ln._rPic->w
-					  : x0 / GLI_SUBPIX;
-				hx1 = x1 / GLI_SUBPIX;
-				g_vm->_selection->putHyperlink(link, hx0, hy0, hx1, hy1);
+		const Rect viewport = pictureViewport();
+		for (int right = 0; right < 2; ++right) {
+			Picture *picture = right ? ln._rPic : ln._lPic;
+			if (!picture || y >= y1 || y + picture->h <= y0)
+				continue;
+			const Point position(right ? viewport.right - picture->w : viewport.left, y);
+			picture->drawPicture(position, viewport, right != 0);
+			Rect slot(position.x, MAX(y, y0), position.x + picture->w, MIN(y + picture->h, y1));
+			slot.clip(viewport);
+			g_vm->_selection->putHyperlink(0, slot.left, slot.top, slot.right, slot.bottom);
+			const PicturePlacement placement = screen.picturePlacement(*picture, position, false, right != 0);
+			const Common::Rect visible = placement.clipped(screen.presentation().toRender(viewport));
+			if (!visible.isEmpty()) {
+				const Point first = screen.presentation().toLogical(Point(visible.left, visible.top));
+				const Point last = screen.presentation().toLogical(Point(visible.right - 1, visible.bottom - 1));
+				g_vm->_selection->putHyperlink(right ? ln._rHyper : ln._lHyper, first.x, first.y, last.x + 1, last.y + 1);
 			}
 		}
 	}

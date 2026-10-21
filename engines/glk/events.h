@@ -217,7 +217,7 @@ private:
 	/**
 	 * Handle mouse down events
 	 */
-	void handleButtonDown(bool isLeft, const Point &pos);
+	void handleButtonDown(bool isLeft, const Point &pos, const Point *renderPos = nullptr);
 
 	/**
 	 * Handle mouse up events

@@ -230,14 +230,14 @@ void PairWindow::setArrangement(uint method, uint size, Window *keyWin) {
 	_windows->rearrange();
 }
 
-void PairWindow::click(const Point &newPos) {
+void PairWindow::click(const Point &newPos, const Point *renderPos) {
 	// Note in case windows are partially overlapping, we want the top-most window to get the click.
 	// WHich is why we recurse in the opposite of the rendering direction (as the _backward flag) indicates
 	for (int ctr = 0, idx = (!_backward ? (int)_children.size() - 1 : 0); ctr < (int)_children.size();
 		++ctr, idx += (!_backward ? -1 : 1)) {
 		Window *w = _children[idx];
 		if (w->_bbox.contains(newPos))
-			w->click(newPos);
+			w->click(newPos, renderPos);
 	}
 }
 

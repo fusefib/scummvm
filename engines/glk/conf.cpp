@@ -71,7 +71,7 @@ Conf::Conf(InterpreterType interpType, bool installGlobal,
 #else
 		_width(640), _height(400),
 #endif
-		_screenFormat(format), _presentationMode(kPresentationLegacy), _reflowScale(100),
+		_screenFormat(format), _presentationMode(kPresentationLegacy), _reflowScale(100), _reflowIntegerPictures(false),
 #ifndef USE_HIGHRES
 		_rows(12), _cols(30),
 #else
@@ -167,6 +167,7 @@ void Conf::synchronize() {
 	if (GlkPreferences::parseInteger(getString("glk_reflow_scale"), reflowScale) &&
 			reflowScale >= 50 && reflowScale <= 300)
 		_reflowScale = reflowScale;
+	syncAsBool("glk_reflow_integer_pictures", _reflowIntegerPictures);
 	syncAsString("moreprompt", _propInfo._morePrompt);
 	syncAsColor("morecolor", _propInfo._moreColor);
 	syncAsColor("morecolor", _propInfo._moreSave);

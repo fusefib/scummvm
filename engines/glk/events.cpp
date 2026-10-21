@@ -245,7 +245,8 @@ void Events::pollEvents() {
 
 		case Common::EVENT_LBUTTONDOWN:
 		case Common::EVENT_RBUTTONDOWN:
-			handleButtonDown(event.type == Common::EVENT_LBUTTONDOWN, g_vm->_screen->presentation().toLogical(event.mouse));
+			handleButtonDown(event.type == Common::EVENT_LBUTTONDOWN,
+				g_vm->_screen->presentation().toLogical(event.mouse), &event.mouse);
 			return;
 
 		case Common::EVENT_LBUTTONUP:
@@ -402,10 +403,10 @@ void Events::handleMouseMove(const Point &pos) {
 	}
 }
 
-void Events::handleButtonDown(bool isLeft, const Point &pos) {
+void Events::handleButtonDown(bool isLeft, const Point &pos, const Point *renderPos) {
 	if (isLeft) {
 		setCursor(CURSOR_IBEAM);
-		g_vm->_windows->inputHandleClick(pos);
+		g_vm->_windows->inputHandleClick(pos, renderPos);
 	} else {
 		g_vm->_clipboard->clipboardReceive(PRIMARY);
 	}

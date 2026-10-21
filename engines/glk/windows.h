@@ -225,7 +225,7 @@ public:
 	/**
 	 * Handle mouse clicks
 	 */
-	void inputHandleClick(const Point &pos);
+	void inputHandleClick(const Point &pos, const Point *renderPos = nullptr);
 
 	void selectionChanged();
 
@@ -539,7 +539,7 @@ public:
 	/**
 	 * Click the window
 	 */
-	virtual void click(const Point &newPos) {}
+	virtual void click(const Point &newPos, const Point *renderPos = nullptr) {}
 
 	/**
 	 * Prepare for inputing a line

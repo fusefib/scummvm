@@ -44,7 +44,7 @@ bool GraphicsWindow::prepareResize(const Rect &box, Graphics::ManagedSurface *&s
 	const Graphics::PixelFormat format = g_system->getScreenFormat();
 	if ((uint64)width * height * format.bytesPerPixel > 0x7fffffffU)
 		return false;
-	surface = new Graphics::ManagedSurface(width, height, format);
+	surface = new PictureSurface(width, height, format);
 	surface->clear(_bgnd);
 	if (_surface)
 		surface->blitFrom(*_surface);
@@ -56,7 +56,7 @@ void GraphicsWindow::installResize(const Rect &box, Graphics::ManagedSurface *su
 	const uint width = MAX(0, (int)box.width()), height = MAX(0, (int)box.height());
 	if (surface || !width || !height) {
 		delete _surface;
-		_surface = surface;
+		_surface = static_cast<PictureSurface *>(surface);
 	}
 	_w = width;
 	_h = height;
@@ -82,7 +82,7 @@ void GraphicsWindow::redraw() {
 		_dirty = 0;
 
 		if (_surface)
-			screen.drawImage(*_surface, Point(_bbox.left, _bbox.top));
+			screen.drawImage(*_surface, Point(_bbox.left, _bbox.top), _bgnd);
 	}
 }
 
@@ -253,8 +253,16 @@ void GraphicsWindow::setBackgroundColor(uint color) {
 	_bgnd = color;
 }
 
-void GraphicsWindow::click(const Point &newPos) {
+void GraphicsWindow::click(const Point &newPos, const Point *renderPos) {
 	Point diff = newPos - Point(_bbox.left, _bbox.top);
+	if (_surface && g_vm->_screen->integerPictures()) {
+		const PresentationGeometry &geometry = g_vm->_screen->presentation();
+		const Point point = renderPos ? *renderPos : Point(geometry.renderX(newPos.x), geometry.renderY(newPos.y));
+		const PicturePlacement placement = g_vm->_screen->picturePlacement(*_surface, Point(_bbox.left, _bbox.top), true);
+		if (!placement.contains(point))
+			return;
+		diff = placement.sourcePoint(point, _surface->w, _surface->h);
+	}
 
 	if (_mouseRequest) {
 		g_vm->_events->store(evtype_MouseInput, this, diff.x, diff.y);
@@ -264,7 +272,7 @@ void GraphicsWindow::click(const Point &newPos) {
 	}
 
 	if (_hyperRequest) {
-		uint linkval = g_vm->_selection->getHyperlink(newPos);
+		uint linkval = g_vm->_selection->getHyperlink(Point(_bbox.left + diff.x, _bbox.top + diff.y));
 		if (linkval) {
 			g_vm->_events->store(evtype_Hyperlink, this, linkval, 0);
 			_hyperRequest = false;

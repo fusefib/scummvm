@@ -240,7 +240,7 @@ void TextGridWindow::clear() {
 	_curY = 0;
 }
 
-void TextGridWindow::click(const Point &newPos) {
+void TextGridWindow::click(const Point &newPos, const Point *renderPos) {
 	int x = newPos.x - _bbox.left;
 	int y = newPos.y - _bbox.top;
 

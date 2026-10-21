@@ -235,7 +235,7 @@ Picture *Pictures::scale(Picture *src, size_t sx, size_t sy) {
 /*--------------------------------------------------------------------------*/
 
 Picture::Picture(int width, int height, const Graphics::PixelFormat &fmt) :
-		AccurateManagedSurface(width, height, fmt), _refCount(0), _scaled(false) {
+		PictureSurface(width, height, fmt), _refCount(0), _scaled(false) {
 
 	// Default transparent color chosen at random
 	_transColor = format.RGBToColor(0x77, 0x77, 0x77);
@@ -252,8 +252,13 @@ void Picture::decrement() {
 	}
 }
 
-void Picture::drawPicture(const Common::Point &destPos, const Common::Rect &box) {
-	g_vm->_screen->drawPicture(*this, destPos, box, _transColor);
+void Picture::setTransparentColor(uint color) {
+	_transColor = color;
+	invalidate();
+}
+
+void Picture::drawPicture(const Common::Point &destPos, const Common::Rect &box, bool rightAligned) {
+	g_vm->_screen->drawInlinePicture(*this, destPos, box, _transColor, rightAligned);
 }
 
 } // End of namespace Glk

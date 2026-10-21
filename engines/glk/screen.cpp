@@ -36,7 +36,7 @@ static void deleteFonts(Common::Array<const Graphics::Font *> &fonts) {
 	fonts.clear();
 }
 
-Screen::Screen() : Graphics::Screen(), _canvasSize(w, h) {
+Screen::Screen() : Graphics::Screen(), _canvasSize(w, h), _pictureScaler(format) {
 	_presentation.logicalSize = _presentation.renderSize = _canvasSize;
 }
 
@@ -172,10 +172,63 @@ void Screen::vLine(int x, int y, int y2, uint color) {
 	fillRect(Rect(x, y, x + 1, y2 + 1), color);
 }
 
-void Screen::drawImage(const Graphics::ManagedSurface &image, const Point &position) {
-	const Common::Rect destination(position.x, position.y, position.x + image.w, position.y + image.h);
+bool Screen::integerPictures() const {
+	return supportsLiveMetrics() && g_conf->_reflowIntegerPictures &&
+		(g_conf->_presentationMode == kPresentationReflow || g_conf->_presentationMode == kPresentationAdaptiveReflow);
+}
+
+PicturePlacement Screen::picturePlacement(const PictureSurface &image, const Point &position, bool centered, bool rightAligned) const {
+	PicturePlacement result;
+	result.x = _presentation.renderX(position.x);
+	result.y = _presentation.renderY(position.y);
+	result.width = _presentation.renderX(position.x + image.w) - result.x;
+	result.height = _presentation.renderY(position.y + image.h) - result.y;
+	result.factor = 0;
+	if (integerPictures() && image.w && image.h) {
+		const uint factor = _pictureScaler.factor(MIN(result.width / image.w, result.height / image.h));
+		const uint width = image.w * factor, height = image.h * factor;
+		if (factor && width <= 32767 && height <= 32767 &&
+				(uint64)width * height * image.format.bytesPerPixel <= 64 * 1024 * 1024) {
+			result.x += centered ? (result.width - width) / 2 : rightAligned ? result.width - width : 0;
+			result.y += centered ? (result.height - height) / 2 : 0;
+			result.width = width;
+			result.height = height;
+			result.factor = factor;
+		}
+	}
+	return result;
+}
+
+void Screen::drawImage(PictureSurface &image, const Point &position, uint background) {
+	const PicturePlacement placement = picturePlacement(image, position, true);
 	AccurateManagedSurface target(*this, getBounds());
-	target.accurateBlitFrom(image, image.getBounds(), _presentation.toRender(destination));
+	const Rect destination(position.x, position.y, position.x + image.w, position.y + image.h);
+	if (placement.factor) {
+		fillRect(destination, background);
+		const Graphics::Surface &prepared = image.prepare(_pictureScaler, placement.factor);
+		target.blitFrom(prepared, Common::Point(placement.x, placement.y));
+	} else {
+		target.accurateBlitFrom(image, image.getBounds(), _presentation.toRender(destination));
+	}
+}
+
+void Screen::drawInlinePicture(PictureSurface &image, const Point &position, const Common::Rect &clip,
+		uint transparent, bool rightAligned) {
+	const PicturePlacement placement = picturePlacement(image, position, false, rightAligned);
+	if (!placement.factor) {
+		drawPicture(image, position, clip, transparent);
+		return;
+	}
+	Common::Rect bounds = _presentation.toRender(clip);
+	bounds.clip(getBounds());
+	const Common::Rect visible = placement.clipped(bounds);
+	if (visible.isEmpty())
+		return;
+	const Graphics::Surface &prepared = image.prepare(_pictureScaler, placement.factor);
+	const Common::Rect source(visible.left - placement.x, visible.top - placement.y,
+		visible.right - placement.x, visible.bottom - placement.y);
+	AccurateManagedSurface target(*this, getBounds());
+	target.transBlitFrom(prepared, source, Common::Point(visible.left, visible.top), transparent);
 }
 
 void Screen::drawPicture(const Graphics::ManagedSurface &image, const Point &position,
