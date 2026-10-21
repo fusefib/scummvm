@@ -140,6 +140,7 @@ private:
 	GUI::CheckboxWidget *_safeClicks;
 	GUI::PopUpWidget *_presentationMode;
 	GUI::PopUpWidget *_reflowScale;
+	GUI::CheckboxWidget *_reflowIntegerPictures;
 	GUI::EditTextWidget *_cols;
 	GUI::EditTextWidget *_rows;
 	GUI::CheckboxWidget *_lockcols;

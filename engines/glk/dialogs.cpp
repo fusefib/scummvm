@@ -392,6 +392,8 @@ GlkOptionsWidget::GlkOptionsWidget(GuiObject *boss, const Common::String &name,
 	const int reflowScales[] = { 50, 75, 100, 125, 150, 175, 200, 250, 300 };
 	for (uint i = 0; i < ARRAYSIZE(reflowScales); ++i)
 		_reflowScale->appendEntry(Common::U32String(Common::String::format("%d%%", reflowScales[i])), reflowScales[i]);
+	_reflowIntegerPictures = createCheckbox("GlkOptionsDisplay.integerpictureslbl", _("Use integer picture scaling"),
+		"GlkOptionsDisplay.integerpictures", _("Enlarge pictures in whole-number steps using the selected Normal or HQ scaler. Text keeps its own scale. Pictures may leave unused space."));
 
 	_tabs->addTab(_("Compatibility"), "GlkOptionsCompatibility");
 	// I18N: Minimum distance between successive text baselines, in pixels.
@@ -607,6 +609,7 @@ GlkOptionsWidget::GlkOptionsWidget(GuiObject *boss, const Common::String &name,
 	_controls.push_back(ControlBinding("rows", _rows, "GlkOptionsLayout.rowslbl"));
 	_controls.push_back(ControlBinding("glk_presentation_mode", _presentationMode, "GlkOptionsDisplay.presentationlbl"));
 	_controls.push_back(ControlBinding("glk_reflow_scale", _reflowScale, "GlkOptionsDisplay.reflowscalelbl"));
+	_controls.push_back(ControlBinding("glk_reflow_integer_pictures", _reflowIntegerPictures, "GlkOptionsDisplay.integerpictureslbl"));
 	_controls.push_back(ControlBinding("safeclicks", _safeClicks, "GlkOptionsInteraction.safeclickslabel"));
 	_controls.push_back(ControlBinding("stylehint", _styleHint, "GlkOptionsInteraction.stylehintlabel"));
 	_controls.push_back(ControlBinding("lockcols", _lockcols, "GlkOptionsLayout.lockcolslbl"));
@@ -732,6 +735,7 @@ void GlkOptionsWidget::loadControls() {
 	setIntegerWidget(_rows, _settings->getInt("rows", _conf->_rows));
 	_presentationMode->setSelectedTag(_settings->getInt("glk_presentation_mode", _conf->_presentationMode));
 	const int reflowScale = _settings->getInt("glk_reflow_scale", _conf->_reflowScale);
+	_reflowIntegerPictures->setState(_settings->getBool("glk_reflow_integer_pictures", _conf->_reflowIntegerPictures));
 	_reflowScale->setSelectedTag(reflowScale);
 	if (_reflowScale->getSelected() < 0 && reflowScale >= 50 && reflowScale <= 300) {
 		_reflowScale->appendEntry(Common::String::format("%d%%", reflowScale), reflowScale);
@@ -904,6 +908,7 @@ void GlkOptionsWidget::updateLayoutDependencies() {
 	_rows->setEnabled(_lockrows->getState());
 	const uint mode = _presentationMode->getSelectedTag();
 	_reflowScale->setEnabled(mode == kPresentationReflow || mode == kPresentationAdaptiveReflow);
+	_reflowIntegerPictures->setEnabled(mode == kPresentationReflow || mode == kPresentationAdaptiveReflow);
 }
 
 void GlkOptionsWidget::updateActionState() {
@@ -1803,6 +1808,7 @@ void GlkOptionsWidget::defineLayout(GUI::ThemeEval &layouts,
 	display.addOptionRow("presentationlbl", "presentation", _presentationMode, true);
 	display.addLabelRow("reflowlbl");
 	display.addOptionRow("reflowscalelbl", "reflowscale", _reflowScale, true);
+	display.addOptionRow("integerpictureslbl", "integerpictures", _reflowIntegerPictures);
 	display.close();
 
 	GlkOptionsPageLayout compatibility(layouts, *this,
