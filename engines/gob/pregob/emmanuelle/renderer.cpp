@@ -592,6 +592,17 @@ void PreGob_Emmanuelle::waitForMinimumDuration(
 	}
 }
 
+bool PreGob_Emmanuelle::resolveIntroPresentation() {
+	if (_vm->shouldQuit())
+		return false;
+
+	presentFrame(false, true);
+	if (!_vm->shouldQuit() &&
+		_platformTag == kOldTotPlatformDOS && _initialInitPresentation)
+		_dosInitialFramePresented = true;
+	return !_vm->shouldQuit();
+}
+
 void PreGob_Emmanuelle::defineCursor(uint16 descriptorOffset) {
 	if (!_tot)
 		return;

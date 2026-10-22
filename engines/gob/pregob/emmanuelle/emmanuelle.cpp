@@ -58,6 +58,25 @@ OldTotPlatformTag detectPlatform(const GobEngine *vm) {
 	return kOldTotPlatformDOS;
 }
 
+const char *loopResultDescription(ModuleLoopResult result) {
+	switch (result) {
+	case kModuleLoopExit:
+		return "normal exit";
+	case kModuleLoopUnmappedSelector:
+		return "unmapped module selector";
+	case kModuleLoopLoadError:
+		return "resource load error";
+	case kModuleLoopExecutionError:
+		return "interpreter error";
+	case kModuleLoopQuit:
+		return "quit requested";
+	case kModuleLoopLimit:
+		return "module iteration limit";
+	default:
+		return "unknown result";
+	}
+}
+
 } // End of anonymous namespace
 
 PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
@@ -423,6 +442,35 @@ void PreGob_Emmanuelle::schedulerTiming(byte period, bool timingVariant,
 	getDosSchedulerTiming(period, timingVariant, reload, initialCountdown);
 }
 
+void PreGob_Emmanuelle::beginIntroFastForward() {
+	hideCursor();
+
+	if (_platformTag == kOldTotPlatformDOS && _vm->_sound)
+		_vm->_sound->speakerOff();
+	if (_diagnosticTraceEnabled)
+		debugC(2, kDebugGameFlow,
+			   "EMMA_TRACE event=intro_skip_begin module=%s",
+			   _moduleFileStem.c_str());
+}
+
+void PreGob_Emmanuelle::finishIntro() {
+	const bool fastForwarding = _introSkip.fastForwarding();
+	const bool resolved = !fastForwarding || resolveIntroPresentation();
+	_introSkip.finish();
+	setInputContext(kEmmanuelleInputNone);
+	if (fastForwarding) {
+		if (!resolved) {
+
+			presentFrame(false, true);
+		}
+		discardPendingInput();
+	}
+	if (_diagnosticTraceEnabled)
+		debugC(2, kDebugGameFlow,
+			   "EMMA_TRACE event=intro_skip_end module=%s requested=%u",
+			   _moduleFileStem.c_str(), fastForwarding ? 1U : 0U);
+}
+
 bool PreGob_Emmanuelle::skipIntermediateSequenceNodes() const {
 	return _platformTag != kOldTotPlatformDOS && _skipIntermediateSequenceNodes;
 }
@@ -666,6 +714,49 @@ void PreGob_Emmanuelle::playDosFightTone(uint16 frequency) {
 	_vm->_sound->speakerOff();
 	setAudioState(kOldTotAudioDosSpeaker, -1, frequency, 0,
 						 true, false);
+}
+
+void PreGob_Emmanuelle::run() {
+	debugC(1, kDebugGameFlow,
+		   "Emmanuelle: starting %s old-TOT runtime",
+		   _platformTag == kOldTotPlatformAmiga
+			   ? "Amiga"
+			   : (_platformTag == kOldTotPlatformAtariST ? "Atari ST"
+														 : "DOS"));
+
+	initScreen();
+	addCursor();
+	_cursorOwned = true;
+	setInputContext(kEmmanuelleInputNone);
+	hideCursor();
+	_vm->_util->setFrameRate(kHostFrameRate);
+
+	bool ready = loadSharedAssets();
+
+	if (ready) {
+		_variables[0] = 0;
+		_initialTitleState = kInitialTitleNone;
+		_initialTomahawkVisibleStart = 0;
+		_introSkip.begin();
+		_initialInitPresentation = true;
+		_dosInitialFrameCoverage = Common::Rect();
+		_dosInitialFrameHasCoverage = false;
+		_dosInitialFramePresented = false;
+		setInputContext(kEmmanuelleInputIntro);
+		const ModuleLoopResult result = runModuleLoop(
+			*this, _variables, ARRAYSIZE(_variables));
+		debugC(1, kDebugGameFlow, "Emmanuelle: runtime stopped: %s",
+			   loopResultDescription(result));
+		_active.restoreAll();
+		clearModuleObjects();
+	}
+	hideCursor();
+	_introSkip.finish();
+	_mainMenuActionThisPoll = false;
+	_openMainMenuAfterSuspend = false;
+	setInputContext(kEmmanuelleInputNone);
+	removeCursor();
+	_cursorOwned = false;
 }
 
 } // End of namespace Emmanuelle
