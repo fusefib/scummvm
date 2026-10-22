@@ -37,6 +37,94 @@
 namespace Gob {
 namespace Emmanuelle {
 
+namespace {
+const char *const kAmigaSoundBank1[2] = {
+	"P1.SPL", "intro.spl"};
+} // End of anonymous namespace
+
+const char *const *PreGob_Emmanuelle::amigaIntroSampleNames(byte &count) const {
+	count = ARRAYSIZE(kAmigaSoundBank1);
+	return kAmigaSoundBank1;
+}
+
+void PreGob_Emmanuelle::serviceAmigaFightFrame(
+	const FightState &state) {
+	if (_platformTag != kOldTotPlatformAmiga)
+		return;
+
+	int16 slot = fightSampleSlot(
+		false, state.left.action, state.left.frame);
+	const int16 rightSlot = fightSampleSlot(
+		true, state.right.action, state.right.frame);
+	if (rightSlot >= 0)
+		slot = rightSlot;
+	if (slot >= 0 && slot < _sampleCount) {
+		stopSampleAudio();
+		_vm->_sound->blasterPlay(&_samples[slot], 1, 0);
+		setAudioState(kOldTotAudioAmigaSample, slot, 0, 1,
+							 false, true);
+	}
+	delay(amigaNativeDelayMilliseconds(200));
+}
+
+bool PreGob_Emmanuelle::playAmigaIntro() {
+	if (_platformTag != kOldTotPlatformAmiga || _sampleBank != 1 ||
+		_sampleCount < 2)
+		return false;
+	if (_introSkip.fastForwarding()) {
+		stopSampleAudio();
+		return true;
+	}
+
+	stopSampleAudio();
+	_vm->_sound->blasterPlay(&_samples[1], -1, 0);
+	setAudioState(kOldTotAudioAmigaSample, 1, 0, -1, false, true);
+	while (!_vm->shouldQuit() && !_introSkip.fastForwarding()) {
+		_vm->_util->delay(1);
+		processGameEvents();
+		(void)randomBounded(100);
+		int16 mouseX = 0;
+		int16 mouseY = 0;
+		MouseButtons mouseButtons = kMouseButtonsNone;
+		const int16 key = takePendingInput(mouseX, mouseY, mouseButtons);
+		if (key != kKeyNone || mouseButtons != kMouseButtonsNone)
+			break;
+	}
+	stopSampleAudio();
+	return true;
+}
+
+bool PreGob_Emmanuelle::playAmigaSampleCommand(byte command) {
+	AmigaSampleCommand sampleCommand;
+	if (!getAmigaSampleCommand(command, sampleCommand))
+		return false;
+	if (_introSkip.fastForwarding()) {
+		stopSampleAudio();
+		return true;
+	}
+	if (sampleCommand.slot >= _sampleCount)
+		return true;
+
+	if (sampleCommand.stopAllFirst)
+		stopSampleAudio();
+	if (sampleCommand.preDelay)
+		delay(amigaNativeDelayMilliseconds(sampleCommand.preDelay));
+	if (_vm->shouldQuit())
+		return true;
+	if (_introSkip.fastForwarding()) {
+		stopSampleAudio();
+		return true;
+	}
+	stopSampleAudio();
+	_vm->_sound->blasterPlay(&_samples[sampleCommand.slot],
+							 sampleCommand.mixerRepeatCount, 0);
+	setAudioState(kOldTotAudioAmigaSample, sampleCommand.slot, 0,
+						 sampleCommand.mixerRepeatCount, false, true);
+	if (sampleCommand.postDelay)
+		delay(amigaNativeDelayMilliseconds(sampleCommand.postDelay));
+	return true;
+}
+
 bool OldTotRenderer::decodeAmigaPackedPayload(
 	const Common::Array<byte> &payload, uint16 width, uint16 height,
 	Surface &out) const {
