@@ -154,7 +154,7 @@ bool PreGob_Emmanuelle::handleAtariFF0B(byte command) {
 }
 
 void PreGob_Emmanuelle::fadeAtariFromBlack() {
-	for (byte phase = 0; phase < 8 && !_vm->shouldQuit(); ++phase) {
+	for (byte phase = 0; phase < 8 && !shouldAbortExecution(); ++phase) {
 		if (!_renderer.presentAtariFadeFromBlackStep(phase))
 			break;
 		waitPresentationFrames();
@@ -162,7 +162,7 @@ void PreGob_Emmanuelle::fadeAtariFromBlack() {
 }
 
 void PreGob_Emmanuelle::fadeAtariToBlack() {
-	for (byte phase = 0; phase < 8 && !_vm->shouldQuit(); ++phase) {
+	for (byte phase = 0; phase < 8 && !shouldAbortExecution(); ++phase) {
 		if (!_renderer.presentAtariFadeToBlackStep(phase))
 			break;
 		waitPresentationFrames();
@@ -278,10 +278,10 @@ void PreGob_Emmanuelle::serviceAtariAudio() {
 }
 
 void PreGob_Emmanuelle::delayAtariAnimation(uint16 units) {
-	while (units && !_vm->shouldQuit()) {
+	while (units && !shouldAbortExecution()) {
 		const uint16 chunk = atariStAnimationDelayChunk(units);
 		delay(chunk);
-		if (_vm->shouldQuit())
+		if (shouldAbortExecution())
 			break;
 		_colorCycleCounter = 5;
 		serviceColorCycle();
@@ -298,13 +298,15 @@ void PreGob_Emmanuelle::waitAtariInputRelease() {
 		key = pollGameInput(mouseX, mouseY, mouseButtons);
 		if (key != kKeyNone)
 			delay(20);
-	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
 			 key != kKeyNone);
 }
 
 void PreGob_Emmanuelle::waitAtariContinuation() {
 	if (!servicePresentation())
 		presentFrame(true);
+	if (shouldAbortExecution())
+		return;
 	fadeAtariFromBlack();
 	if (_vm->_sound && _vm->_sound->blasterPlayingSound())
 		stopSampleAudio();
@@ -317,7 +319,7 @@ void PreGob_Emmanuelle::waitAtariContinuation() {
 	do {
 		delay(20);
 		key = pollGameInput(mouseX, mouseY, mouseButtons);
-	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
 			 !atariStContinuationAcceptsKey(key));
 }
 

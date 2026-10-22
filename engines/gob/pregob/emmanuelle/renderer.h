@@ -188,6 +188,7 @@ public:
 					 bool transparentBackground);
 
 	uint savedRegionDepth() const { return _savedRegions.size(); }
+	void discardSavedRegions() { _savedRegions.clear(); }
 
 	bool amigaPresentedSnapshotValid() const {
 		return (bool)_amigaPresentedSurface;

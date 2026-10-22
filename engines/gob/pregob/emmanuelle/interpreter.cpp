@@ -261,20 +261,26 @@ void OldTotVM::reconfigureVideoBackend() {
 }
 
 bool OldTotVM::executeInline(uint16 offset) {
+	if (_host.executionFailed())
+		return false;
 	OldTotInline op;
 	if (!_data.decodeInline(offset, op))
 		return false;
 
 	switch (op.subOpcode) {
 	case 0x01:
+		// FF01/FF02 depth must match regions the renderer actually owns.
+		// Failed captures and restores leave both stacks unchanged.
 		if (_savedRegionDepth < 10) {
-			_host.saveScreenRect(op.words[0], op.words[1], op.words[2], op.words[3]);
+			if (!_host.saveScreenRect(op.words[0], op.words[1], op.words[2], op.words[3]))
+				return false;
 			++_savedRegionDepth;
 		}
 		break;
 	case 0x02:
 		if (_savedRegionDepth != 0) {
-			_host.restoreScreenRect();
+			if (!_host.restoreScreenRect())
+				return false;
 			--_savedRegionDepth;
 		}
 		break;
@@ -327,7 +333,7 @@ bool OldTotVM::executeInline(uint16 offset) {
 		return false;
 	}
 
-	return true;
+	return !_host.executionFailed();
 }
 
 bool OldTotVM::installScheduledCycle(uint16 offset, bool timingVariant) {
@@ -347,7 +353,7 @@ bool OldTotVM::installScheduledCycle(uint16 offset, bool timingVariant) {
 
 uint32 OldTotVM::advanceTimer(uint32 quanta, uint maxCallbacks) {
 	uint callbacks = 0;
-	if (_schedulerTargets.empty())
+	if (_schedulerTargets.empty() || _host.executionFailed())
 		return 0;
 
 	while (quanta != 0 && !_schedulerTargets.empty()) {
@@ -373,7 +379,7 @@ uint32 OldTotVM::advanceTimer(uint32 quanta, uint maxCallbacks) {
 		_host.dispatchScheduled(target);
 		++callbacks;
 
-		if (_host.shouldQuit())
+		if (_host.shouldQuit() || _host.executionFailed())
 			return 0;
 		if (generation == _schedulerGeneration && !_schedulerTargets.empty())
 			_schedulerIndex = (currentIndex + 1) % _schedulerTargets.size();

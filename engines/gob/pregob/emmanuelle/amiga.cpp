@@ -136,7 +136,7 @@ bool PreGob_Emmanuelle::handleAmigaFF0B(byte command) {
 }
 
 void PreGob_Emmanuelle::fadeAmigaFromBlack() {
-	for (byte phase = 0; phase < 16 && !_vm->shouldQuit(); ++phase) {
+	for (byte phase = 0; phase < 16 && !shouldAbortExecution(); ++phase) {
 		if (!_renderer.presentAmigaFadeFromBlackStep(phase))
 			break;
 		waitPresentationFrames();
@@ -144,7 +144,7 @@ void PreGob_Emmanuelle::fadeAmigaFromBlack() {
 }
 
 void PreGob_Emmanuelle::fadeAmigaToBlack() {
-	for (byte phase = 0; phase < 16 && !_vm->shouldQuit(); ++phase) {
+	for (byte phase = 0; phase < 16 && !shouldAbortExecution(); ++phase) {
 		if (!_renderer.presentAmigaFadeToBlackStep(phase))
 			break;
 		waitPresentationFrames();
@@ -217,7 +217,7 @@ void PreGob_Emmanuelle::waitAmigaInputRelease() {
 	do {
 		delay(amigaNativeDelayMilliseconds(100));
 		key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
-	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
 			 key != kKeyNone);
 }
 

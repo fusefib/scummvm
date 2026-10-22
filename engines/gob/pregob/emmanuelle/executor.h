@@ -49,6 +49,7 @@ public:
 	virtual void animationNode(uint16 nodeOffset) = 0;
 	virtual void rememberNode24(uint16 nodeOffset) = 0;
 	virtual bool shouldAbortExecution() const { return false; }
+	virtual bool executionFailed() const { return false; }
 	/** Command 201 suppresses intermediate sequence entries on ST and Amiga. */
 	virtual bool skipIntermediateSequenceNodes() const { return false; }
 };
@@ -90,6 +91,7 @@ enum OldTotExecutorStopReason {
 	kOldTotExecutorCompleted,
 	kOldTotExecutorSuspended,
 	kOldTotExecutorHostAbort,
+	kOldTotExecutorHostFailure,
 	kOldTotExecutorMalformedData,
 	kOldTotExecutorStackOverflow,
 	kOldTotExecutorAnalysisLimit

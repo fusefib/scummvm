@@ -392,8 +392,15 @@ bool OldTotRenderer::saveScreenRect(uint16 x, uint16 y, uint16 width,
 		height == 0 || _savedRegions.size() >= 10)
 		return false;
 
-	SurfacePtr saved(new Surface(width, height, 1));
-	saved->blit(*_vm->_draw->_backSurface, x, y, x + width - 1,
+	const Surface &back = *_vm->_draw->_backSurface;
+	if (x >= back.getWidth() || y >= back.getHeight() ||
+		width > back.getWidth() || height > back.getHeight())
+		return false;
+	// Waterfall captures extend below the screen; retain only visible pixels.
+	width = MIN<uint16>(width, back.getWidth() - x);
+	height = MIN<uint16>(height, back.getHeight() - y);
+	SurfacePtr saved(new Surface(width, height, back.getBPP()));
+	saved->blit(back, x, y, x + width - 1,
 				y + height - 1, 0, 0);
 	_savedRegions.push_back(OldTotPreparedSavedRegion(saved, x, y));
 	return true;
@@ -654,13 +661,16 @@ void OldTotRenderer::drawLetText(const Font &font, const Common::String &text,
 }
 
 void PreGob_Emmanuelle::presentFrame(bool waitForFrame, bool force) {
-	if (_introSkip.fastForwarding() && !force)
+	if (_hostFailed || (_introSkip.fastForwarding() && !force))
 		return;
 	_vm->_draw->blitInvalidated();
 	if (_platformTag == kOldTotPlatformDOS) {
 		const byte videoMode = _scriptVM
 			? _scriptVM->runtimeState().videoMode : _runtimeState.videoMode;
-		_renderer.presentDosFrame(_moduleFileStem, videoMode);
+		if (!_renderer.presentDosFrame(_moduleFileStem, videoMode)) {
+			failHostOperation("DOS presentation");
+			return;
+		}
 	}
 	if (_platformTag == kOldTotPlatformAtariST)
 		_renderer.captureAtariPresentedFrame();
@@ -677,7 +687,7 @@ bool PreGob_Emmanuelle::servicePresentation() {
 
 	bool paced = false;
 	PresentationStep step;
-	while (!_vm->shouldQuit() && !_renderer.presentationQuiescent()) {
+	while (!shouldAbortExecution() && !_renderer.presentationQuiescent()) {
 		byte randomVariant = _renderer.presentationVariant();
 		// Mode 44 advances RNG here even when black selects a fade instead.
 		if (!_renderer.presentationActive() &&
@@ -701,6 +711,10 @@ bool PreGob_Emmanuelle::servicePresentation() {
 					? _renderer.presentAmigaMode44Step(step.variant, step.phase) :
 					_renderer.presentAtariMode44Step(step.variant, step.phase);
 		}
+		if (!rendered) {
+			failHostOperation("presentation step");
+			break;
+		}
 		// Ordinary Amiga phase zero waits before buffer publication (native
 		// 0x1136A); phase one publishes, waits again (0x113CE), then captures.
 		if (!_introSkip.fastForwarding() &&
@@ -708,34 +722,33 @@ bool PreGob_Emmanuelle::servicePresentation() {
 			_vm->_draw->blitInvalidated();
 		waitPresentationFrames();
 		paced = true;
-		if (step.operation == kPresentationFadeFromBlack && !_vm->shouldQuit()) {
+		if (step.operation == kPresentationFadeFromBlack && !shouldAbortExecution()) {
 			if (amiga)
 				fadeAmigaFromBlack();
 			else
 				fadeAtariFromBlack();
 		}
-		if (step.complete && !_vm->shouldQuit()) {
+		if (step.complete && !shouldAbortExecution()) {
 			if (amiga)
 				_renderer.captureAmigaPresentedFrame();
 			else
 				_renderer.captureAtariPresentedFrame();
 		}
-		if (_diagnosticTraceEnabled &&
-			(!rendered || (step.operation != kPresentationFrame &&
-			 (step.phase == 0 || step.complete))))
+		if (_diagnosticTraceEnabled && step.operation != kPresentationFrame &&
+			(step.phase == 0 || step.complete))
 			debugC(3, kDebugGraphics,
 				"EMMA_TRACE event=%s_present module=%s operation=%u "
-				"variant=%u phase=%u complete=%u rendered=%u mode=%u "
+				"variant=%u phase=%u complete=%u mode=%u "
 				"frame_pending=%u active=%u palette_transition=%u black=%u",
 				amiga ? "amiga" : "atari", _moduleFileStem.c_str(),
 				(uint)step.operation, (uint)step.variant, (uint)step.phase,
-				step.complete ? 1U : 0U, rendered ? 1U : 0U,
+				step.complete ? 1U : 0U,
 				(uint)_renderer.presentationMode(),
 				_renderer.presentationPending() ? 1U : 0U,
 				_renderer.presentationActive() ? 1U : 0U,
 				amiga && _renderer.amigaPaletteTransitionPending() ? 1U : 0U,
 				(amiga ? _renderer.amigaBlack() : _renderer.atariBlack()) ? 1U : 0U);
-		if (!rendered || step.complete)
+		if (step.complete)
 			break;
 	}
 	return paced;
@@ -743,7 +756,7 @@ bool PreGob_Emmanuelle::servicePresentation() {
 
 void PreGob_Emmanuelle::waitForMinimumDuration(
 	uint32 startTime, uint32 minimumMilliseconds) {
-	while (!_vm->shouldQuit() && !_introSkip.fastForwarding()) {
+	while (!shouldAbortExecution() && !_introSkip.fastForwarding()) {
 		const uint32 elapsed = g_system->getMillis() - startTime;
 		const uint32 remaining = minimumDurationRemaining(
 			elapsed, minimumMilliseconds);
@@ -835,22 +848,15 @@ bool PreGob_Emmanuelle::resolveIntroPresentation() {
 }
 
 void PreGob_Emmanuelle::defineCursor(uint16 descriptorOffset) {
-	if (!_tot)
-		return;
-
 	OldTotDrawDescriptor descriptor;
-	if (!_tot->decodeDrawDescriptor(descriptorOffset, descriptor)) {
-		debugC(1, kDebugGraphics,
-			   "Emmanuelle: invalid cursor descriptor 0x%04X",
-			   descriptorOffset);
+	if (!_tot || !_tot->decodeDrawDescriptor(descriptorOffset, descriptor)) {
+		failHostOperation("cursor descriptor", descriptorOffset);
 		return;
 	}
 
 	SurfacePtr cursor = _renderer.decodeSpriteSurface(*_tot, descriptor);
 	if (!cursor || cursor->getWidth() != 16 || cursor->getHeight() != 16) {
-		debugC(1, kDebugGraphics,
-			   "Emmanuelle: invalid cursor image at 0x%04X",
-			   descriptorOffset);
+		failHostOperation("cursor image", descriptorOffset);
 		return;
 	}
 
@@ -863,26 +869,28 @@ void PreGob_Emmanuelle::defineCursor(uint16 descriptorOffset) {
 }
 
 void PreGob_Emmanuelle::drawNode(uint16 nodeOffset) {
-	if (!_tot || !_scriptVM ||
-		uint32(nodeOffset) + 12U > _tot->size())
-		return;
-
 	OldTotDrawDescriptor descriptor;
-	if (!_tot->decodeDrawDescriptor(nodeOffset, descriptor))
+	if (!_tot || !_scriptVM ||
+		!_tot->decodeDrawDescriptor(nodeOffset, descriptor)) {
+		failHostOperation("draw descriptor", nodeOffset);
 		return;
+	}
 	const int16 x = descriptor.xIndirect()
 						? (int16)_scriptVM->readVariable(descriptor.x)
 						: (int16)descriptor.x;
 	const int16 y = descriptor.yIndirect()
 						? (int16)_scriptVM->readVariable(descriptor.y)
 						: (int16)descriptor.y;
-	const bool drawn = _renderer.drawSprite(*_tot, descriptor, x, y);
-	const bool initialTomahawkDraw = drawn && _initialInitPresentation &&
+	if (!_renderer.drawSprite(*_tot, descriptor, x, y)) {
+		failHostOperation("sprite draw", nodeOffset);
+		return;
+	}
+	const bool initialTomahawkDraw = _initialInitPresentation &&
 		!_introSkip.available() && descriptor.width == 320 &&
 		descriptor.height == 200;
 	if (initialTomahawkDraw && _initialTitleState == kInitialTitleNone)
 		_initialTitleState = kInitialTitleDrawn;
-	if (drawn && _platformTag == kOldTotPlatformDOS &&
+	if (_platformTag == kOldTotPlatformDOS &&
 		_initialInitPresentation &&
 		!_introSkip.fastForwarding()) {
 		// DOS draws directly to video memory. Reproduce that visibility and
@@ -948,15 +956,18 @@ void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
 	OldTotTextPlan plan;
 	if (!_tot || !_scriptVM ||
 		!planOldTotText(*_tot, *_scriptVM, nodeOffset, plan)) {
+		failHostOperation("text plan", nodeOffset);
 		return;
 	}
 	Font *font = _fonts[plan.fontIndex & 1];
 	if (!font) {
+		failHostOperation("text font", nodeOffset);
 		return;
 	}
 	if (_platformTag == kOldTotPlatformAmiga) {
 		byte colors[16];
 		if (!getAmigaTextColorTable(_moduleFileStem, colors) || plan.background > 16) {
+			failHostOperation("text colors", nodeOffset);
 			return;
 		}
 		// Script color 15 is pale yellow (23) in LOADCAS, not green (15).
@@ -964,6 +975,7 @@ void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
 			plan.background = colors[plan.background];
 		for (uint i = 0; i < plan.glyphs.size(); ++i) {
 			if (plan.glyphs[i].color >= 16) {
+				failHostOperation("text colors", nodeOffset);
 				return;
 			}
 			plan.glyphs[i].color = colors[plan.glyphs[i].color];
@@ -1049,8 +1061,10 @@ bool PreGob_Emmanuelle::renderAnimationFrame(
 void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 	OldTotAnimationSetup setup;
 	if (!_tot || !_scriptVM ||
-		!_tot->decodeAnimationSetup(nodeOffset, setup))
+		!_tot->decodeAnimationSetup(nodeOffset, setup)) {
+		failHostOperation("animation setup", nodeOffset);
 		return;
+	}
 
 	int16 baseX = 0;
 	int16 baseY = 0;
@@ -1071,14 +1085,18 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 	}
 
 	if (setup.flags & kAnimStepped) {
-		for (uint16 step = 0; step < setup.stepCount && !_vm->shouldQuit();
+		for (uint16 step = 0; step < setup.stepCount && !shouldAbortExecution();
 			 ++step) {
 			// Known animations use up to 8 frames; a wider counter also
 			// handles the inclusive byte limit without wrapping.
 			for (uint16 frame = 1;
-				 frame <= setup.frameMax && !_vm->shouldQuit(); ++frame) {
+				 frame <= setup.frameMax && !shouldAbortExecution(); ++frame) {
 				const bool rendered = renderAnimationFrame(
 					setup, step, (byte)frame, baseX, baseY);
+				if (!rendered && setup.hasDescriptor && setup.slot < 20) {
+					failHostOperation("animation frame", nodeOffset);
+					return;
+				}
 				if (_platformTag == kOldTotPlatformDOS && rendered &&
 					!_introSkip.fastForwarding()) {
 					presentFrame(true);
@@ -1092,7 +1110,7 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 					servicePresentation();
 					waitPresentationFrames(atariStAnimationVblCount());
 				}
-				if (_vm->shouldQuit())
+				if (shouldAbortExecution())
 					break;
 				if (setup.frameDelay) {
 					const uint16 units = (uint16)setup.frameDelay * 10;
@@ -1111,7 +1129,11 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 	if (setup.flags & kAnimClear) {
 		SpriteBounds restoredBounds;
 		const bool hadActive = _active.bounds(setup.slot, restoredBounds);
-		if (_active.restore(setup.slot) && hadActive)
+		if (hadActive && !_active.restore(setup.slot)) {
+			failHostOperation("animation restore", nodeOffset);
+			return;
+		}
+		if (hadActive)
 			_renderer.notePresentationDirtyRect(
 				restoredBounds.x, restoredBounds.y,
 				restoredBounds.x + restoredBounds.w - 1,
@@ -1119,13 +1141,19 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 	}
 }
 
-void PreGob_Emmanuelle::saveScreenRect(uint16 x, uint16 y, uint16 width,
+bool PreGob_Emmanuelle::saveScreenRect(uint16 x, uint16 y, uint16 width,
 									   uint16 height) {
-	_renderer.saveScreenRect(x, y, width, height);
+	if (_renderer.saveScreenRect(x, y, width, height))
+		return true;
+	failHostOperation("save screen region");
+	return false;
 }
 
-void PreGob_Emmanuelle::restoreScreenRect() {
-	_renderer.restoreScreenRect();
+bool PreGob_Emmanuelle::restoreScreenRect() {
+	if (_renderer.restoreScreenRect())
+		return true;
+	failHostOperation("restore screen region");
+	return false;
 }
 
 void PreGob_Emmanuelle::fillScreen(byte color) {
@@ -1199,12 +1227,15 @@ bool PreGob_Emmanuelle::renderFightActors(const FightState &state) {
 }
 
 void PreGob_Emmanuelle::reinitializeVideoBackend(byte videoMode) {
+	bool applied;
 	if (_platformTag == kOldTotPlatformAmiga)
-		_renderer.applyAmigaModulePalette(_moduleFileStem);
+		applied = _renderer.applyAmigaModulePalette(_moduleFileStem);
 	else if (_platformTag == kOldTotPlatformAtariST)
-		_renderer.applyAtariModulePalette(_moduleFileStem);
+		applied = _renderer.applyAtariModulePalette(_moduleFileStem);
 	else
-		_renderer.applyDosPalette(_moduleFileStem, videoMode);
+		applied = _renderer.applyDosPalette(_moduleFileStem, videoMode);
+	if (!applied)
+		failHostOperation("video palette");
 }
 
 } // End of namespace Emmanuelle

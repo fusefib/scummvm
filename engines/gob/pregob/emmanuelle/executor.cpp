@@ -40,6 +40,8 @@ const char *oldTotExecutorStopReasonName(OldTotExecutorStopReason reason) {
 		return "suspended";
 	case kOldTotExecutorHostAbort:
 		return "host abort";
+	case kOldTotExecutorHostFailure:
+		return "host failure";
 	case kOldTotExecutorMalformedData:
 		return "malformed data";
 	case kOldTotExecutorStackOverflow:
@@ -72,6 +74,10 @@ bool OldTotExecutor::valid(uint32 o, uint32 n) const {
 }
 bool OldTotExecutor::stop(OldTotExecutorStopReason reason) {
 	_stopReason = reason;
+	if (reason == kOldTotExecutorHostFailure) {
+		_suspended = false;
+		_suspendedNode = 0;
+	}
 	return false;
 }
 bool OldTotExecutor::step() {
@@ -173,6 +179,8 @@ bool OldTotExecutor::importState(const OldTotExecutorState &in) {
 }
 
 bool OldTotExecutor::runRoot() {
+	if (_host.executionFailed())
+		return stop(kOldTotExecutorHostFailure);
 	if (!_started) {
 		uint16 root;
 		if (!_data.getRootSequenceOffset(root) || !valid(root, 2))
@@ -204,6 +212,8 @@ bool OldTotExecutor::resume() {
 }
 
 bool OldTotExecutor::dispatch(uint16 offset) {
+	if (_host.executionFailed())
+		return stop(kOldTotExecutorHostFailure);
 	if (_suspended)
 		return stop(kOldTotExecutorSuspended);
 	_stopReason = kOldTotExecutorRunning;
@@ -214,6 +224,8 @@ bool OldTotExecutor::dispatch(uint16 offset) {
 }
 
 bool OldTotExecutor::dispatchScheduled(uint16 offset) {
+	if (_host.executionFailed())
+		return stop(kOldTotExecutorHostFailure);
 	// Timer callbacks are synchronous subroutine calls. Preserve the suspended
 	// main continuation underneath their temporary frames.
 	const bool wasSuspended = _suspended;
@@ -222,13 +234,11 @@ bool OldTotExecutor::dispatchScheduled(uint16 offset) {
 	_suspendedNode = 0;
 	_stopReason = kOldTotExecutorRunning;
 	const uint base = _frames.size();
-	if (!pushDispatch(offset)) {
-		_suspended = wasSuspended;
-		_suspendedNode = oldNode;
+	if (!pushDispatch(offset))
 		return false;
-	}
 	const bool ok = runLoop(base);
-	if (wasSuspended && !_suspended) {
+	if (ok && wasSuspended &&
+		_stopReason == kOldTotExecutorCompleted) {
 		_suspended = true;
 		_suspendedNode = oldNode;
 		_stopReason = kOldTotExecutorSuspended;
@@ -362,6 +372,8 @@ bool OldTotExecutor::processDispatch(OldTotExecFrame &f) {
 		f.inputState = OldTotExecFrame::kInputPolling;
 		const int16 selected = _host.chooseInputRegion(
 			current, n, initialEntry, reentering);
+		if (_host.executionFailed() || _host.shouldAbortExecution())
+			return true;
 		if (selected == -3) {
 			_suspended = true;
 			_suspendedNode = current;
@@ -425,18 +437,23 @@ bool OldTotExecutor::processDispatch(OldTotExecFrame &f) {
 }
 
 bool OldTotExecutor::runLoop(uint baseDepth) {
+	if (_host.executionFailed())
+		return stop(kOldTotExecutorHostFailure);
 	while (_frames.size() > baseDepth && !_suspended) {
 		if (_host.shouldAbortExecution()) {
 			_stopReason = kOldTotExecutorHostAbort;
 			return true;
 		}
 		OldTotExecFrame &f = _frames.back();
-		if (f.kind == OldTotExecFrame::kDispatch) {
-			if (!processDispatch(f))
-				return false;
-		} else {
-			if (!processSequence(f))
-				return false;
+		const bool ok = f.kind == OldTotExecFrame::kDispatch
+			? processDispatch(f) : processSequence(f);
+		if (_host.executionFailed())
+			return stop(kOldTotExecutorHostFailure);
+		if (!ok)
+			return false;
+		if (_host.shouldAbortExecution()) {
+			_stopReason = kOldTotExecutorHostAbort;
+			return true;
 		}
 	}
 	_stopReason = _suspended ? kOldTotExecutorSuspended
