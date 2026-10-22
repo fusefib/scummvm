@@ -126,6 +126,52 @@ bool OldTotExecutor::replaceWithSequence(uint16 owner, uint16 cursor, byte count
 	return true;
 }
 
+void OldTotExecutor::exportState(OldTotExecutorState &out) const {
+	out.frames = _frames;
+	out.steps = _steps;
+	out.started = _started;
+	out.suspended = _suspended;
+	out.suspendedNode = _suspendedNode;
+}
+
+bool OldTotExecutor::exportSuspendedInputState(
+		OldTotExecutorState &out) const {
+	uint16 node = 0;
+	if (!activeInputNode(node))
+		return false;
+	exportState(out);
+	out.suspended = true;
+	out.suspendedNode = node;
+	return true;
+}
+
+bool OldTotExecutor::importState(const OldTotExecutorState &in) {
+	if (in.frames.size() > 256)
+		return false;
+	for (uint i = 0; i < in.frames.size(); ++i) {
+		const OldTotExecFrame &f = in.frames[i];
+		if (f.inputState > OldTotExecFrame::kInputReenter)
+			return false;
+		if (f.kind == OldTotExecFrame::kDispatch) {
+			if (f.current && !valid(f.current))
+				return false;
+		} else if (f.kind == OldTotExecFrame::kSequence) {
+			if (f.index > f.count || !valid(f.cursor))
+				return false;
+		} else
+			return false;
+	}
+	if (in.suspended && (!in.suspendedNode || !valid(in.suspendedNode) || _data.byteAt(in.suspendedNode) != 0x1B))
+		return false;
+	_frames = in.frames;
+	_steps = in.steps;
+	_started = in.started;
+	_suspended = in.suspended;
+	_suspendedNode = in.suspendedNode;
+	_stopReason = _suspended ? kOldTotExecutorSuspended : kOldTotExecutorRunning;
+	return true;
+}
+
 bool OldTotExecutor::runRoot() {
 	if (!_started) {
 		uint16 root;
