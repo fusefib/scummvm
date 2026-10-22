@@ -117,6 +117,32 @@ InputLatch::InputLatch() {
 	_mouseButtons = 0;
 }
 
+IntroSkipState::IntroSkipState() {
+	_state = kUnavailable;
+}
+
+void IntroSkipState::begin() {
+	_state = kPlaying;
+}
+
+bool IntroSkipState::request() {
+	if (_state != kPlaying)
+		return false;
+	_state = kRequested;
+	return true;
+}
+
+bool IntroSkipState::activate(bool quitRequested) {
+	if (_state != kRequested || quitRequested)
+		return false;
+	_state = kSkipping;
+	return true;
+}
+
+void IntroSkipState::finish() {
+	_state = kUnavailable;
+}
+
 void InputLatch::noteKey(int16 key) {
 	if (_key == 0 && key != 0)
 		_key = key;
