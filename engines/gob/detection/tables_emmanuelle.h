@@ -186,4 +186,16 @@
 	 "INIT.TOA",
 	 0},
 
+	{{"emmanuelle",
+	  nullptr,
+	  AD_ENTRY1s("LOADAERO.TOA", "4debafe279865987cc6b43040d364a47", 50816),
+	  DE_DEU,
+	  kPlatformAmiga,
+	  ADGF_UNSTABLE,
+	  GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
+	 kFeaturesEGA,
+	 nullptr,
+	 "INIT.TOA",
+	 0},
+
 #endif // GOB_DETECTION_TABLES_EMMANUELLE_H

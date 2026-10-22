@@ -61,6 +61,8 @@ uint16 amigaRandomBounded(uint32 &state, uint16 upperExclusive);
 uint16 amigaNativeDelayMilliseconds(uint16 units);
 void getAmigaSchedulerTiming(byte period, uint16 &reload,
 							 uint16 &initialCountdown);
+uint16 amigaInitialModuleSelector(uint16 scriptSelector,
+								 bool forceLoadHot);
 
 bool decodeAmigaPackedPixels(const Common::Array<byte> &payload,
 							 uint16 width, uint16 height,

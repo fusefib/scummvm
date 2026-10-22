@@ -731,6 +731,11 @@ bool amigaHandlesNativeCommand(byte command) {
 	}
 }
 
+uint16 amigaInitialModuleSelector(uint16 scriptSelector,
+								 bool forceLoadHot) {
+	return forceLoadHot ? 1 : scriptSelector;
+}
+
 uint16 amigaNativeRand(uint32 &state) {
 	state = state * 0x41C64E6DU + 0x3039U;
 	return (uint16)((state >> 16) & 0x7FFFU);

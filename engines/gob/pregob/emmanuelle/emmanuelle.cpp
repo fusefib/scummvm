@@ -450,6 +450,8 @@ bool PreGob_Emmanuelle::applyInitialModuleSelectorPolicy(
 		return false;
 
 	const uint16 scriptSelector = selector;
+	selector = amigaInitialModuleSelector(
+		scriptSelector, _vm->_language == Common::DE_DEU);
 	if (_diagnosticTraceEnabled)
 		debugC(2, kDebugGameFlow,
 			   "EMMA_TRACE event=amiga_initial_selector script=%u selected=%u",
