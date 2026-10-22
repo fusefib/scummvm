@@ -76,6 +76,8 @@ public:
 	}
 
 	ADDetectedGame fallbackDetect(const FileMap &allFiles, const Common::FSList &fslist, ADDetectedGameExtraInfo **extra) const override;
+	DetectedGame toDetectedGame(const ADDetectedGame &adGame,
+		ADDetectedGameExtraInfo *extraInfo) const override;
 
 private:
 	/**
@@ -87,7 +89,17 @@ private:
 GobMetaEngineDetection::GobMetaEngineDetection() :
 	AdvancedMetaEngineDetection(Gob::gameDescriptions, gobGames) {
 
-	_guiOptions = GUIO2(GUIO_NOLAUNCHLOAD, GAMEOPTION_TTS);
+	_guiOptions = GUIO1(GAMEOPTION_TTS);
+}
+
+DetectedGame GobMetaEngineDetection::toDetectedGame(
+		const ADDetectedGame &adGame,
+		ADDetectedGameExtraInfo *extraInfo) const {
+	DetectedGame game = AdvancedMetaEngineDetection::toDetectedGame(
+		adGame, extraInfo);
+	if (adGame.desc && strcmp(adGame.desc->gameId, "emmanuelle") != 0)
+		game.appendGUIOptions(GUIO_NOLAUNCHLOAD);
+	return game;
 }
 
 ADDetectedGame GobMetaEngineDetection::fallbackDetect(const FileMap &allFiles, const Common::FSList &fslist, ADDetectedGameExtraInfo **extra) const {
