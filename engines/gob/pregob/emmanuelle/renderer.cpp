@@ -36,6 +36,7 @@
 #include "gob/video.h"
 #include "gob/pregob/emmanuelle/animation.h"
 #include "gob/pregob/emmanuelle/dos.h"
+#include "gob/pregob/emmanuelle/emmanuelle.h"
 #include "gob/pregob/emmanuelle/fight.h"
 #include "gob/pregob/emmanuelle/saveload.h"
 #include "gob/pregob/emmanuelle/text.h"

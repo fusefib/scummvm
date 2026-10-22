@@ -34,6 +34,11 @@
 namespace Gob {
 namespace Emmanuelle {
 
+enum OldTotAudioKind {
+	kOldTotAudioNone = 0,
+	kOldTotAudioDosSpeaker
+};
+
 struct ProtectionPrompt {
 	byte letter;
 	uint16 box;

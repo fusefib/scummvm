@@ -90,6 +90,7 @@ MODULE_OBJS := \
 	pregob/emmanuelle/active.o \
 	pregob/emmanuelle/animation.o \
 	pregob/emmanuelle/dos.o \
+	pregob/emmanuelle/emmanuelle.o \
 	pregob/emmanuelle/executor.o \
 	pregob/emmanuelle/fight.o \
 	pregob/emmanuelle/gameflow.o \
