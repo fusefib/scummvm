@@ -95,6 +95,7 @@ MODULE_OBJS := \
 	pregob/emmanuelle/oldixx.o \
 	pregob/emmanuelle/oldtot.o \
 	pregob/emmanuelle/runtime.o \
+	pregob/emmanuelle/saveload.o \
 	pregob/emmanuelle/text.o \
 	pregob/onceupon/onceupon.o \
 	pregob/onceupon/abracadabra.o \
