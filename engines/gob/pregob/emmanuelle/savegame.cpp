@@ -39,6 +39,35 @@
 namespace Gob {
 namespace Emmanuelle {
 
+struct EmmanuellePreparedRestore {
+	EmmanuellePreparedRestore() {
+		// Own staged resources; commitRestore adopts objects or swaps their state.
+		tot = nullptr;
+		localI00 = nullptr;
+		vm = nullptr;
+		executor = nullptr;
+		active = nullptr;
+
+		cursorDefined = false;
+	}
+	~EmmanuellePreparedRestore() {
+		delete executor;
+		delete vm;
+		delete active;
+		delete localI00;
+		delete tot;
+	}
+
+	OldTotData *tot;
+	OldIxxBank *localI00;
+	OldTotVM *vm;
+	OldTotExecutor *executor;
+	ActiveSpriteLayer *active;
+	OldTotRendererPreparedState renderer;
+	SurfacePtr cursor;
+	bool cursorDefined;
+};
+
 bool PreGob_Emmanuelle::moduleUsesLocalGraphics(
 		ModuleId module) const {
 	return module == kModuleLoadHot || module == kModuleLoadPla ||
@@ -159,6 +188,202 @@ Common::Error PreGob_Emmanuelle::saveGameStream(
 	debugC(2, kDebugSaveLoad,
 		"Emmanuelle: %s profile %u module %s at 0x%04X",
 		isAutosave ? "autosaved" : "saved",
+		(uint)state.profile, state.moduleFileStem.c_str(),
+		state.executor.suspendedNode);
+	return Common::kNoError;
+}
+
+bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
+		EmmanuellePreparedRestore &prepared, Common::String &reason) {
+	if (state.platform != _platformTag ||
+		state.profile != emmanuelleRuntimeProfile(
+			_platformTag, _vm->_language)) {
+		reason = "runtime profile mismatch";
+		return false;
+	}
+	const char *stem = moduleFileStem(state.module);
+	if (!stem || !state.moduleFileStem.equalsIgnoreCase(stem)) {
+		reason = "invalid module";
+		return false;
+	}
+	const char *extension = ".TOT";
+	uint32 size = 0;
+	byte digest[16];
+	prepared.tot = loadScriptResource(Common::String(stem) + extension,
+		reason, &size, digest);
+	if (!prepared.tot)
+		return false;
+	if (size != state.moduleSize ||
+		memcmp(digest, state.moduleMD5, sizeof(digest)) != 0) {
+		reason = _s("This save uses a different version of the game scripts. "
+			"Try an earlier saved game.");
+		return false;
+	}
+	if (state.executor.suspendedNode >= prepared.tot->size() ||
+		prepared.tot->byteAt(state.executor.suspendedNode) != 0x1B) {
+		reason = "invalid suspended instruction";
+		return false;
+	}
+	if (moduleUsesLocalGraphics(state.module)) {
+		const char *ixxExtension = ".I00";
+		Common::SeekableReadStream *stream = openLoose(
+			Common::String(stem) + ixxExtension);
+		if (!stream) {
+			reason = "local graphics bank is unavailable";
+			return false;
+		}
+		prepared.localI00 = new OldIxxBank(*stream);
+		delete stream;
+		if (!prepared.localI00->valid()) {
+			reason = "invalid local graphics bank";
+			return false;
+		}
+	}
+	prepared.vm = new OldTotVM(*prepared.tot, *this);
+	prepared.vm->loadVariables(state.variables, ARRAYSIZE(state.variables));
+	prepared.vm->runtimeState() = state.runtime;
+	if (!prepared.vm->importTransientState(state.vmTransient)) {
+		reason = "invalid VM state";
+		return false;
+	}
+	prepared.executor = new OldTotExecutor(
+		*prepared.tot, *prepared.vm, *this);
+	if (!prepared.executor->importState(state.executor)) {
+		reason = "invalid executor state";
+		return false;
+	}
+	if (state.renderer.savedRegions.size() !=
+		state.vmTransient.savedRegionDepth) {
+		reason = "invalid framebuffer or region state";
+		return false;
+	}
+	OldTotRenderer candidateRenderer(_vm);
+	candidateRenderer.setResourceBanks(prepared.localI00, _sharedI01);
+	if (!candidateRenderer.prepareState(state.renderer,
+			prepared.renderer)) {
+		reason = "invalid renderer state";
+		return false;
+	}
+	prepared.active = new ActiveSpriteLayer(_vm, 20);
+	if (!prepared.active->importState(state.renderer)) {
+		reason = "invalid active-object state";
+		return false;
+	}
+
+	byte table[16];
+	byte alternateTable[16];
+	const bool paletteAvailable = state.runtime.videoMode <= 1
+		? getDosCgaColorTables(stem, table, alternateTable)
+		: getDosPaletteRegisters(stem, table);
+	if (!paletteAvailable) {
+		reason = "DOS presentation resources are unavailable";
+		return false;
+	}
+	if (state.cursorDefined) {
+		OldTotDrawDescriptor descriptor;
+		if (!prepared.tot->decodeDrawDescriptor(
+				state.cursorDescriptor, descriptor)) {
+			reason = "invalid cursor descriptor";
+			return false;
+		}
+		prepared.cursor = candidateRenderer.decodeSpriteSurface(
+			*prepared.tot, descriptor);
+		if (!prepared.cursor || prepared.cursor->getWidth() != 16 ||
+			prepared.cursor->getHeight() != 16) {
+			reason = "invalid cursor image";
+			return false;
+		}
+		prepared.cursorDefined = true;
+	}
+
+	reason.clear();
+	return true;
+}
+
+void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
+		EmmanuellePreparedRestore &prepared) {
+	const char *stem = moduleFileStem(state.module);
+	const bool usesLocalGraphics = moduleUsesLocalGraphics(state.module);
+	if (_vm && _vm->_sound)
+			_vm->_sound->speakerOff();
+	clearModuleObjects();
+	_tot = prepared.tot;
+	prepared.tot = nullptr;
+	_localI00 = prepared.localI00;
+	prepared.localI00 = nullptr;
+	_scriptVM = prepared.vm;
+	prepared.vm = nullptr;
+	_executor = prepared.executor;
+	prepared.executor = nullptr;
+	_moduleFileStem = stem;
+	_currentModule = state.module;
+	_currentUsesLocalGraphics = usesLocalGraphics;
+	_renderer.setResourceBanks(_localI00, _sharedI01);
+	_renderer.commitState(prepared.renderer);
+	_active.swapState(*prepared.active);
+	_runtimeState = state.runtime;
+	for (uint i = 0; i < ARRAYSIZE(_variables); ++i)
+		_variables[i] = state.variables[i];
+	_randomState = state.randomState;
+	_vm->_rnd.setSeed(state.commonRandomSeed);
+	_schedulerAccumulator = state.schedulerAccumulator;
+	_schedulerDebt = state.schedulerDebt;
+	_node24Offset = state.rememberedNode24Offset;
+	resetInitialStateAfterLoad();
+	_cursorDefined = false;
+	_cursorDescriptor = 0;
+	if (prepared.cursorDefined) {
+		setCursor(*prepared.cursor, 0, 0);
+		_cursorDefined = true;
+		_cursorDescriptor = state.cursorDescriptor;
+	}
+	if (state.cursorVisible && _cursorDefined)
+		showCursor();
+	else
+		hideCursor();
+	discardPendingInput();
+	setInputContext(kEmmanuelleInputChoice);
+	if (!_renderer.applyDosPalette(_moduleFileStem, _runtimeState.videoMode))
+		warning("Emmanuelle: unable to restore DOS palette for %s",
+			_moduleFileStem.c_str());
+	presentFrame(false, true);
+}
+
+void PreGob_Emmanuelle::resetInitialStateAfterLoad() {
+	_introSkip.finish();
+	_initialInitPresentation = false;
+	_initialTitleState = kInitialTitleNone;
+	_initialTomahawkVisibleStart = 0;
+	_dosInitialFrameCoverage = Common::Rect();
+	_dosInitialFrameHasCoverage = false;
+	_dosInitialFramePresented = false;
+	_mainMenuActionThisPoll = false;
+	_openMainMenuAfterSuspend = false;
+	_audioKind = kOldTotAudioNone;
+	_audioSlot = -1;
+	_audioFrequency = 0;
+	_audioRepeatCount = 0;
+	_audioActive = false;
+	_audioBlocking = false;
+}
+
+Common::Error PreGob_Emmanuelle::loadGameStream(
+		Common::SeekableReadStream &stream) {
+	if (_executor && !_executor->suspended())
+		return Common::kReadingFailed;
+	EmmanuelleSaveState state;
+	EmmanuellePreparedRestore prepared;
+	Common::String reason;
+	if (!decodeEmmanuelleSave(stream, state, reason) ||
+		!prepareRestore(state, prepared, reason)) {
+		debugC(1, kDebugSaveLoad,
+			"Emmanuelle: rejected save state: %s",
+			reason.empty() ? "restore failed" : reason.c_str());
+		return Common::Error(Common::kReadingFailed, reason);
+	}
+	commitRestore(state, prepared);
+	debugC(2, kDebugSaveLoad,
+		"Emmanuelle: restored profile %u module %s at 0x%04X",
 		(uint)state.profile, state.moduleFileStem.c_str(),
 		state.executor.suspendedNode);
 	return Common::kNoError;
