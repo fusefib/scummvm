@@ -61,4 +61,34 @@
 	 "INIT.TOT",
 	 0},
 
+{{"emmanuelle",
+	  nullptr,
+	  AD_ENTRY2s(
+		  "INIT.TOT", "ad6cc0d8ba2964848250d56ca2e5a6ab", 26368,
+		  "INIT.I01", "b8fac1a5213832a0d3420b9ad42e7253", 36736),
+	  EN_ANY,
+	  kPlatformDOS,
+	  ADGF_UNSTABLE,
+	  GUIO5(GUIO_NOSUBTITLES, GUIO_NOSPEECH,
+			GAMEOPTION_EMMANUELLE_ENHANCED_FIGHTS,
+			GUIO_RENDERCGA, GUIO_RENDEREGA)},
+	 kFeaturesEGA | kFeatures16Colors,
+	 nullptr,
+	 "INIT.TOT",
+	 0},
+
+{{"emmanuelle",
+	  nullptr,
+	  AD_ENTRY2s(
+		  "INIT.TOT", "ad6cc0d8ba2964848250d56ca2e5a6ab", 26368,
+		  "INIT.I01", "b8fac1a5213832a0d3420b9ad42e7253", 36736),
+	  EN_ANY,
+	  kPlatformAtariST,
+	  ADGF_UNSTABLE,
+	  GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
+	 kFeaturesEGA | kFeatures16Colors,
+	 nullptr,
+	 "INIT.TOT",
+	 0},
+
 #endif // GOB_DETECTION_TABLES_EMMANUELLE_H
