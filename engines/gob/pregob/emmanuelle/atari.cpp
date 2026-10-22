@@ -51,6 +51,7 @@ const char *const *PreGob_Emmanuelle::atariIntroSampleNames(byte &count) const {
 	return kAtariSoundBank1;
 }
 
+
 void PreGob_Emmanuelle::startAtariFightConclusionAudio() {
 	if (_platformTag != kOldTotPlatformAtariST || _sampleCount <= 13)
 		return;
@@ -83,6 +84,89 @@ void PreGob_Emmanuelle::serviceAtariFightFrame(
 	}
 	if (!played)
 		delay(100);
+}
+
+bool PreGob_Emmanuelle::handleAtariFF0B(byte command) {
+	if (!atariStHandlesNativeCommand(command))
+		return false;
+	switch (command) {
+	case 40:
+		if (_scriptVM && _scriptVM->readVariable(0) == 10)
+			_renderer.applyAtariPalette(3);
+		_colorCycleEnabled = false;
+		return true;
+	case 41:
+		_colorCycleEnabled = true;
+		return true;
+	case 42:
+		_renderer.disarmAtariTransition();
+		return true;
+	case 43:
+		servicePresentation();
+		_renderer.armAtariTransition(43);
+		return true;
+	case 44:
+		_renderer.armAtariTransition(44);
+		return true;
+	case 45: {
+		uint16 words[4];
+		const byte variant = (byte)randomBounded(3);
+		if (getAtariStEffect45(variant, words))
+			_renderer.applyAtariEffectWords(words);
+		return true;
+	}
+	case 46:
+		for (byte i = 0; i < 3 && !_vm->shouldQuit(); ++i) {
+			_renderer.rotateAtariEffectWords();
+			delay(250);
+		}
+		return true;
+	case 47:
+		_renderer.selectAtariPalette(4, false);
+		fadeAtariToBlack();
+		return true;
+	case 80:
+		stopSampleAudio();
+		return true;
+	case 81:
+		if (_scriptVM && _scriptVM->readVariable(0) == 0 &&
+			_scriptVM->readVariable(1) == 0)
+			playAtariIntro();
+		return true;
+	case 82:
+	case 83:
+	case 85:
+	case 86:
+	case 89:
+	case 90:
+	case 91:
+	case 92:
+	case 94:
+		return playAtariSampleCommand(command);
+	case 201:
+		if (_scriptVM && command201SkipsIntermediateNodes(
+						  _platformTag, _scriptVM->readVariable(0)))
+			_skipIntermediateSequenceNodes = true;
+		return true;
+	default:
+		return false;
+	}
+}
+
+void PreGob_Emmanuelle::fadeAtariFromBlack() {
+	for (byte phase = 0; phase < 8 && !_vm->shouldQuit(); ++phase) {
+		if (!_renderer.presentAtariFadeFromBlackStep(phase))
+			break;
+		waitPresentationFrames();
+	}
+}
+
+void PreGob_Emmanuelle::fadeAtariToBlack() {
+	for (byte phase = 0; phase < 8 && !_vm->shouldQuit(); ++phase) {
+		if (!_renderer.presentAtariFadeToBlackStep(phase))
+			break;
+		waitPresentationFrames();
+	}
 }
 
 bool PreGob_Emmanuelle::playAtariIntro() {
@@ -191,6 +275,50 @@ void PreGob_Emmanuelle::serviceAtariAudio() {
 		setAudioState(kOldTotAudioAtariSample, slot, 0, 1,
 						   false, true);
 	}
+}
+
+void PreGob_Emmanuelle::delayAtariAnimation(uint16 units) {
+	while (units && !_vm->shouldQuit()) {
+		const uint16 chunk = atariStAnimationDelayChunk(units);
+		delay(chunk);
+		if (_vm->shouldQuit())
+			break;
+		_colorCycleCounter = 5;
+		serviceColorCycle();
+		units -= chunk;
+	}
+}
+
+void PreGob_Emmanuelle::waitAtariInputRelease() {
+	int16 mouseX = 0;
+	int16 mouseY = 0;
+	MouseButtons mouseButtons = kMouseButtonsNone;
+	int16 key = kKeyNone;
+	do {
+		key = pollGameInput(mouseX, mouseY, mouseButtons);
+		if (key != kKeyNone)
+			delay(20);
+	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+			 key != kKeyNone);
+}
+
+void PreGob_Emmanuelle::waitAtariContinuation() {
+	if (!servicePresentation())
+		presentFrame(true);
+	fadeAtariFromBlack();
+	if (_vm->_sound && _vm->_sound->blasterPlayingSound())
+		stopSampleAudio();
+	_pendingInput.clear();
+	_vm->_util->clearKeyBuf();
+	int16 mouseX = 0;
+	int16 mouseY = 0;
+	MouseButtons mouseButtons = kMouseButtonsNone;
+	int16 key = kKeyNone;
+	do {
+		delay(20);
+		key = pollGameInput(mouseX, mouseY, mouseButtons);
+	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+			 !atariStContinuationAcceptsKey(key));
 }
 
 bool PreGob_Emmanuelle::hasAnyAtariSoundFile() const {

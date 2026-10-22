@@ -43,6 +43,7 @@
 #include "gob/util.h"
 #include "gob/video.h"
 
+#include "gob/pregob/emmanuelle/atari.h"
 #include "gob/pregob/emmanuelle/dos.h"
 #include "gob/pregob/emmanuelle/oldixx.h"
 #include "gob/pregob/emmanuelle/oldtot.h"
@@ -53,7 +54,15 @@ namespace Emmanuelle {
 
 namespace {
 
+const char *const kSoundBank2[19] = {
+	"P1.SPL", "P2.SPL", "P3.SPL", "P5.SPL", "P6.SPL", "P7.SPL",
+	"P8.SPL", "P9.SPL", "P10.SPL", "P11.SPL", "P12.SPL",
+	"P13.SPL", "P14.SPL", "P15.SPL", "P16.SPL", "P17.SPL",
+	"P19.SPL", "P20.SPL", "P21.SPL"};
+
 OldTotPlatformTag detectPlatform(const GobEngine *vm) {
+	if (vm && vm->getPlatform() == Common::kPlatformAtariST)
+		return kOldTotPlatformAtariST;
 
 	return kOldTotPlatformDOS;
 }
@@ -155,11 +164,13 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
 	_colorCycleCounter = 0;
 
 	_renderer.setPlatform(_platformTag);
-	_runtimeState.videoMode = dosVideoModeForRenderMode(
-		Common::parseRenderMode(ConfMan.get("render_mode")));
-	_runtimeState.savedVideoMode = _runtimeState.videoMode;
-	_enhancedDosFights =
-		ConfMan.getBool("emmanuelle_enhanced_fights");
+	if (_platformTag == kOldTotPlatformDOS) {
+		_runtimeState.videoMode = dosVideoModeForRenderMode(
+			Common::parseRenderMode(ConfMan.get("render_mode")));
+		_runtimeState.savedVideoMode = _runtimeState.videoMode;
+		_enhancedDosFights =
+			ConfMan.getBool("emmanuelle_enhanced_fights");
+	}
 
 	if (_vm->_console)
 		_vm->_console->registerEmmanuelleDebugger(this);
@@ -170,7 +181,7 @@ PreGob_Emmanuelle::~PreGob_Emmanuelle() {
 		_vm->_console->unregisterEmmanuelleDebugger();
 	_introSkip.finish();
 	setInputContext(kEmmanuelleInputNone);
-
+	stopSampleAudio();
 	if (_platformTag == kOldTotPlatformDOS && _vm && _vm->_sound)
 		_vm->_sound->speakerOff();
 	clearModuleObjects();
@@ -308,6 +319,8 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 }
 
 void PreGob_Emmanuelle::clearModuleObjects() {
+	if (_platformTag == kOldTotPlatformAtariST)
+		_renderer.resetAtariModuleState();
 
 	delete _executor;
 	_executor = nullptr;
@@ -371,8 +384,15 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 	if (_vm->shouldQuit())
 		return false;
 	bool paletteApplied = false;
-	paletteApplied = _renderer.applyDosPalette(
-			_moduleFileStem, _runtimeState.videoMode);
+	if (_platformTag == kOldTotPlatformAtariST) {
+			if (_renderer.atariModulePaletteDiffers(_moduleFileStem) &&
+				!_renderer.atariBlack()) {
+				fadeAtariToBlack();
+			}
+			paletteApplied = _renderer.applyAtariModulePalette(_moduleFileStem);
+		} else
+			paletteApplied = _renderer.applyDosPalette(
+				_moduleFileStem, _runtimeState.videoMode);
 	if (!paletteApplied) {
 		debugC(1, kDebugGraphics,
 			   "Emmanuelle: no platform palette for module %s", stem);
@@ -412,7 +432,13 @@ bool PreGob_Emmanuelle::executeLoadedModule() {
 	if (ok && !_vm->shouldQuit() && _initialInitPresentation &&
 		_moduleFileStem.equalsIgnoreCase("INIT"))
 		ensureInitialTomahawkHandoff();
-
+	if (ok && !_vm->shouldQuit() && _platformTag != kOldTotPlatformDOS &&
+		!_initialInitComplete && _currentModule == kModuleInit) {
+		_initialInitComplete = true;
+		ok = loadSampleBank(2);
+		if (!ok)
+			_initialTitleState = kInitialTitleNone;
+	}
 	if (ok && !_vm->shouldQuit() &&
 		_initialInitPresentation &&
 		_moduleFileStem.equalsIgnoreCase("INIT"))
@@ -434,19 +460,28 @@ bool PreGob_Emmanuelle::applyInitialModuleSelectorPolicy(
 }
 
 uint16 PreGob_Emmanuelle::randomBounded(uint16 upperExclusive) {
+	if (_platformTag == kOldTotPlatformAtariST) {
+		return atariStRandomBounded(
+			_vm->_rnd.getRandomNumber(0xFFFFFFFFU), upperExclusive);
+	}
 
 	return dosRandomBounded(_randomState, upperExclusive);
 }
 
 void PreGob_Emmanuelle::schedulerTiming(byte period, bool timingVariant,
 										uint16 &reload, uint16 &initialCountdown) {
+	if (_platformTag == kOldTotPlatformAtariST) {
+		(void)timingVariant;
+		getAtariStSchedulerTiming(period, reload, initialCountdown);
+		return;
+	}
 
 	getDosSchedulerTiming(period, timingVariant, reload, initialCountdown);
 }
 
 void PreGob_Emmanuelle::beginIntroFastForward() {
 	hideCursor();
-
+	stopSampleAudio();
 	if (_platformTag == kOldTotPlatformDOS && _vm->_sound)
 		_vm->_sound->speakerOff();
 	if (_diagnosticTraceEnabled)
@@ -462,7 +497,8 @@ void PreGob_Emmanuelle::finishIntro() {
 	setInputContext(kEmmanuelleInputNone);
 	if (fastForwarding) {
 		if (!resolved) {
-
+			if (_platformTag == kOldTotPlatformAtariST)
+				servicePresentation();
 			presentFrame(false, true);
 		}
 		discardPendingInput();
@@ -475,6 +511,27 @@ void PreGob_Emmanuelle::finishIntro() {
 
 bool PreGob_Emmanuelle::skipIntermediateSequenceNodes() const {
 	return _platformTag != kOldTotPlatformDOS && _skipIntermediateSequenceNodes;
+}
+
+void PreGob_Emmanuelle::serviceColorCycle() {
+	if (_platformTag == kOldTotPlatformDOS)
+		return;
+	const ColorCycleResult result = advanceColorCycle(
+		_colorCycleCounter, _colorCycleEnabled,
+		_scriptVM ? _scriptVM->readVariable(0) : 0);
+	_colorCycleCounter = result.counter;
+	if (result.rotatePalette) {
+		if (_platformTag == kOldTotPlatformAtariST)
+			_renderer.rotateAtariColorCycleWords();
+
+	}
+}
+
+void PreGob_Emmanuelle::serviceWaitColorCycle() {
+	if (_platformTag == kOldTotPlatformDOS)
+		return;
+	_colorCycleCounter = prepareAtariStWaitColorCounter(_colorCycleCounter);
+	serviceColorCycle();
 }
 
 void PreGob_Emmanuelle::setAudioState(
@@ -495,6 +552,70 @@ void PreGob_Emmanuelle::setAudioState(
 			   blocking ? 1U : 0U);
 }
 
+bool PreGob_Emmanuelle::loadSampleBank(byte bank) {
+	if (_platformTag == kOldTotPlatformDOS ||
+		(bank != 1 && bank != 2))
+		return false;
+	if (_platformTag == kOldTotPlatformAtariST && _silentAtariAudio) {
+		_sampleBank = bank;
+		_sampleCount = 0;
+		return true;
+	}
+
+	stopSampleAudio();
+	for (uint i = 0; i < ARRAYSIZE(_samples); ++i)
+		_vm->_sound->sampleFree(&_samples[i]);
+
+	if (!prepareSampleBank(bank, _samples, _sampleCount)) {
+		_sampleBank = 0;
+		return false;
+	}
+	_sampleBank = bank;
+	debugC(2, kDebugSound,
+		   "Emmanuelle: loaded sample bank %u (%u samples)",
+		   bank, _sampleCount);
+	return true;
+}
+
+const char *const *PreGob_Emmanuelle::sampleBankNames(byte bank, byte &count) const {
+	if (bank == 2) {
+		count = ARRAYSIZE(kSoundBank2);
+		return kSoundBank2;
+	}
+	if (_platformTag == kOldTotPlatformAtariST)
+		return atariIntroSampleNames(count);
+
+	count = 0;
+	return nullptr;
+}
+
+bool PreGob_Emmanuelle::prepareSampleBank(byte bank, SoundDesc *samples,
+		byte &count) const {
+	byte size;
+	const char *const *names = sampleBankNames(bank, size);
+	count = 0;
+	if (!names)
+		return false;
+	for (byte i = 0; i < size; ++i) {
+		if (!_vm->_sound->sampleLoad(&samples[i], SOUND_SND, names[i])) {
+			debugC(1, kDebugSound, "Emmanuelle: failed to load sample %s", names[i]);
+			return false;
+		}
+	}
+	count = size;
+	return true;
+}
+
+void PreGob_Emmanuelle::stopSampleAudio() {
+	if (_platformTag == kOldTotPlatformDOS || !_vm || !_vm->_sound)
+		return;
+	_atariIntroPosition = -1;
+	_vm->_sound->blasterStop(0);
+	if (_audioActive)
+		setAudioState(_audioKind, _audioSlot, 0,
+						   _audioRepeatCount, _audioBlocking, false);
+}
+
 void PreGob_Emmanuelle::dispatchScheduled(uint16 target) {
 	if (_executor)
 		_executor->dispatchScheduled(target);
@@ -503,7 +624,8 @@ void PreGob_Emmanuelle::dispatchScheduled(uint16 target) {
 void PreGob_Emmanuelle::runFight(
 	uint16 leftMeterBonus, uint16 rightMeterBonus, uint16 leftDamageOption,
 	uint16 rightDamageOption, uint16 leftBaseMeter, uint16 rightBaseMeter) {
-
+	if (_platformTag == kOldTotPlatformAtariST)
+		_skipIntermediateSequenceNodes = false;
 	if (!_recupTot || _recupRoots.size() != 40 || !_scriptVM)
 		return;
 
@@ -560,6 +682,8 @@ void PreGob_Emmanuelle::runFight(
 			playDosFightTone(440);
 		if (state.pendingRightDamage != 0 && !_vm->shouldQuit())
 			playDosFightTone(1000);
+		if (!_vm->shouldQuit())
+			serviceAtariFightFrame(state);
 
 		if (_vm->shouldQuit())
 			break;
@@ -573,7 +697,8 @@ void PreGob_Emmanuelle::runFight(
 			break;
 	}
 	if (result && !_vm->shouldQuit()) {
-
+		if (result == 4)
+			startAtariFightConclusionAudio();
 		for (byte frame = 1; frame <= 9 && !_vm->shouldQuit(); ++frame) {
 			setFightConclusionFrame(
 				state, result, frame, (byte)(fightRandom(8) + 1));
@@ -585,7 +710,8 @@ void PreGob_Emmanuelle::runFight(
 			presentFrame(true);
 			processGameEvents();
 		}
-
+		if (result == 4 || _platformTag == kOldTotPlatformAmiga)
+			stopSampleAudio();
 		if (!_vm->shouldQuit()) {
 			const uint16 terminalDelay =
 				2000;
@@ -617,6 +743,9 @@ void PreGob_Emmanuelle::runFight(
 
 bool PreGob_Emmanuelle::handleNativeFF0B(
 	byte command, OldTotRuntimeState &runtimeState) {
+
+	if (_platformTag == kOldTotPlatformAtariST)
+		return handleAtariFF0B(command);
 
 	bool reinitialize = false;
 	if (!applyDosNativeCommand(command, runtimeState, reinitialize,
@@ -680,7 +809,14 @@ void PreGob_Emmanuelle::exportDiagnosticSnapshot(
 	out.native.colorCounter = _colorCycleCounter;
 	out.native.activeObjectCount = _active.activeCount();
 	out.native.savedRegionDepth = _renderer.savedRegionDepth();
-
+	if (_platformTag == kOldTotPlatformAtariST) {
+		out.native.presentationMode = _renderer.presentationMode();
+		out.native.presentationVariant = _renderer.presentationVariant();
+		out.native.presentationPhase = _renderer.presentationPhase();
+		out.native.presentationDirty = _renderer.presentationPending();
+		out.native.presentationActive = _renderer.presentationActive();
+		out.native.paletteBlack = _renderer.atariBlack();
+	}
 }
 
 bool PreGob_Emmanuelle::queryProtectionHint(
@@ -725,7 +861,13 @@ void PreGob_Emmanuelle::run() {
 			   ? "Amiga"
 			   : (_platformTag == kOldTotPlatformAtariST ? "Atari ST"
 														 : "DOS"));
-
+	if (_platformTag != kOldTotPlatformDOS &&
+		_platformTag != kOldTotPlatformAtariST &&
+		_platformTag != kOldTotPlatformAmiga) {
+		debugC(1, kDebugGameFlow,
+			   "Emmanuelle: platform frontend is not implemented yet");
+		return;
+	}
 	initScreen();
 	addCursor();
 	_cursorOwned = true;
@@ -734,7 +876,8 @@ void PreGob_Emmanuelle::run() {
 	_vm->_util->setFrameRate(kHostFrameRate);
 
 	bool ready = loadSharedAssets();
-
+	if (ready && _platformTag != kOldTotPlatformDOS)
+		ready = loadSampleBank(1);
 	if (ready) {
 		_variables[0] = 0;
 		_initialTitleState = kInitialTitleNone;

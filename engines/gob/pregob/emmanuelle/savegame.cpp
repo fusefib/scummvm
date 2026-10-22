@@ -110,6 +110,10 @@ EmmanuelleSaveBoundaryState PreGob_Emmanuelle::saveBoundaryState() const {
 	}
 
 	state.paletteReady = true;
+	if (state.paletteReady && _platformTag == kOldTotPlatformAtariST)
+		state.paletteReady = _renderer.atariPaletteValid() &&
+			!_renderer.atariBlack() &&
+			_renderer.presentationQuiescent();
 
 	state.inInit = _currentModule == kModuleInit;
 	state.audioIdle = !isAudioPlaying(_platformTag, _audioActive,
@@ -176,7 +180,10 @@ bool PreGob_Emmanuelle::exportSaveState(
 	state.nativeState.skipIntermediateSequenceNodes = _skipIntermediateSequenceNodes;
 	state.nativeState.colorCycleEnabled = _colorCycleEnabled;
 	state.nativeState.colorCycleCounter = _colorCycleCounter;
-
+	if (_platformTag == kOldTotPlatformAtariST) {
+		state.nativeState.effectCommand =
+			_renderer.presentationMode();
+	}
 	return true;
 }
 
@@ -284,19 +291,28 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		reason = "invalid active-object state";
 		return false;
 	}
+	if (_platformTag == kOldTotPlatformAtariST &&
+		(!state.renderer.atariPaletteValid || state.renderer.atariBlack ||
+		 (state.nativeState.effectCommand != 0 &&
+		  state.nativeState.effectCommand != 43))) {
+		reason = "invalid Atari presentation state";
+		return false;
+	}
 
 	if (!state.nativeState.initialInitComplete) {
 		reason = "startup is not complete";
 		return false;
 	}
-	byte table[16];
-	byte alternateTable[16];
-	const bool paletteAvailable = state.runtime.videoMode <= 1
-		? getDosCgaColorTables(stem, table, alternateTable)
-		: getDosPaletteRegisters(stem, table);
-	if (!paletteAvailable) {
-		reason = "DOS presentation resources are unavailable";
-		return false;
+	if (_platformTag == kOldTotPlatformDOS) {
+		byte table[16];
+		byte alternateTable[16];
+		const bool paletteAvailable = state.runtime.videoMode <= 1
+			? getDosCgaColorTables(stem, table, alternateTable)
+			: getDosPaletteRegisters(stem, table);
+		if (!paletteAvailable) {
+			reason = "DOS presentation resources are unavailable";
+			return false;
+		}
 	}
 	if (state.cursorDefined) {
 		OldTotDrawDescriptor descriptor;
@@ -314,7 +330,12 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		}
 		prepared.cursorDefined = true;
 	}
-
+	if (_platformTag != kOldTotPlatformDOS && !_silentAtariAudio) {
+		if (!prepareSampleBank(2, prepared.samples, prepared.sampleCount)) {
+			reason = "sound bank is unavailable";
+			return false;
+		}
+	}
 	reason.clear();
 	return true;
 }
@@ -323,8 +344,10 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 		EmmanuellePreparedRestore &prepared) {
 	const char *stem = moduleFileStem(state.module);
 	const bool usesLocalGraphics = moduleUsesLocalGraphics(state.module);
-	if (_vm && _vm->_sound)
-			_vm->_sound->speakerOff();
+	if (_platformTag != kOldTotPlatformDOS)
+		stopSampleAudio();
+	else if (_vm && _vm->_sound)
+		_vm->_sound->speakerOff();
 	clearModuleObjects();
 	_tot = prepared.tot;
 	prepared.tot = nullptr;
@@ -371,10 +394,15 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 		hideCursor();
 	discardPendingInput();
 	setInputContext(kEmmanuelleInputChoice);
-	if (!_renderer.applyDosPalette(_moduleFileStem, _runtimeState.videoMode))
-		warning("Emmanuelle: unable to restore DOS palette for %s",
-			_moduleFileStem.c_str());
-	presentFrame(false, true);
+	if (_platformTag == kOldTotPlatformDOS) {
+		if (!_renderer.applyDosPalette(_moduleFileStem, _runtimeState.videoMode))
+			warning("Emmanuelle: unable to restore DOS palette for %s",
+				_moduleFileStem.c_str());
+		presentFrame(false, true);
+	} else {
+		_vm->_draw->blitInvalidated();
+		_vm->_video->retrace(false);
+	}
 }
 
 void PreGob_Emmanuelle::resetInitialStateAfterLoad() {
