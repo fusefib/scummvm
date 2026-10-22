@@ -438,6 +438,8 @@ EmmanuelleRuntimeProfile emmanuelleRuntimeProfile(
 		return kEmmanuelleProfileDosEnglish;
 	}
 	if (platform == kOldTotPlatformAtariST) {
+		if (language == Common::ES_ESP)
+			return kEmmanuelleProfileAtariSpanish;
 		return kEmmanuelleProfileAtariEnglish;
 	}
 	return kEmmanuelleProfileInvalid;
@@ -472,6 +474,7 @@ bool emmanuelleProfileMatchesPlatform(EmmanuelleRuntimeProfile profile,
 	case kEmmanuelleProfileDosSpanish:
 		return platform == kOldTotPlatformDOS;
 	case kEmmanuelleProfileAtariEnglish:
+	case kEmmanuelleProfileAtariSpanish:
 		return platform == kOldTotPlatformAtariST;
 	default:
 		return false;
