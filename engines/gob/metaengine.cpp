@@ -27,13 +27,16 @@
 
 #include "engines/advancedDetector.h"
 
+#include "backends/keymapper/keymap.h"
 #include "common/config-manager.h"
 #include "common/hashmap.h"
+#include "common/platform.h"
 
 #include "common/translation.h"
 
 #include "gob/gameidtotype.h"
 #include "gob/gob.h"
+#include "gob/pregob/emmanuelle/input_keymaps.h"
 
 // For struct GOBGameDescription.
 #include "gob/detection/detection.h"
@@ -86,6 +89,7 @@ public:
 	}
 
 	bool hasFeature(MetaEngineFeature f) const override;
+	Common::KeymapArray initKeymaps(const char *target) const override;
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const Gob::GOBGameDescription *desc) const override;
 
@@ -96,6 +100,15 @@ public:
 
 bool GobMetaEngine::hasFeature(MetaEngineFeature f) const {
 	return false;
+}
+
+Common::KeymapArray GobMetaEngine::initKeymaps(const char *target) const {
+	if (!target || getGameId(target) != "emmanuelle")
+		return MetaEngine::initKeymaps(target);
+
+	const Common::Platform platform = Common::parsePlatform(
+		ConfMan.get("platform", target));
+	return Gob::Emmanuelle::createEmmanuelleKeymaps(platform);
 }
 
 bool Gob::GobEngine::hasFeature(EngineFeature f) const {

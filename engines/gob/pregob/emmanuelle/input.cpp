@@ -38,6 +38,31 @@
 namespace Gob {
 namespace Emmanuelle {
 
+void PreGob_Emmanuelle::setInputContext(EmmanuelleInputContext context) {
+	Common::Keymapper *keymapper = _vm->getEventManager()->getKeymapper();
+	if (!keymapper)
+		return;
+	const EmmanuelleInputContext effectiveContext =
+		_introSkip.available() ? kEmmanuelleInputIntro : context;
+	for (int value = kEmmanuelleInputIntro;
+		 value <= kEmmanuelleInputFight; ++value) {
+		const EmmanuelleInputContext candidate =
+			(EmmanuelleInputContext)value;
+		Common::Keymap *keymap = keymapper->getKeymap(
+			emmanuelleInputKeymapId(candidate));
+		if (keymap)
+			keymap->setEnabled(candidate == effectiveContext);
+	}
+	_inputContext = effectiveContext;
+}
+
+void PreGob_Emmanuelle::handleCustomAction(
+		Common::CustomEventType action) {
+
+	if (action == (Common::CustomEventType)kEmmanuelleActionSkipIntro)
+		_introSkip.request();
+}
+
 void PreGob_Emmanuelle::processGameEvents() {
 	_vm->_util->processInput();
 
