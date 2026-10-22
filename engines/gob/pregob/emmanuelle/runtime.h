@@ -68,6 +68,24 @@ struct InputBoundary {
 	bool showCursor;
 };
 
+/** Intro skip state, cleared at INIT's first input choice. */
+class IntroSkipState {
+public:
+	IntroSkipState();
+
+	void begin();
+	bool request();
+	bool activate(bool quitRequested);
+	void finish();
+
+	bool available() const { return _state != kUnavailable; }
+	bool fastForwarding() const { return _state == kSkipping; }
+
+private:
+	enum State { kUnavailable, kPlaying, kRequested, kSkipping };
+	State _state;
+};
+
 bool isAudioPlaying(OldTotPlatformTag platform, bool speakerActive,
 	bool samplePlaying);
 /** Native timer quanta per 50 Hz input pass. */
