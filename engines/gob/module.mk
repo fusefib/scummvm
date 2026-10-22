@@ -87,6 +87,7 @@ MODULE_OBJS := \
 	pregob/txtfile.o \
 	pregob/gctfile.o \
 	pregob/seqfile.o \
+	pregob/emmanuelle/active.o \
 	pregob/emmanuelle/animation.o \
 	pregob/emmanuelle/dos.o \
 	pregob/emmanuelle/executor.o \
