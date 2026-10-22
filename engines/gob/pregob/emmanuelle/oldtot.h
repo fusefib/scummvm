@@ -131,6 +131,7 @@ public:
 
 	bool valid() const { return !_data.empty(); }
 	uint32 size() const { return _data.size(); }
+	bool computeMD5(byte digest[16]) const;
 
 	byte byteAt(uint32 offset) const;
 	uint16 uint16BEAt(uint32 offset) const;

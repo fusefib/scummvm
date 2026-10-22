@@ -29,8 +29,6 @@
 
 #include "common/config-manager.h"
 #include "common/events.h"
-#include "common/memstream.h"
-#include "common/md5.h"
 #include "common/rendermode.h"
 #include "common/system.h"
 
@@ -210,8 +208,7 @@ Common::SeekableReadStream *PreGob_Emmanuelle::openLoose(
 }
 
 OldTotData *PreGob_Emmanuelle::loadScriptResource(
-		const Common::String &name, Common::String &reason,
-		uint32 *sourceSize, byte *sourceMD5) const {
+		const Common::String &name, Common::String &reason) const {
 	Common::SeekableReadStream *stream = openLoose(name);
 	if (!stream || stream->size() <= 0 || stream->size() > 0xFFFF) {
 		delete stream;
@@ -219,28 +216,8 @@ OldTotData *PreGob_Emmanuelle::loadScriptResource(
 		return nullptr;
 	}
 
-	Common::Array<byte> data;
-	data.resize((uint32)stream->size());
-	if (stream->read(&data[0], data.size()) != data.size()) {
-		delete stream;
-		reason = "unable to read script resource";
-		return nullptr;
-	}
+	OldTotData *tot = new OldTotData(*stream);
 	delete stream;
-
-	byte digest[16];
-	Common::MemoryReadStream identityStream(&data[0], data.size());
-	if (!Common::computeStreamMD5(identityStream, digest)) {
-		reason = "unable to identify script resource";
-		return nullptr;
-	}
-	if (sourceSize)
-		*sourceSize = data.size();
-	if (sourceMD5)
-		memcpy(sourceMD5, digest, sizeof(digest));
-
-	Common::MemoryReadStream scriptStream(&data[0], data.size());
-	OldTotData *tot = new OldTotData(scriptStream);
 	if (!tot->valid()) {
 		delete tot;
 		reason = "malformed script resource";

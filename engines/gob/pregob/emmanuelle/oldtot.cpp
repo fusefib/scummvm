@@ -27,6 +27,9 @@
 
 #include "gob/pregob/emmanuelle/oldtot.h"
 
+#include "common/md5.h"
+#include "common/memstream.h"
+
 namespace Gob {
 namespace Emmanuelle {
 
@@ -81,6 +84,68 @@ OldTotData::OldTotData(Common::SeekableReadStream &stream) {
 	stream.seek(0);
 	if (stream.read(&_data[0], _data.size()) != _data.size())
 		_data.clear();
+}
+
+bool OldTotData::isCasinoWheelWait(OldTotPlatformTag platform,
+		Common::Language language, uint16 offset) const {
+	if (platform != kOldTotPlatformDOS && platform != kOldTotPlatformAtariST &&
+		platform != kOldTotPlatformAmiga)
+		return false;
+	if ((language == Common::ES_ESP && platform == kOldTotPlatformAmiga) ||
+		(language == Common::DE_DEU && platform != kOldTotPlatformAmiga))
+		return false;
+	static const struct {
+		Common::Language language;
+		uint16 sequence;
+		uint16 message;
+	} layouts[] = {
+		{Common::EN_ANY, 0x4D12, 0x1B6F},
+		{Common::ES_ESP, 0x4B8D, 0x1B2A},
+		{Common::FR_FRA, 0x4CE6, 0x1BA4},
+		{Common::DE_DEU, 0x4D55, 0x1B9E}
+	};
+	for (uint layout = 0; layout < ARRAYSIZE(layouts); ++layout) {
+		if (layouts[layout].language != language)
+			continue;
+		const uint16 start = layouts[layout].sequence;
+		if (!has(start, 80) || offset < start + 4 || offset >= start + 62 ||
+			(offset - start - 4) % 5 != 0 ||
+			_data[start] != 0x1C || _data[start + 1] != 29)
+			return false;
+		uint16 frames[3];
+		for (uint i = 0; i < 12; ++i) {
+			const uint16 record = start + 2 + 5 * i;
+			const uint16 frame = uint16BEAt(record);
+			if (_data[record + 2] != 0xFF || _data[record + 3] != 3 ||
+				_data[record + 4] != 1)
+				return false;
+			if (i < 3) {
+				OldTotDrawDescriptor descriptor;
+				if (!decodeDrawDescriptor(frame, descriptor) || descriptor.flags != 0x43 ||
+					descriptor.drawFlags != 0 || descriptor.x != 139 || descriptor.y != 153 ||
+					descriptor.width != 48 || descriptor.height != 24)
+					return false;
+				frames[i] = frame;
+			} else if (frame != frames[i % 3])
+				return false;
+		}
+		const byte saveBubble[] = {0xFF, 1, 0, 80, 0, 24, 0, 136, 0, 24};
+		OldTotDrawDescriptor bubble;
+		return frames[0] != frames[1] && frames[0] != frames[2] && frames[1] != frames[2] &&
+			memcmp(&_data[start + 62], saveBubble, sizeof(saveBubble)) == 0 &&
+			decodeDrawDescriptor(uint16BEAt(start + 72), bubble) &&
+			bubble.x == 80 && bubble.y == 24 && bubble.width == 136 && bubble.height == 24 &&
+			uint16BEAt(start + 74) == layouts[layout].message &&
+			uint16BEAt(start + 76) == 0x094F && uint16BEAt(start + 78) == 0xFF02;
+	}
+	return false;
+}
+
+bool OldTotData::computeMD5(byte digest[16]) const {
+	if (!valid())
+		return false;
+	Common::MemoryReadStream stream(&_data[0], _data.size());
+	return Common::computeStreamMD5(stream, digest);
 }
 
 bool OldTotData::has(uint32 offset, uint32 length) const {
