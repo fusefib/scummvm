@@ -75,8 +75,20 @@ public:
 	explicit OldTotRenderer(GobEngine *vm);
 
 	void setResourceBanks(const OldIxxBank *localBank, const OldIxxBank *sharedBank);
+	void setPlatform(OldTotPlatformTag platform) {
+		_platform = platform;
+
+	}
 	bool applyDosPalette(const Common::String &moduleName, byte videoMode);
 	bool presentDosFrame(const Common::String &moduleName, byte videoMode);
+	bool atariModulePaletteDiffers(const Common::String &moduleName) const;
+	bool applyAtariModulePalette(const Common::String &moduleName);
+	bool selectAtariPalette(byte paletteNumber, bool makeVisible);
+	bool applyAtariPalette(byte paletteNumber);
+	/** Apply one of eight native palette phases without owning event pacing. */
+	bool atariPaletteValid() const { return _atariPaletteValid; }
+	bool atariBlack() const { return _atariBlack; }
+
 
 	bool saveScreenRect(uint16 x, uint16 y, uint16 width, uint16 height);
 	bool restoreScreenRect();
@@ -107,11 +119,17 @@ public:
 	void commitState(OldTotRendererPreparedState &in);
 
 private:
+	bool setAtariWords(const uint16 words[16], bool makeVisible);
+	void showAtariWords(const uint16 words[16]);
 
 	GobEngine *_vm;
+	OldTotPlatformTag _platform;
 	const OldIxxBank *_localBank;
 	const OldIxxBank *_sharedBank;
 	Common::Array<OldTotPreparedSavedRegion> _savedRegions;
+	uint16 _atariLogicalPalette[16];
+	bool _atariPaletteValid;
+	bool _atariBlack;
 };
 
 } // End of namespace Emmanuelle

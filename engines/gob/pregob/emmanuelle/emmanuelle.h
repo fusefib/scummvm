@@ -137,6 +137,7 @@ private:
 
 	void presentFrame(bool waitForFrame, bool force = false);
 	void processGameEvents();
+	// Count frame boundaries, processing events after each wait.
 	// Count event-processing time toward the minimum elapsed duration.
 	void waitForMinimumDuration(uint32 startTime, uint32 minimumMilliseconds);
 	bool initialTomahawkPresentationVisible() const;

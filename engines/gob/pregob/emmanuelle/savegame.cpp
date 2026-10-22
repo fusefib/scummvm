@@ -258,6 +258,7 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		return false;
 	}
 	OldTotRenderer candidateRenderer(_vm);
+	candidateRenderer.setPlatform(_platformTag);
 	candidateRenderer.setResourceBanks(prepared.localI00, _sharedI01);
 	if (!candidateRenderer.prepareState(state.renderer,
 			prepared.renderer)) {

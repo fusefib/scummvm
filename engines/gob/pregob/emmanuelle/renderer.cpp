@@ -46,10 +46,20 @@ namespace Emmanuelle {
 
 OldTotRenderer::OldTotRenderer(GobEngine *vm) :
 	_vm(vm) {
+	_platform = kOldTotPlatformDOS;
 
 	// The module host owns both resource banks.
 	_localBank = nullptr;
 	_sharedBank = nullptr;
+
+	// A valid logical palette can be retained while the display is black.
+	_atariPaletteValid = false;
+	_atariBlack = false;
+
+
+
+	for (uint i = 0; i < ARRAYSIZE(_atariLogicalPalette); ++i)
+		_atariLogicalPalette[i] = 0;
 }
 
 bool OldTotRenderer::exportState(EmmanuelleRendererState &out) const {
@@ -109,6 +119,7 @@ bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
 void OldTotRenderer::commitState(OldTotRendererPreparedState &in) {
 	_vm->_draw->_backSurface->blit(*in.framebuffer);
 	_savedRegions.swap(in.savedRegions);
+
 
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0,
 		in.framebuffer->getWidth() - 1, in.framebuffer->getHeight() - 1);
@@ -609,6 +620,8 @@ bool PreGob_Emmanuelle::renderAnimationFrame(
 		return false;
 	const bool composited = _active.composite(
 		setup.slot, *cell, framePlan.x, framePlan.y, 0xFF);
+	if (composited) {
+	}
 	return composited;
 }
 
@@ -719,6 +732,8 @@ bool PreGob_Emmanuelle::renderFightActors(const FightState &state) {
 	const bool composited = _active.compositePair(
 		0, *leftCell, leftPlacement.cellX, leftPlacement.cellY, 0xFF,
 		1, *rightCell, rightPlacement.cellX, rightPlacement.cellY, 0xFF);
+	if (composited) {
+	}
 	return composited;
 }
 

@@ -117,6 +117,7 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm) :
 	_audioBlocking = false;
 
 
+	_renderer.setPlatform(_platformTag);
 	_runtimeState.videoMode = dosVideoModeForRenderMode(
 		Common::parseRenderMode(ConfMan.get("render_mode")));
 	_runtimeState.savedVideoMode = _runtimeState.videoMode;
@@ -675,7 +676,10 @@ static const char *loopResultDescription(ModuleLoopResult result) {
 void PreGob_Emmanuelle::run() {
 	debugC(1, kDebugGameFlow,
 		   "Emmanuelle: starting %s old-TOT runtime",
-		   "DOS");
+		   _platformTag == kOldTotPlatformAmiga
+			   ? "Amiga"
+			   : (_platformTag == kOldTotPlatformAtariST ? "Atari ST"
+														 : "DOS"));
 
 	initScreen();
 	addCursor();
