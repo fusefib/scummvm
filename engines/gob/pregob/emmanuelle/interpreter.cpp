@@ -279,7 +279,7 @@ bool OldTotVM::executeInline(uint16 offset) {
 		}
 		break;
 	case 0x03:
-		_host.waitOpcode03(op.arg);
+		_host.waitOpcode03(op.arg, offset);
 		break;
 	case 0x04:
 		_host.fillScreen(op.arg);

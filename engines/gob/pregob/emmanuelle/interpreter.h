@@ -67,7 +67,7 @@ public:
 	/** Execute inline FF03 using DOS wait semantics by default.
 	 * ST and Amiga also service presentation and palette changes here.
 	 */
-	virtual void waitOpcode03(byte arg) {
+	virtual void waitOpcode03(byte arg, uint16 offset) {
 		if (arg == 0)
 			waitReturn();
 		else if (arg == 0xFF)

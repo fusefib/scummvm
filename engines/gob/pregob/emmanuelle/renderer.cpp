@@ -709,16 +709,12 @@ bool PreGob_Emmanuelle::servicePresentation() {
 		if (!_introSkip.fastForwarding() &&
 			(!amiga || step.operation != kPresentationFrame || step.phase != 0))
 			_vm->_draw->blitInvalidated();
-		const byte hostWaits = amiga && step.operation == kPresentationMode44 && step.phase == 0 ? 0 : 1;
-		waitPresentationFrames(hostWaits);
-		// Report requested waits even when quitting interrupts them.
-		if (hostWaits != 0)
-			paced = true;
+		waitPresentationFrames();
+		paced = true;
 		if (step.operation == kPresentationFadeFromBlack && !_vm->shouldQuit()) {
-			if (amiga) {
+			if (amiga)
 				fadeAmigaFromBlack();
-				processGameEvents();
-			} else
+			else
 				fadeAtariFromBlack();
 		}
 		if (step.complete && !_vm->shouldQuit()) {
@@ -750,17 +746,14 @@ bool PreGob_Emmanuelle::servicePresentation() {
 
 void PreGob_Emmanuelle::waitForMinimumDuration(
 	uint32 startTime, uint32 minimumMilliseconds) {
-	while (!_vm->shouldQuit()) {
+	while (!_vm->shouldQuit() && !_introSkip.fastForwarding()) {
 		const uint32 elapsed = g_system->getMillis() - startTime;
 		const uint32 remaining = minimumDurationRemaining(
 			elapsed, minimumMilliseconds);
 		if (remaining == 0)
 			break;
 
-		const uint16 slice = remaining < 20 ? (uint16)remaining : 20;
-		_vm->_util->delay(slice);
-		processGameEvents();
-		serviceAtariAudio();
+		delay(remaining < 20 ? (uint16)remaining : 20);
 	}
 }
 

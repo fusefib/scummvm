@@ -115,7 +115,7 @@ public:
 	void restoreScreenRect() override;
 	void waitReturn() override;
 	void waitInputRelease() override;
-	void waitOpcode03(byte arg) override;
+	void waitOpcode03(byte arg, uint16 offset) override;
 	// Sleep for the requested duration; event processing adds to elapsed time.
 	void delay(uint16 milliseconds) override;
 	void fillScreen(byte color) override;

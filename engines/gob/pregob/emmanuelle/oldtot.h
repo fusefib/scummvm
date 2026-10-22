@@ -29,8 +29,11 @@
 #define GOB_PREGOB_EMMANUELLE_OLDTOT_H
 
 #include "common/array.h"
+#include "common/language.h"
 #include "common/scummsys.h"
 #include "common/stream.h"
+
+#include "gob/pregob/emmanuelle/platform.h"
 
 namespace Gob {
 namespace Emmanuelle {
@@ -137,6 +140,9 @@ public:
 
 	/** Decode an inline FF primitive.  Returns false if framing is invalid. */
 	bool decodeInline(uint16 offset, OldTotInline &out) const;
+	/** Recognize the twelve direct-draw waits in LOADCAS's roulette spin. */
+	bool isCasinoWheelWait(OldTotPlatformTag platform, Common::Language language,
+		uint16 offset) const;
 
 	/** Decode opcode 0x2A's timer callback table. */
 	bool decodeScheduledCycle(uint16 offset, OldTotScheduledCycle &out) const;

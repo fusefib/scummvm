@@ -127,20 +127,13 @@ int16 PreGob_Emmanuelle::pollGameInput(int16 &mouseX, int16 &mouseY,
 int16 PreGob_Emmanuelle::pollInterpreterInput(
 	int16 &mouseX, int16 &mouseY, MouseButtons &mouseButtons, bool inFight) {
 	const bool atari = _platformTag == kOldTotPlatformAtariST;
-	if (!atari && _platformTag != kOldTotPlatformAmiga) {
-		const int16 key = pollGameInput(mouseX, mouseY, mouseButtons);
-		serviceInterpreterTimer();
-		return key;
-	}
-
 	processGameEvents();
 	if (_vm->shouldQuit()) {
 		_schedulerDebt = 0;
 		return kKeyNone;
 	}
 
-	if (atari)
-		serviceAtariAudio();
+	serviceAtariAudio();
 	serviceColorCycle();
 	serviceInterpreterTimer();
 	if (_vm->shouldQuit()) {
@@ -150,13 +143,9 @@ int16 PreGob_Emmanuelle::pollInterpreterInput(
 
 	const bool paced = servicePresentation();
 	// Amiga fights perform their own frame pacing.
-	if ((atari || !inFight) && !paced && !_vm->shouldQuit() &&
-		!_introSkip.fastForwarding()) {
-		if (atari)
-			presentFrame(true);
-		else
-			waitPresentationFrames();
-	}
+	if ((_platformTag != kOldTotPlatformAmiga || !inFight) &&
+		!paced && !_vm->shouldQuit() && !_introSkip.fastForwarding())
+		presentFrame(true);
 	if (atari && !_vm->shouldQuit())
 		fadeAtariFromBlack();
 	if (_vm->shouldQuit()) {
@@ -367,7 +356,7 @@ void PreGob_Emmanuelle::waitInputRelease() {
 			 !inputIdle(key, mouseButtons));
 }
 
-void PreGob_Emmanuelle::waitOpcode03(byte arg) {
+void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16 offset) {
 	if (_introSkip.fastForwarding()) {
 		servicePresentation();
 		processGameEvents();
@@ -390,28 +379,26 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg) {
 			waitAtariInputRelease();
 		return;
 	}
-	if (_platformTag == kOldTotPlatformAmiga) {
-		servicePresentation();
-		noteInitialTomahawkVisible();
-		serviceWaitColorCycle();
-		delay(amigaNativeDelayMilliseconds(
-			opcode03DelayUnits(arg)));
-		return;
-	}
-	if (_platformTag == kOldTotPlatformDOS) {
-		presentFrame(true);
-		noteInitialTomahawkVisible();
-		processGameEvents();
-		if (!_vm->shouldQuit())
-			delay(dosOpcode03DelayMilliseconds(arg));
-		return;
-	}
+	// The twelve LOADCAS wheel draws have tiny native pauses. Keep each image
+	// readable on fast hosts without changing other script waits. This 80 ms
+	// minimum is a presentation policy, not a measured native drawing cost.
+	const bool wheel = arg == 1 && _currentModule == kModuleLoadCas && _tot &&
+		_tot->isCasinoWheelWait(_platformTag, _vm->_language, offset);
+	const uint32 presentationStart = wheel ? g_system->getMillis() : 0;
 	if (!servicePresentation())
 		presentFrame(true);
-	fadeAtariFromBlack();
+	if (_platformTag == kOldTotPlatformAtariST)
+		fadeAtariFromBlack();
 	noteInitialTomahawkVisible();
 	serviceWaitColorCycle();
-	delay(opcode03DelayUnits(arg));
+	uint16 milliseconds = opcode03DelayUnits(arg);
+	if (_platformTag == kOldTotPlatformDOS)
+		milliseconds = dosOpcode03DelayMilliseconds(arg);
+	else if (_platformTag == kOldTotPlatformAmiga)
+		milliseconds = amigaNativeDelayMilliseconds(milliseconds);
+	delay(milliseconds);
+	if (wheel)
+		waitForMinimumDuration(presentationStart, 80);
 }
 
 void PreGob_Emmanuelle::delay(uint16 milliseconds) {
