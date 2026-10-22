@@ -121,7 +121,18 @@ bool OldTotRenderer::exportState(EmmanuelleRendererState &out) const {
 	out.amigaBlack = _amigaBlack;
 	out.amigaModuleGeneration = _amigaModuleGeneration;
 	out.amigaPresentedGeneration = _amigaPresentedGeneration;
-
+	if (_platform == kOldTotPlatformAmiga) {
+		out.amigaPresentationMode = _presentation.mode();
+		out.amigaPresentationVariant = _presentation.variant();
+		out.amigaPresentationPhase = _presentation.phase();
+		out.amigaPresentationPending = _presentation.pending();
+		out.amigaPresentationActive = _presentation.active();
+		out.amigaPaletteTransitionPending =
+			_presentation.paletteTransitionPending();
+		if (_amigaPresentedSurface)
+			exportOldTotSurface(*_amigaPresentedSurface,
+				out.amigaPresentedFrame);
+	}
 	return true;
 }
 
@@ -226,6 +237,13 @@ void OldTotRenderer::commitState(OldTotRendererPreparedState &in) {
 			showAtariWords(black);
 		} else {
 			showAtariWords(_atariLogicalPalette);
+		}
+	} else if (_platform == kOldTotPlatformAmiga && _amigaPaletteValid) {
+		if (_amigaBlack) {
+			uint16 black[32] = {0};
+			showAmigaWords(black);
+		} else {
+			showAmigaWords(_amigaLogicalPalette);
 		}
 	}
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0,
@@ -426,6 +444,33 @@ bool OldTotRenderer::drawPackedPayload(const Common::Array<byte> &payload,
 		return false;
 
 	Surface &dest = *_vm->_draw->_backSurface;
+	if (_platform == kOldTotPlatformAmiga) {
+		Surface decoded(width, height, 1);
+		decoded.clear();
+		if (!decodeAmigaPackedPayload(payload, width, height, decoded))
+			return false;
+		for (int16 dy = 0; dy < (int16)height; ++dy) {
+			const int16 targetY = y + dy;
+			if (targetY < 0 || targetY >= (int16)dest.getHeight())
+				continue;
+			const int16 sourceY =
+				verticalFlip ? height - 1 - dy : dy;
+			for (int16 dx = 0; dx < (int16)width; ++dx) {
+				const int16 targetX = x + dx;
+				if (targetX < 0 || targetX >= (int16)dest.getWidth())
+					continue;
+				const int16 sourceX =
+					horizontalFlip ? width - 1 - dx : dx;
+				const uint32 pixel = decoded.get(sourceX, sourceY).get();
+				if (!transparentZero || pixel != 0)
+					dest.putPixelRaw(targetX, targetY, pixel);
+			}
+		}
+		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y,
+								x + width - 1, y + height - 1);
+		notePresentationDirtyRect(x, y, x + width - 1, y + height - 1);
+		return true;
+	}
 
 	Common::Array<byte> packedPayload = payload;
 	if (!horizontalFlip && !verticalFlip) {
@@ -510,8 +555,13 @@ SurfacePtr OldTotRenderer::decodeSpriteSurface(const OldTotData &tot,
 
 	SurfacePtr raw(new Surface(desc.width, desc.height, 1));
 	raw->clear();
-	_vm->_video->drawPackedSprite(&payload[0], desc.width, desc.height,
-								  0, 0, 0, *raw);
+	if (_platform == kOldTotPlatformAmiga) {
+		if (!decodeAmigaPackedPayload(payload, desc.width, desc.height, *raw))
+			return SurfacePtr();
+	} else {
+		_vm->_video->drawPackedSprite(&payload[0], desc.width, desc.height,
+									  0, 0, 0, *raw);
+	}
 	if (!desc.horizontalFlip() && !desc.verticalFlip())
 		return raw;
 
@@ -624,17 +674,19 @@ void PreGob_Emmanuelle::presentFrame(bool waitForFrame, bool force) {
 }
 
 bool PreGob_Emmanuelle::servicePresentation() {
-	if (_platformTag != kOldTotPlatformAtariST)
+	const bool amiga = _platformTag == kOldTotPlatformAmiga;
+	if (_platformTag != kOldTotPlatformAtariST && !amiga)
 		return false;
 
 	bool paced = false;
 	PresentationStep step;
 	while (!_vm->shouldQuit() && !_renderer.presentationQuiescent()) {
 		byte randomVariant = _renderer.presentationVariant();
+		// Mode 44 advances RNG here even when black selects a fade instead.
 		if (!_renderer.presentationActive() &&
 			_renderer.presentationMode() == 44)
 			randomVariant = (byte)randomBounded(5);
-		if (!_renderer.nextPresentationStep(
+		if (!_renderer.nextPresentationStep(amiga ? _renderer.amigaBlack() :
 				_renderer.atariBlack(), randomVariant, step))
 			break;
 
@@ -642,37 +694,54 @@ bool PreGob_Emmanuelle::servicePresentation() {
 		if (step.operation == kPresentationMode43 ||
 			step.operation == kPresentationMode44) {
 			if (step.phase == 0)
-				rendered = _renderer.beginAtariTransitionFrame();
+				rendered = amiga ? _renderer.beginAmigaTransitionFrame() :
+					_renderer.beginAtariTransitionFrame();
 			if (rendered && step.operation == kPresentationMode43)
-				rendered = _renderer.presentAtariMode43Step(step.phase);
-			else if (rendered &&
-					 step.operation == kPresentationMode44)
-				rendered = _renderer.presentAtariMode44Step(
-					step.variant, step.phase);
+				rendered = amiga ? _renderer.presentAmigaMode43Step(step.phase) :
+					_renderer.presentAtariMode43Step(step.phase);
+			else if (rendered && step.operation == kPresentationMode44)
+				rendered = amiga
+					? _renderer.presentAmigaMode44Step(step.variant, step.phase) :
+					_renderer.presentAtariMode44Step(step.variant, step.phase);
 		}
-		if (!_introSkip.fastForwarding())
+		// Ordinary Amiga phase zero waits before buffer publication (native
+		// 0x1136A); phase one publishes, waits again (0x113CE), then captures.
+		if (!_introSkip.fastForwarding() &&
+			(!amiga || step.operation != kPresentationFrame || step.phase != 0))
 			_vm->_draw->blitInvalidated();
-		waitPresentationFrames();
-		paced = true;
-		if (step.operation == kPresentationFadeFromBlack &&
-			!_vm->shouldQuit())
-			fadeAtariFromBlack();
-		if (step.complete && !_vm->shouldQuit())
-			_renderer.captureAtariPresentedFrame();
+		const byte hostWaits = amiga && step.operation == kPresentationMode44 && step.phase == 0 ? 0 : 1;
+		waitPresentationFrames(hostWaits);
+		// Report requested waits even when quitting interrupts them.
+		if (hostWaits != 0)
+			paced = true;
+		if (step.operation == kPresentationFadeFromBlack && !_vm->shouldQuit()) {
+			if (amiga) {
+				fadeAmigaFromBlack();
+				processGameEvents();
+			} else
+				fadeAtariFromBlack();
+		}
+		if (step.complete && !_vm->shouldQuit()) {
+			if (amiga)
+				_renderer.captureAmigaPresentedFrame();
+			else
+				_renderer.captureAtariPresentedFrame();
+		}
 		if (_diagnosticTraceEnabled &&
 			(!rendered || (step.operation != kPresentationFrame &&
 			 (step.phase == 0 || step.complete))))
 			debugC(3, kDebugGraphics,
-				   "EMMA_TRACE event=atari_present module=%s operation=%u "
-				   "variant=%u phase=%u complete=%u rendered=%u "
-				   "mode=%u pending=%u active=%u black=%u",
-				   _moduleFileStem.c_str(), (uint)step.operation,
-				   (uint)step.variant, (uint)step.phase,
-				   step.complete ? 1U : 0U, rendered ? 1U : 0U,
-				   (uint)_renderer.presentationMode(),
-				   _renderer.presentationPending() ? 1U : 0U,
-				   _renderer.presentationActive() ? 1U : 0U,
-				   _renderer.atariBlack() ? 1U : 0U);
+				"EMMA_TRACE event=%s_present module=%s operation=%u "
+				"variant=%u phase=%u complete=%u rendered=%u mode=%u "
+				"frame_pending=%u active=%u palette_transition=%u black=%u",
+				amiga ? "amiga" : "atari", _moduleFileStem.c_str(),
+				(uint)step.operation, (uint)step.variant, (uint)step.phase,
+				step.complete ? 1U : 0U, rendered ? 1U : 0U,
+				(uint)_renderer.presentationMode(),
+				_renderer.presentationPending() ? 1U : 0U,
+				_renderer.presentationActive() ? 1U : 0U,
+				amiga && _renderer.amigaPaletteTransitionPending() ? 1U : 0U,
+				(amiga ? _renderer.amigaBlack() : _renderer.atariBlack()) ? 1U : 0U);
 		if (!rendered || step.complete)
 			break;
 	}
@@ -758,6 +827,14 @@ bool PreGob_Emmanuelle::resolveIntroPresentation() {
 			_renderer.restoreAtariPaletteImmediately();
 		if (!_renderer.presentationQuiescent() ||
 			_renderer.atariBlack())
+			return false;
+	} else if (_platformTag == kOldTotPlatformAmiga) {
+		servicePresentation();
+		if (_renderer.amigaBlack())
+			_renderer.restoreAmigaPaletteImmediately();
+		if (!_renderer.presentationQuiescent() ||
+			_renderer.amigaPaletteTransitionPending() ||
+			_renderer.amigaBlack())
 			return false;
 	}
 	presentFrame(false, true);
@@ -1017,7 +1094,10 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 					presentFrame(true);
 					processGameEvents();
 				}
-
+				if (_platformTag == kOldTotPlatformAmiga && rendered) {
+					servicePresentation();
+					delay(amigaNativeDelayMilliseconds(150));
+				}
 				if (_platformTag == kOldTotPlatformAtariST && rendered) {
 					servicePresentation();
 					waitPresentationFrames(atariStAnimationVblCount());
@@ -1028,9 +1108,10 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 					const uint16 units = (uint16)setup.frameDelay * 10;
 					if (_platformTag == kOldTotPlatformAtariST)
 						delayAtariAnimation(units);
-					else {
-					delay(units);
-										}
+					else if (_platformTag == kOldTotPlatformAmiga)
+						delay(amigaNativeDelayMilliseconds(units));
+					else
+						delay(units);
 				}
 				if (_introSkip.fastForwarding())
 					processGameEvents();
@@ -1128,10 +1209,12 @@ bool PreGob_Emmanuelle::renderFightActors(const FightState &state) {
 }
 
 void PreGob_Emmanuelle::reinitializeVideoBackend(byte videoMode) {
-	if (_platformTag == kOldTotPlatformAtariST)
-			_renderer.applyAtariModulePalette(_moduleFileStem);
-		else
-			_renderer.applyDosPalette(_moduleFileStem, videoMode);
+	if (_platformTag == kOldTotPlatformAmiga)
+		_renderer.applyAmigaModulePalette(_moduleFileStem);
+	else if (_platformTag == kOldTotPlatformAtariST)
+		_renderer.applyAtariModulePalette(_moduleFileStem);
+	else
+		_renderer.applyDosPalette(_moduleFileStem, videoMode);
 }
 
 } // End of namespace Emmanuelle

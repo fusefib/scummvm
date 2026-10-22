@@ -47,6 +47,7 @@ const char *const *PreGob_Emmanuelle::amigaIntroSampleNames(byte &count) const {
 	return kAmigaSoundBank1;
 }
 
+
 void PreGob_Emmanuelle::serviceAmigaFightFrame(
 	const FightState &state) {
 	if (_platformTag != kOldTotPlatformAmiga)
@@ -65,6 +66,89 @@ void PreGob_Emmanuelle::serviceAmigaFightFrame(
 							 false, true);
 	}
 	delay(amigaNativeDelayMilliseconds(200));
+}
+
+bool PreGob_Emmanuelle::handleAmigaFF0B(byte command) {
+	if (!amigaHandlesNativeCommand(command))
+		return false;
+	switch (command) {
+	case 40:
+		_colorCycleEnabled = false;
+		if (_scriptVM && _scriptVM->readVariable(0) == 10)
+			_renderer.applyAmigaPalette(3, true);
+		return true;
+	case 41:
+		_colorCycleEnabled = true;
+		return true;
+	case 42:
+		_renderer.disarmAmigaTransition();
+		return true;
+	case 43:
+		servicePresentation();
+		_renderer.armAmigaTransition(43);
+		return true;
+	case 44:
+		_renderer.armAmigaTransition(44);
+		return true;
+	case 45: {
+		uint16 words[5];
+		const byte variant = (byte)randomBounded(3);
+		if (getAmigaEffect45(variant, words))
+			_renderer.applyAmigaEffect45(words);
+		return true;
+	}
+	case 46:
+		for (byte i = 0; i < 4 && !_vm->shouldQuit(); ++i) {
+			_renderer.rotateAmigaEffect46();
+			delay(amigaNativeDelayMilliseconds(250));
+		}
+		return true;
+	case 47:
+		_renderer.noteAmigaPaletteTransition();
+		fadeAmigaToBlack();
+		_renderer.applyAmigaPalette(4, false);
+		return true;
+	case 80:
+		stopSampleAudio();
+		return true;
+	case 81:
+		if (_scriptVM && _scriptVM->readVariable(0) == 0)
+			playAmigaIntro();
+		return true;
+	case 82:
+	case 83:
+	case 85:
+	case 86:
+	case 89:
+	case 90:
+	case 91:
+	case 92:
+	case 94:
+		return playAmigaSampleCommand(command);
+	case 201:
+		if (_scriptVM && command201SkipsIntermediateNodes(
+						  _platformTag, _scriptVM->readVariable(0)))
+			_skipIntermediateSequenceNodes = true;
+		return true;
+	default:
+		return false;
+	}
+}
+
+void PreGob_Emmanuelle::fadeAmigaFromBlack() {
+	for (byte phase = 0; phase < 16 && !_vm->shouldQuit(); ++phase) {
+		if (!_renderer.presentAmigaFadeFromBlackStep(phase))
+			break;
+		waitPresentationFrames();
+	}
+}
+
+void PreGob_Emmanuelle::fadeAmigaToBlack() {
+	for (byte phase = 0; phase < 16 && !_vm->shouldQuit(); ++phase) {
+		if (!_renderer.presentAmigaFadeToBlackStep(phase))
+			break;
+		waitPresentationFrames();
+	}
 }
 
 bool PreGob_Emmanuelle::playAmigaIntro() {
@@ -123,6 +207,18 @@ bool PreGob_Emmanuelle::playAmigaSampleCommand(byte command) {
 	if (sampleCommand.postDelay)
 		delay(amigaNativeDelayMilliseconds(sampleCommand.postDelay));
 	return true;
+}
+
+void PreGob_Emmanuelle::waitAmigaInputRelease() {
+	int16 mouseX = 0;
+	int16 mouseY = 0;
+	MouseButtons mouseButtons = kMouseButtonsNone;
+	int16 key = kKeyNone;
+	do {
+		delay(amigaNativeDelayMilliseconds(100));
+		key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
+	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+			 key != kKeyNone);
 }
 
 bool OldTotRenderer::decodeAmigaPackedPayload(

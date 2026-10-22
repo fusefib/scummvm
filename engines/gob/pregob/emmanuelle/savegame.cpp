@@ -114,7 +114,11 @@ EmmanuelleSaveBoundaryState PreGob_Emmanuelle::saveBoundaryState() const {
 		state.paletteReady = _renderer.atariPaletteValid() &&
 			!_renderer.atariBlack() &&
 			_renderer.presentationQuiescent();
-
+	if (state.paletteReady && _platformTag == kOldTotPlatformAmiga)
+		state.paletteReady = _renderer.amigaPaletteValid() &&
+			!_renderer.amigaBlack() &&
+			_renderer.presentationQuiescent() &&
+			!_renderer.amigaPaletteTransitionPending();
 	state.inInit = _currentModule == kModuleInit;
 	state.audioIdle = !isAudioPlaying(_platformTag, _audioActive,
 		_vm && _vm->_sound && _vm->_sound->blasterPlayingSound());
@@ -298,7 +302,18 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		reason = "invalid Atari presentation state";
 		return false;
 	}
-
+	if (_platformTag == kOldTotPlatformAmiga &&
+		(!state.renderer.amigaPaletteValid || state.renderer.amigaBlack ||
+		 state.renderer.amigaPresentationPending ||
+		 state.renderer.amigaPresentationActive ||
+		 state.renderer.amigaPaletteTransitionPending ||
+		 state.renderer.amigaPresentationVariant != 0 ||
+		 state.renderer.amigaPresentationPhase != 0 ||
+		 (state.renderer.amigaPresentationMode != 0 &&
+		  state.renderer.amigaPresentationMode != 43))) {
+		reason = "invalid Amiga presentation state";
+		return false;
+	}
 	if (!state.nativeState.initialInitComplete) {
 		reason = "startup is not complete";
 		return false;

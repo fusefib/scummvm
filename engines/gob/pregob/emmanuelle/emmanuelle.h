@@ -160,7 +160,7 @@ private:
 	int16 pollGameInput(int16 &mouseX, int16 &mouseY,
 						  MouseButtons &mouseButtons);
 	int16 pollInterpreterInput(int16 &mouseX, int16 &mouseY,
-							   MouseButtons &mouseButtons);
+		MouseButtons &mouseButtons, bool inFight = false);
 	void applyInputBoundary(const InputBoundary &boundary);
 	void discardPendingInput();
 	void serviceInterpreterTimer();

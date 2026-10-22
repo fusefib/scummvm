@@ -43,6 +43,7 @@
 #include "gob/util.h"
 #include "gob/video.h"
 
+#include "gob/pregob/emmanuelle/amiga.h"
 #include "gob/pregob/emmanuelle/atari.h"
 #include "gob/pregob/emmanuelle/dos.h"
 #include "gob/pregob/emmanuelle/oldixx.h"
@@ -63,7 +64,8 @@ const char *const kSoundBank2[19] = {
 OldTotPlatformTag detectPlatform(const GobEngine *vm) {
 	if (vm && vm->getPlatform() == Common::kPlatformAtariST)
 		return kOldTotPlatformAtariST;
-
+	if (vm && vm->getPlatform() == Common::kPlatformAmiga)
+		return kOldTotPlatformAmiga;
 	return kOldTotPlatformDOS;
 }
 
@@ -175,7 +177,8 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
 		_enhancedDosFights =
 			ConfMan.getBool("emmanuelle_enhanced_fights");
 	}
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		_randomState &= 0xFFFFU;
 	if (_vm->_console)
 		_vm->_console->registerEmmanuelleDebugger(this);
 }
@@ -325,7 +328,12 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 void PreGob_Emmanuelle::clearModuleObjects() {
 	if (_platformTag == kOldTotPlatformAtariST)
 		_renderer.resetAtariModuleState();
-
+	if (_platformTag == kOldTotPlatformAmiga) {
+		_active.discardAll();
+		_renderer.resetAmigaModuleState();
+		_schedulerAccumulator = 0;
+		_schedulerDebt = 0;
+	}
 	delete _executor;
 	_executor = nullptr;
 	delete _scriptVM;
@@ -349,7 +357,8 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 	_moduleFileStem = stem;
 	_currentModule = moduleId;
 	_currentUsesLocalGraphics = usesLocalGraphics;
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		_renderer.beginAmigaModuleState();
 	debugC(2, kDebugGameFlow, "Emmanuelle: loading module %s", stem);
 
 	const char *totExtension = _platformTag == kOldTotPlatformAmiga
@@ -388,15 +397,21 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 	if (_vm->shouldQuit())
 		return false;
 	bool paletteApplied = false;
-	if (_platformTag == kOldTotPlatformAtariST) {
-			if (_renderer.atariModulePaletteDiffers(_moduleFileStem) &&
-				!_renderer.atariBlack()) {
-				fadeAtariToBlack();
-			}
-			paletteApplied = _renderer.applyAtariModulePalette(_moduleFileStem);
-		} else
-			paletteApplied = _renderer.applyDosPalette(
-				_moduleFileStem, _runtimeState.videoMode);
+	if (_platformTag == kOldTotPlatformAmiga) {
+		if (_renderer.amigaModulePaletteDiffers(_moduleFileStem) &&
+			!_renderer.amigaBlack()) {
+			fadeAmigaToBlack();
+		}
+		paletteApplied = _renderer.applyAmigaModulePalette(_moduleFileStem);
+	} else if (_platformTag == kOldTotPlatformAtariST) {
+		if (_renderer.atariModulePaletteDiffers(_moduleFileStem) &&
+			!_renderer.atariBlack()) {
+			fadeAtariToBlack();
+		}
+		paletteApplied = _renderer.applyAtariModulePalette(_moduleFileStem);
+	} else
+		paletteApplied = _renderer.applyDosPalette(
+			_moduleFileStem, _runtimeState.videoMode);
 	if (!paletteApplied) {
 		debugC(1, kDebugGraphics,
 			   "Emmanuelle: no platform palette for module %s", stem);
@@ -411,7 +426,6 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 		debugC(2, kDebugGameFlow,
 			   "EMMA_TRACE event=module_load platform=%u module=%s size=%u",
 			   (uint)_platformTag, _moduleFileStem.c_str(), (uint)_tot->size());
-
 	return true;
 }
 
@@ -460,7 +474,17 @@ void PreGob_Emmanuelle::unloadModule() {
 
 bool PreGob_Emmanuelle::applyInitialModuleSelectorPolicy(
 		ModuleId moduleId, uint16 &selector) {
-	return false;
+	if (_platformTag != kOldTotPlatformAmiga || moduleId != kModuleInit)
+		return false;
+
+	const uint16 scriptSelector = selector;
+	selector = amigaInitialModuleSelector(
+		scriptSelector, false);
+	if (_diagnosticTraceEnabled)
+		debugC(2, kDebugGameFlow,
+			   "EMMA_TRACE event=amiga_initial_selector script=%u selected=%u",
+			   (uint)scriptSelector, (uint)selector);
+	return true;
 }
 
 uint16 PreGob_Emmanuelle::randomBounded(uint16 upperExclusive) {
@@ -468,7 +492,8 @@ uint16 PreGob_Emmanuelle::randomBounded(uint16 upperExclusive) {
 		return atariStRandomBounded(
 			_vm->_rnd.getRandomNumber(0xFFFFFFFFU), upperExclusive);
 	}
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		return amigaRandomBounded(_randomState, upperExclusive);
 	return dosRandomBounded(_randomState, upperExclusive);
 }
 
@@ -479,7 +504,11 @@ void PreGob_Emmanuelle::schedulerTiming(byte period, bool timingVariant,
 		getAtariStSchedulerTiming(period, reload, initialCountdown);
 		return;
 	}
-
+	if (_platformTag == kOldTotPlatformAmiga) {
+		(void)timingVariant;
+		getAmigaSchedulerTiming(period, reload, initialCountdown);
+		return;
+	}
 	getDosSchedulerTiming(period, timingVariant, reload, initialCountdown);
 }
 
@@ -501,8 +530,7 @@ void PreGob_Emmanuelle::finishIntro() {
 	setInputContext(kEmmanuelleInputNone);
 	if (fastForwarding) {
 		if (!resolved) {
-			if (_platformTag == kOldTotPlatformAtariST)
-				servicePresentation();
+			servicePresentation();
 			presentFrame(false, true);
 		}
 		discardPendingInput();
@@ -527,14 +555,17 @@ void PreGob_Emmanuelle::serviceColorCycle() {
 	if (result.rotatePalette) {
 		if (_platformTag == kOldTotPlatformAtariST)
 			_renderer.rotateAtariColorCycleWords();
-
+		else
+			_renderer.rotateAmigaColorCycle();
 	}
 }
 
 void PreGob_Emmanuelle::serviceWaitColorCycle() {
 	if (_platformTag == kOldTotPlatformDOS)
 		return;
-	_colorCycleCounter = prepareAtariStWaitColorCounter(_colorCycleCounter);
+	_colorCycleCounter = _platformTag == kOldTotPlatformAtariST
+		? prepareAtariStWaitColorCounter(_colorCycleCounter)
+		: prepareAmigaWaitColorCounter(_colorCycleCounter);
 	serviceColorCycle();
 }
 
@@ -588,7 +619,8 @@ const char *const *PreGob_Emmanuelle::sampleBankNames(byte bank, byte &count) co
 	}
 	if (_platformTag == kOldTotPlatformAtariST)
 		return atariIntroSampleNames(count);
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		return amigaIntroSampleNames(count);
 	count = 0;
 	return nullptr;
 }
@@ -628,7 +660,8 @@ void PreGob_Emmanuelle::dispatchScheduled(uint16 target) {
 void PreGob_Emmanuelle::runFight(
 	uint16 leftMeterBonus, uint16 rightMeterBonus, uint16 leftDamageOption,
 	uint16 rightDamageOption, uint16 leftBaseMeter, uint16 rightBaseMeter) {
-	if (_platformTag == kOldTotPlatformAtariST)
+	if (_platformTag == kOldTotPlatformAtariST ||
+		_platformTag == kOldTotPlatformAmiga)
 		_skipIntermediateSequenceNodes = false;
 	if (!_recupTot || _recupRoots.size() != 40 || !_scriptVM)
 		return;
@@ -647,10 +680,16 @@ void PreGob_Emmanuelle::runFight(
 			   (int)state.rightMeter, (uint)leftDamageOption, (uint)rightDamageOption);
 	renderFightActors(state);
 	presentFrame(_platformTag != kOldTotPlatformAmiga);
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		_renderer.commitAmigaDirectFrame();
 	if (_platformTag == kOldTotPlatformDOS && !_vm->shouldQuit()) {
 		const uint16 initialHold = kDosFightInitialHoldMilliseconds;
 		delay(initialHold);
+	} else if (_platformTag == kOldTotPlatformAmiga &&
+			   !_vm->shouldQuit()) {
+		serviceAmigaFightFrame(state);
+		stopSampleAudio();
+		delay(amigaNativeDelayMilliseconds(1000));
 	}
 	processGameEvents();
 	FightInputState fightInput(_platformTag == kOldTotPlatformDOS);
@@ -661,7 +700,9 @@ void PreGob_Emmanuelle::runFight(
 		int16 mouseX = 0;
 		int16 mouseY = 0;
 		MouseButtons mouseButtons = kMouseButtonsNone;
-		int16 key = takePendingInput(mouseX, mouseY, mouseButtons);
+		int16 key = _platformTag == kOldTotPlatformAmiga
+			? pollInterpreterInput(mouseX, mouseY, mouseButtons, true)
+			: takePendingInput(mouseX, mouseY, mouseButtons);
 		if (key >= 'a' && key <= 'z')
 			key = (int16)(key - 'a' + 'A');
 		fightInput.noteKey(key);
@@ -681,18 +722,23 @@ void PreGob_Emmanuelle::runFight(
 
 		advanceFightFrame(state);
 		renderFightActors(state);
-
+		if (_platformTag == kOldTotPlatformAmiga) {
+			presentFrame(false);
+			_renderer.commitAmigaDirectFrame();
+		}
 		if (state.pendingLeftDamage != 0)
 			playDosFightTone(440);
 		if (state.pendingRightDamage != 0 && !_vm->shouldQuit())
 			playDosFightTone(1000);
 		if (!_vm->shouldQuit())
 			serviceAtariFightFrame(state);
-
+		if (!_vm->shouldQuit())
+			serviceAmigaFightFrame(state);
 		if (_vm->shouldQuit())
 			break;
 		result = applyFightDamage(state);
-		presentFrame(true);
+		if (_platformTag != kOldTotPlatformAmiga)
+			presentFrame(true);
 		processGameEvents();
 		if (_platformTag == kOldTotPlatformDOS && !_vm->shouldQuit())
 			waitForMinimumDuration(
@@ -707,18 +753,25 @@ void PreGob_Emmanuelle::runFight(
 			setFightConclusionFrame(
 				state, result, frame, (byte)(fightRandom(8) + 1));
 			renderFightActors(state);
-
-			delay(100);
+			if (_platformTag == kOldTotPlatformAmiga) {
+				presentFrame(false);
+				_renderer.commitAmigaDirectFrame();
+				serviceAmigaFightFrame(state);
+			} else
+				delay(100);
 			if (_vm->shouldQuit())
 				break;
-			presentFrame(true);
+			if (_platformTag != kOldTotPlatformAmiga)
+				presentFrame(true);
 			processGameEvents();
 		}
 		if (result == 4 || _platformTag == kOldTotPlatformAmiga)
 			stopSampleAudio();
 		if (!_vm->shouldQuit()) {
 			const uint16 terminalDelay =
-				2000;
+				_platformTag == kOldTotPlatformAmiga
+					? amigaNativeDelayMilliseconds(2000)
+					: 2000;
 			delay(terminalDelay);
 		}
 		if (!_vm->shouldQuit())
@@ -747,7 +800,8 @@ void PreGob_Emmanuelle::runFight(
 
 bool PreGob_Emmanuelle::handleNativeFF0B(
 	byte command, OldTotRuntimeState &runtimeState) {
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		return handleAmigaFF0B(command);
 	if (_platformTag == kOldTotPlatformAtariST)
 		return handleAtariFF0B(command);
 
@@ -813,13 +867,22 @@ void PreGob_Emmanuelle::exportDiagnosticSnapshot(
 	out.native.colorCounter = _colorCycleCounter;
 	out.native.activeObjectCount = _active.activeCount();
 	out.native.savedRegionDepth = _renderer.savedRegionDepth();
-	if (_platformTag == kOldTotPlatformAtariST) {
+	if (_platformTag == kOldTotPlatformAtariST ||
+		_platformTag == kOldTotPlatformAmiga) {
 		out.native.presentationMode = _renderer.presentationMode();
 		out.native.presentationVariant = _renderer.presentationVariant();
 		out.native.presentationPhase = _renderer.presentationPhase();
 		out.native.presentationDirty = _renderer.presentationPending();
 		out.native.presentationActive = _renderer.presentationActive();
+	}
+	if (_platformTag == kOldTotPlatformAtariST)
 		out.native.paletteBlack = _renderer.atariBlack();
+	else if (_platformTag == kOldTotPlatformAmiga) {
+		out.native.paletteTransition = _renderer.amigaPaletteTransitionPending();
+		out.native.paletteBlack = _renderer.amigaBlack();
+		out.native.presentedSnapshot = _renderer.amigaPresentedSnapshotValid();
+		out.native.moduleGeneration = _renderer.amigaModuleGeneration();
+		out.native.presentedGeneration = _renderer.amigaPresentedGeneration();
 	}
 }
 
@@ -841,7 +904,6 @@ void PreGob_Emmanuelle::setDiagnosticTraceEnabled(bool enabled) {
 	_diagnosticTraceEnabled = enabled;
 	debugC(1, kDebugGameFlow, "Emmanuelle: diagnostic trace %s",
 		   enabled ? "enabled" : "disabled");
-
 }
 
 void PreGob_Emmanuelle::playDosFightTone(uint16 frequency) {
