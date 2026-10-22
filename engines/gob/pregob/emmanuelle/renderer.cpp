@@ -369,5 +369,148 @@ Font *OldTotRenderer::loadLetFont(Common::SeekableReadStream &stream) const {
 	return new Font(data);
 }
 
+void PreGob_Emmanuelle::presentFrame(bool waitForFrame, bool force) {
+	if (_introSkip.fastForwarding() && !force)
+		return;
+	_vm->_draw->blitInvalidated();
+	const byte videoMode = _scriptVM
+		? _scriptVM->runtimeState().videoMode : _runtimeState.videoMode;
+	_renderer.presentDosFrame(_moduleFileStem, videoMode);
+
+	if (waitForFrame)
+		_vm->_util->waitEndFrame(false);
+	else
+		_vm->_video->retrace();
+}
+
+void PreGob_Emmanuelle::defineCursor(uint16 descriptorOffset) {
+	if (!_tot)
+		return;
+
+	OldTotDrawDescriptor descriptor;
+	if (!_tot->decodeDrawDescriptor(descriptorOffset, descriptor)) {
+		debugC(1, kDebugGraphics,
+			   "Emmanuelle: invalid cursor descriptor 0x%04X",
+			   descriptorOffset);
+		return;
+	}
+
+	SurfacePtr cursor = _renderer.decodeSpriteSurface(*_tot, descriptor);
+	if (!cursor || cursor->getWidth() != 16 || cursor->getHeight() != 16) {
+		debugC(1, kDebugGraphics,
+			   "Emmanuelle: invalid cursor image at 0x%04X",
+			   descriptorOffset);
+		return;
+	}
+
+	// Native input coordinates are the sprite origin; hit testing adds the
+	// cursor's 8,8 center itself. Keep the backend hotspot at the origin so
+	// mouse event coordinates retain that convention.
+	setCursor(*cursor, 0, 0);
+	_cursorDefined = true;
+	_cursorDescriptor = descriptorOffset;
+}
+
+void PreGob_Emmanuelle::drawNode(uint16 nodeOffset) {
+	if (!_tot || !_scriptVM ||
+		uint32(nodeOffset) + 12U > _tot->size())
+		return;
+
+	OldTotDrawDescriptor descriptor;
+	if (!_tot->decodeDrawDescriptor(nodeOffset, descriptor))
+		return;
+	const int16 x = descriptor.xIndirect()
+						? (int16)_scriptVM->readVariable(descriptor.x)
+						: (int16)descriptor.x;
+	const int16 y = descriptor.yIndirect()
+						? (int16)_scriptVM->readVariable(descriptor.y)
+						: (int16)descriptor.y;
+	_renderer.drawSprite(*_tot, descriptor, x, y);
+
+}
+
+bool PreGob_Emmanuelle::handleProtectionTextNode(uint16 nodeOffset) {
+	if (!_tot || !_scriptVM || uint32(nodeOffset) + 15U > _tot->size() ||
+		(_tot->uint16BEAt(nodeOffset + 13) & 0x00FF) != 0x00FF)
+		return false;
+
+	uint32 cursor = nodeOffset + 15;
+	uint32 recordUnits = 0;
+	while (cursor + 4 <= _tot->size() && _tot->byteAt(cursor) != 0) {
+		++recordUnits;
+		cursor += 4;
+	}
+	if (cursor >= _tot->size() || (recordUnits & 1) != 0 ||
+		recordUnits == 0)
+		return false;
+
+	const uint16 choices = (uint16)(recordUnits / 2);
+	const uint32 recordOffset = nodeOffset + 15 +
+								8U * randomBounded(choices);
+	byte raw[8];
+	for (uint i = 0; i < ARRAYSIZE(raw); ++i)
+		raw[i] = _tot->byteAt(recordOffset + i);
+
+	ProtectionChallenge challenge;
+	if (!decodeProtectionRecord(raw, challenge))
+		return false;
+	uint16 variables[7];
+	for (uint i = 0; i < ARRAYSIZE(variables); ++i)
+		variables[i] = _scriptVM->readVariable(i);
+	installProtectionChallenge(challenge, variables);
+	for (uint i = 1; i < ARRAYSIZE(variables); ++i)
+		_scriptVM->writeVariable(i, variables[i]);
+	return true;
+}
+
+void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
+	if (!_tot || !_scriptVM)
+		return;
+
+	OldTotTextPlan plan;
+	if (!planOldTotText(*_tot, *_scriptVM, nodeOffset, plan))
+		return;
+	if (plan.background != 0x10) {
+		_vm->_draw->_backSurface->fillRect(
+			plan.x, plan.y, plan.x + plan.width - 1,
+			plan.y + plan.height - 1, plan.background);
+	}
+
+	Font *font = _fonts[plan.fontIndex & 1];
+	if (!font)
+		return;
+	for (uint i = 0; i < plan.glyphs.size(); ++i) {
+		const OldTotTextGlyph &glyph = plan.glyphs[i];
+		font->drawLetter(*_vm->_draw->_backSurface, glyph.character,
+						 glyph.x, glyph.y, glyph.color, plan.background,
+						 plan.background == 0x10);
+	}
+	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, plan.x, plan.y,
+							plan.x + plan.width - 1,
+							plan.y + plan.height - 1);
+}
+
+void PreGob_Emmanuelle::textNode(uint16 nodeOffset) {
+	if (!handleProtectionTextNode(nodeOffset))
+		renderTextPlan(nodeOffset);
+}
+
+void PreGob_Emmanuelle::saveScreenRect(uint16 x, uint16 y, uint16 width,
+									   uint16 height) {
+	_renderer.saveScreenRect(x, y, width, height);
+}
+
+void PreGob_Emmanuelle::restoreScreenRect() {
+	_renderer.restoreScreenRect();
+}
+
+void PreGob_Emmanuelle::fillScreen(byte color) {
+	_renderer.fillScreen(color);
+}
+
+void PreGob_Emmanuelle::reinitializeVideoBackend(byte videoMode) {
+	_renderer.applyDosPalette(_moduleFileStem, videoMode);
+}
+
 } // End of namespace Emmanuelle
 } // End of namespace Gob
