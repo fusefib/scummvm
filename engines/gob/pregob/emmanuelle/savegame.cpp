@@ -326,7 +326,7 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		}
 		prepared.cursorDefined = true;
 	}
-	if (_platformTag != kOldTotPlatformDOS) {
+	if (_platformTag != kOldTotPlatformDOS && !_silentAtariAudio) {
 		if (!prepareSampleBank(2, prepared.samples, prepared.sampleCount)) {
 			reason = "sound bank is unavailable";
 			return false;

@@ -64,7 +64,7 @@ class PreGob_Emmanuelle : public PreGob,
 						  public FightRandomSource,
 						  public OldTotDebugProvider {
 public:
-	PreGob_Emmanuelle(GobEngine *vm);
+	PreGob_Emmanuelle(GobEngine *vm, bool optionalAtariAudio);
 	~PreGob_Emmanuelle() override;
 
 	void run() override;
@@ -180,6 +180,7 @@ private:
 	const char *const *sampleBankNames(byte bank, byte &count) const;
 	const char *const *atariIntroSampleNames(byte &count) const;
 	bool prepareSampleBank(byte bank, SoundDesc *samples, byte &count) const;
+	bool hasAnyAtariSoundFile() const;
 	void stopSampleAudio();
 	void serviceAtariAudio();
 	void waitAtariAudio();
@@ -222,6 +223,8 @@ private:
 	uint16 _node24Offset;
 	uint32 _randomState;
 	OldTotPlatformTag _platformTag;
+	bool _optionalAtariAudio;
+	bool _silentAtariAudio;
 	bool _enhancedDosFights;
 	uint32 _schedulerAccumulator;
 	uint32 _schedulerDebt;

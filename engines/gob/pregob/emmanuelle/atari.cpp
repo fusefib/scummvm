@@ -172,6 +172,8 @@ bool PreGob_Emmanuelle::playAtariIntro() {
 		stopSampleAudio();
 		return true;
 	}
+	if (_silentAtariAudio)
+		return true;
 	if (_sampleCount <= 16)
 		return false;
 
@@ -206,6 +208,11 @@ bool PreGob_Emmanuelle::playAtariSampleCommand(byte command) {
 		return false;
 	if (_introSkip.fastForwarding()) {
 		stopSampleAudio();
+		return true;
+	}
+	if (_silentAtariAudio) {
+		if (sampleCommand.postDelay)
+			delay(sampleCommand.postDelay);
 		return true;
 	}
 	if (sampleCommand.slot >= _sampleCount)
@@ -308,6 +315,18 @@ void PreGob_Emmanuelle::waitAtariContinuation() {
 		key = pollGameInput(mouseX, mouseY, mouseButtons);
 	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
 			 !atariStContinuationAcceptsKey(key));
+}
+
+bool PreGob_Emmanuelle::hasAnyAtariSoundFile() const {
+	for (byte bank = 1; bank <= 2; ++bank) {
+		byte count;
+		const char *const *names = sampleBankNames(bank, count);
+		for (byte i = 0; i < count; ++i) {
+			if (_vm->_dataIO->hasFile(names[i]))
+				return true;
+		}
+	}
+	return false;
 }
 
 bool OldTotRenderer::presentAtariMode44Step(byte variant, byte phase) {

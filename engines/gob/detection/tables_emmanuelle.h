@@ -96,7 +96,8 @@
 	  kPlatformAtariST,
 	  ADGF_UNSTABLE,
 	  GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
-	 kFeaturesEGA | kFeatures16Colors,
+	 kFeaturesEGA | kFeatures16Colors |
+		 kFeaturesEmmanuelleOptionalAtariAudio,
 	 nullptr,
 	 "INIT.TOT",
 	 0},

@@ -59,10 +59,12 @@ static OldTotPlatformTag detectPlatform(const GobEngine *vm) {
 	return kOldTotPlatformDOS;
 }
 
-PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm) :
+PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
+									 bool optionalAtariAudio) :
 	PreGob(vm), _renderer(vm), _active(vm, 20), _moduleFileStem(),
 	_randomState(vm->_rnd.getRandomNumber(0xFFFFFFFFU)),
 	_platformTag(detectPlatform(vm)),
+	_optionalAtariAudio(optionalAtariAudio),
 	_dosInitialFrameCoverage() {
 	// Owned scripts, sprite banks, fonts, and execution objects.
 	_tot = nullptr;
@@ -123,6 +125,7 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm) :
 	// Loaded samples outlive individual playback commands.
 	_sampleBank = 0;
 	_sampleCount = 0;
+	_silentAtariAudio = false;
 
 	// -1 means the Atari intro sample sequence is idle.
 	_atariIntroPosition = -1;
@@ -511,6 +514,12 @@ bool PreGob_Emmanuelle::loadSampleBank(byte bank) {
 	if (_platformTag == kOldTotPlatformDOS ||
 		(bank != 1 && bank != 2))
 		return false;
+	if (_platformTag == kOldTotPlatformAtariST && _silentAtariAudio) {
+		_sampleBank = bank;
+		_sampleCount = 0;
+		return true;
+	}
+
 	stopSampleAudio();
 	for (uint i = 0; i < ARRAYSIZE(_samples); ++i)
 		_vm->_sound->sampleFree(&_samples[i]);
@@ -847,7 +856,13 @@ void PreGob_Emmanuelle::run() {
 	setInputContext(kEmmanuelleInputNone);
 	hideCursor();
 	_vm->_util->setFrameRate(kHostFrameRate);
-
+	if (_platformTag == kOldTotPlatformAtariST &&
+		atariStAudioPolicy(_optionalAtariAudio,
+						   hasAnyAtariSoundFile()) == kAtariStAudioSilent) {
+		_silentAtariAudio = true;
+		warning("Emmanuelle: running the loader-free Atari ST profile "
+				"without sound samples");
+	}
 	bool ready = loadSharedAssets();
 	if (ready && _platformTag != kOldTotPlatformDOS)
 		ready = loadSampleBank(1);

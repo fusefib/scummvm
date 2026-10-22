@@ -737,7 +737,8 @@ Common::Error GobEngine::initGameParts() {
 		_map      = new Map_v2(this);
 		_goblin   = new Goblin_v2(this);
 		_scenery  = new Scenery_v2(this);
-		_preGob   = new Emmanuelle::PreGob_Emmanuelle(this);
+		_preGob   = new Emmanuelle::PreGob_Emmanuelle(
+			this, (_features & kFeaturesEmmanuelleOptionalAtariAudio) != 0);
 		break;
 
 	default:

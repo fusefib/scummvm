@@ -302,7 +302,7 @@ bool readPayload(Common::SeekableReadStream &stream,
 	if ((state.platform == kOldTotPlatformDOS &&
 		 (state.nativeState.sampleBank != 0 || state.nativeState.sampleCount != 0)) ||
 		(state.platform == kOldTotPlatformAtariST &&
-		 (state.nativeState.sampleBank != 2 || state.nativeState.sampleCount != 19)))
+		 (state.nativeState.sampleBank != 2 || (state.nativeState.sampleCount != 0 && state.nativeState.sampleCount != 19))))
 		return false;
 
 	if (!readBool(stream, state.nativeState.initialInitComplete) ||
