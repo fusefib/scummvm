@@ -156,4 +156,18 @@
 	 "INIT.TOT",
 	 0},
 
+{{"emmanuelle",
+	  nullptr,
+	  AD_ENTRY2s(
+		  "INIT.TOA", "c831705becf32463b26e8999e944b210", 27520,
+		  "INIT.IA1", "4f7f8af78780fc67e6f845dc8537af22", 43136),
+	  EN_ANY,
+	  kPlatformAmiga,
+	  ADGF_UNSTABLE,
+	  GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
+	 kFeaturesEGA,
+	 nullptr,
+	 "INIT.TOA",
+	 0},
+
 #endif // GOB_DETECTION_TABLES_EMMANUELLE_H
