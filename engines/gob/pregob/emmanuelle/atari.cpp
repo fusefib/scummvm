@@ -38,6 +38,173 @@
 namespace Gob {
 namespace Emmanuelle {
 
+namespace {
+const char *const kAtariSoundBank1[17] = {
+	"P1.SPL", "S4.SPL", "S5.SPL", "S6.SPL", "S7.SPL", "S8.SPL",
+	"S9.SPL", "S10.SPL", "S11.SPL", "S12.SPL", "S13.SPL",
+	"S14.SPL", "S15.SPL", "S16.SPL", "S17.SPL", "S18.SPL",
+	"S19.SPL"};
+} // End of anonymous namespace
+
+const char *const *PreGob_Emmanuelle::atariIntroSampleNames(byte &count) const {
+	count = ARRAYSIZE(kAtariSoundBank1);
+	return kAtariSoundBank1;
+}
+
+void PreGob_Emmanuelle::startAtariFightConclusionAudio() {
+	if (_platformTag != kOldTotPlatformAtariST || _sampleCount <= 13)
+		return;
+	stopSampleAudio();
+	_vm->_sound->blasterPlay(&_samples[13], 1, 0);
+	setAudioState(kOldTotAudioAtariSample, 13, 0, 1,
+		false, true);
+}
+
+void PreGob_Emmanuelle::serviceAtariFightFrame(
+	const FightState &state) {
+	if (_platformTag != kOldTotPlatformAtariST)
+		return;
+
+	const int16 leftSlot = fightSampleSlot(
+		false, state.left.action, state.left.frame);
+	const int16 rightSlot = fightSampleSlot(
+		true, state.right.action, state.right.frame);
+	const int16 slots[2] = {leftSlot, rightSlot};
+	bool played = false;
+	stopSampleAudio();
+	for (uint i = 0; i < ARRAYSIZE(slots) && !_vm->shouldQuit(); ++i) {
+		if (slots[i] < 0 || slots[i] >= _sampleCount)
+			continue;
+		_vm->_sound->blasterPlay(&_samples[slots[i]], 1, 0);
+		setAudioState(kOldTotAudioAtariSample, slots[i], 0, 1,
+							 true, true);
+		waitAtariAudio();
+		played = true;
+	}
+	if (!played)
+		delay(100);
+}
+
+bool PreGob_Emmanuelle::playAtariIntro() {
+	if (_platformTag != kOldTotPlatformAtariST)
+		return false;
+	if (_introSkip.fastForwarding()) {
+		stopSampleAudio();
+		return true;
+	}
+	if (_silentAtariAudio)
+		return true;
+	if (_sampleCount <= 16)
+		return false;
+
+	stopSampleAudio();
+	_atariIntroPosition = 0;
+	serviceAtariAudio();
+	while (!_vm->shouldQuit() &&
+		   !_introSkip.fastForwarding() &&
+		   (_vm->_sound->blasterPlayingSound() ||
+			_atariIntroPosition >= 0)) {
+		_vm->_util->delay(1);
+		processGameEvents();
+		int16 mouseX = 0;
+		int16 mouseY = 0;
+		MouseButtons mouseButtons = kMouseButtonsNone;
+		const int16 key = takePendingInput(mouseX, mouseY, mouseButtons);
+		if (key != kKeyNone) {
+			stopSampleAudio();
+			return true;
+		}
+		serviceAtariAudio();
+	}
+	if (_vm->shouldQuit() || _introSkip.fastForwarding())
+		stopSampleAudio();
+	_atariIntroPosition = -1;
+	return true;
+}
+
+bool PreGob_Emmanuelle::playAtariSampleCommand(byte command) {
+	AtariStSampleCommand sampleCommand;
+	if (!getAtariStSampleCommand(command, sampleCommand))
+		return false;
+	if (_introSkip.fastForwarding()) {
+		stopSampleAudio();
+		return true;
+	}
+	if (_silentAtariAudio) {
+		if (sampleCommand.postDelay)
+			delay(sampleCommand.postDelay);
+		return true;
+	}
+	if (sampleCommand.slot >= _sampleCount)
+		return true;
+
+	if (sampleCommand.stopMode == kAtariStAudioStopAlways ||
+		(sampleCommand.stopMode == kAtariStAudioStopIfPlaying &&
+		 _vm->_sound->blasterPlayingSound()))
+		stopSampleAudio();
+	_vm->_sound->blasterPlay(&_samples[sampleCommand.slot],
+							 sampleCommand.mixerRepeatCount, 0);
+	setAudioState(kOldTotAudioAtariSample, sampleCommand.slot, 0,
+						 sampleCommand.mixerRepeatCount,
+						 sampleCommand.waitForCompletion, true);
+	if (sampleCommand.waitForCompletion)
+		waitAtariAudio();
+	if (_vm->shouldQuit())
+		return true;
+	if (sampleCommand.postDelay)
+		delay(sampleCommand.postDelay);
+	return true;
+}
+
+void PreGob_Emmanuelle::waitAtariAudio() {
+	while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+		   _vm->_sound->blasterPlayingSound()) {
+		_vm->_util->delay(1);
+		processGameEvents();
+	}
+	if (_introSkip.fastForwarding())
+		stopSampleAudio();
+	if (_audioKind == kOldTotAudioAtariSample && _audioActive)
+		setAudioState(kOldTotAudioAtariSample, _audioSlot, 0,
+						   _audioRepeatCount, _audioBlocking, false);
+}
+
+void PreGob_Emmanuelle::serviceAtariAudio() {
+	if (_platformTag != kOldTotPlatformAtariST ||
+		_vm->_sound->blasterPlayingSound())
+		return;
+	if (_audioKind == kOldTotAudioAtariSample && _audioActive)
+		setAudioState(kOldTotAudioAtariSample, _audioSlot, 0,
+						   _audioRepeatCount, _audioBlocking, false);
+	if (_atariIntroPosition < 0)
+		return;
+	uint count = 0;
+	const byte *slots = getAtariStIntroComposition(count);
+	if ((uint)_atariIntroPosition >= count) {
+		_atariIntroPosition = -1;
+		return;
+	}
+
+	const byte slot = slots[_atariIntroPosition++];
+	if (slot < _sampleCount) {
+		_vm->_sound->blasterPlay(&_samples[slot], 1, 0);
+		setAudioState(kOldTotAudioAtariSample, slot, 0, 1,
+						   false, true);
+	}
+}
+
+bool PreGob_Emmanuelle::hasAnyAtariSoundFile() const {
+	for (byte bank = 1; bank <= 2; ++bank) {
+		byte count;
+		const char *const *names = sampleBankNames(bank, count);
+		for (byte i = 0; i < count; ++i) {
+			if (_vm->_dataIO->hasFile(names[i]))
+				return true;
+		}
+	}
+	return false;
+}
+
 bool OldTotRenderer::presentAtariMode44Step(byte variant, byte phase) {
 	if (_platform != kOldTotPlatformAtariST || !_atariTransitionTarget ||
 		!_vm || !_vm->_draw || !_vm->_draw->_backSurface)
