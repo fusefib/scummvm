@@ -84,6 +84,19 @@ int16 PreGob_Emmanuelle::pollInterpreterInput(
 	return key;
 }
 
+void PreGob_Emmanuelle::serviceInterpreterTimer() {
+	if (!_scriptVM || _vm->shouldQuit()) {
+		_schedulerDebt = 0;
+		return;
+	}
+
+	_schedulerDebt += accumulateTimerQuanta(
+		_platformTag, _schedulerAccumulator);
+	_schedulerDebt = _scriptVM->advanceTimer(_schedulerDebt, 8);
+	if (_vm->shouldQuit())
+		_schedulerDebt = 0;
+}
+
 bool PreGob_Emmanuelle::inputIdle(int16 key,
 										MouseButtons mouseButtons) const {
 	return key == kKeyNone && mouseButtons == kMouseButtonsNone;

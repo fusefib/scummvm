@@ -408,8 +408,56 @@ bool PreGob_Emmanuelle::applyInitialModuleSelectorPolicy(
 	return false;
 }
 
+uint16 PreGob_Emmanuelle::randomBounded(uint16 upperExclusive) {
+
+	return dosRandomBounded(_randomState, upperExclusive);
+}
+
+void PreGob_Emmanuelle::schedulerTiming(byte period, bool timingVariant,
+										uint16 &reload, uint16 &initialCountdown) {
+
+	getDosSchedulerTiming(period, timingVariant, reload, initialCountdown);
+}
+
 bool PreGob_Emmanuelle::skipIntermediateSequenceNodes() const {
 	return _platformTag != kOldTotPlatformDOS && _skipIntermediateSequenceNodes;
+}
+
+void PreGob_Emmanuelle::setAudioState(
+	OldTotAudioKind kind, int16 slot, uint16 frequency,
+	int16 repeatCount, bool blocking, bool active) {
+	_audioKind = kind;
+	_audioSlot = slot;
+	_audioFrequency = frequency;
+	_audioRepeatCount = repeatCount;
+	_audioBlocking = blocking && active;
+	_audioActive = active;
+	if (_diagnosticTraceEnabled)
+		debugC(3, kDebugSound,
+			   "EMMA_TRACE event=audio_%s platform=%u kind=%u slot=%d "
+			   "frequency=%u repeat=%d blocking=%u",
+			   active ? "start" : "stop", (uint)_platformTag, (uint)kind,
+			   (int)slot, (uint)frequency, (int)repeatCount,
+			   blocking ? 1U : 0U);
+}
+
+void PreGob_Emmanuelle::dispatchScheduled(uint16 target) {
+	if (_executor)
+		_executor->dispatchScheduled(target);
+}
+
+bool PreGob_Emmanuelle::handleNativeFF0B(
+	byte command, OldTotRuntimeState &runtimeState) {
+
+	bool reinitialize = false;
+	if (!applyDosNativeCommand(command, runtimeState, reinitialize,
+							   !_enhancedDosFights))
+		return false;
+	if (reinitialize) {
+		reinitializeVideoBackend(runtimeState.videoMode);
+		runtimeState.videoInitMarker = 0x28;
+	}
+	return true;
 }
 
 } // End of namespace Emmanuelle
