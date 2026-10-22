@@ -77,7 +77,6 @@ uint16 dimAmigaPaletteWord(uint16 word, byte steps);
 
 byte prepareAmigaWaitColorCounter(byte counter);
 
-
 byte amigaMode43PixelOffset(byte phase, uint32 wordOrdinal);
 
 struct AmigaMode44Rect {
