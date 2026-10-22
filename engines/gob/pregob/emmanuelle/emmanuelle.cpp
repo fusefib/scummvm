@@ -224,6 +224,7 @@ OldTotData *PreGob_Emmanuelle::loadScriptResource(
 		reason = "malformed script resource";
 		return nullptr;
 	}
+	tot->applyScriptPatches(_platformTag, _vm->_language, name);
 	reason.clear();
 	return tot;
 }

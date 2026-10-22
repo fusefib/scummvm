@@ -105,6 +105,7 @@ MODULE_OBJS := \
 	pregob/emmanuelle/runtime.o \
 	pregob/emmanuelle/savegame.o \
 	pregob/emmanuelle/saveload.o \
+	pregob/emmanuelle/script_patches.o \
 	pregob/emmanuelle/text.o \
 	pregob/onceupon/onceupon.o \
 	pregob/onceupon/abracadabra.o \
