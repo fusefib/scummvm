@@ -511,6 +511,8 @@ EmmanuelleRuntimeProfile emmanuelleRuntimeProfile(
 	if (platform == kOldTotPlatformAmiga) {
 		if (language == Common::DE_DEU)
 			return kEmmanuelleProfileAmigaGerman;
+		if (language == Common::FR_FRA)
+			return kEmmanuelleProfileAmigaFrench;
 		return kEmmanuelleProfileAmigaEnglish;
 	}
 	return kEmmanuelleProfileInvalid;
@@ -549,6 +551,7 @@ bool emmanuelleProfileMatchesPlatform(EmmanuelleRuntimeProfile profile,
 		return platform == kOldTotPlatformAtariST;
 	case kEmmanuelleProfileAmigaEnglish:
 	case kEmmanuelleProfileAmigaGerman:
+	case kEmmanuelleProfileAmigaFrench:
 		return platform == kOldTotPlatformAmiga;
 	default:
 		return false;
