@@ -99,6 +99,8 @@ const char *oldTotExecutorStopReasonName(OldTotExecutorStopReason reason);
 
 class OldTotExecutor {
 public:
+	enum { kMaxFrames = 256 };
+
 	OldTotExecutor(const OldTotData &data, OldTotVM &vm, OldTotExecHost &host);
 	/** Run the module's root sequence, resuming it if already started. */
 	bool runRoot();

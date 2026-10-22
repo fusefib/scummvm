@@ -38,11 +38,90 @@ namespace {
 
 const uint16 kSaveVersion = 1;
 const uint32 kMaxPayloadSize = 8 * 1024 * 1024;
-const uint32 kMaxSurfaceBytes = 320 * 200 * 4;
-const uint kMaxExecutorFrames = 128;
-const uint kMaxSchedulerTargets = 128;
+const uint kMaxSchedulerTargets = 255;
 const uint kMaxSavedRegions = 10;
 const uint kMaxActiveObjects = 20;
+
+bool validSurfaceLayout(uint16 width, uint16 height, byte bytesPerPixel,
+		uint32 size, bool allowEmpty) {
+	if (width == 0 || height == 0)
+		return allowEmpty && width == 0 && height == 0 &&
+			bytesPerPixel == 0 && size == 0;
+	return width <= 320 && height <= 200 &&
+		bytesPerPixel >= 1 && bytesPerPixel <= 4 &&
+		size == (uint32)width * height * bytesPerPixel;
+}
+
+bool validSurface(const EmmanuelleSurfaceState &surface, bool allowEmpty) {
+	return validSurfaceLayout(surface.width, surface.height,
+		surface.bytesPerPixel, surface.pixels.size(), allowEmpty);
+}
+
+// Check the stored structure here; restore validates it against game resources.
+bool validateSaveState(const EmmanuelleSaveState &state) {
+	const char *stem = moduleFileStem(state.module);
+	if (!emmanuelleProfileMatchesPlatform(state.profile, state.platform) ||
+		!stem || state.moduleFileStem.size() > 15 ||
+		!state.moduleFileStem.equalsIgnoreCase(stem) ||
+		state.moduleSize == 0 || state.moduleSize > 0xFFFF ||
+		state.vmTransient.savedRegionDepth > kMaxSavedRegions ||
+		state.vmTransient.schedulerTargets.size() > kMaxSchedulerTargets ||
+		(state.vmTransient.schedulerTargets.empty()
+			? state.vmTransient.schedulerIndex != 0
+			: state.vmTransient.schedulerIndex >= state.vmTransient.schedulerTargets.size()) ||
+		state.executor.frames.empty() ||
+		state.executor.frames.size() > OldTotExecutor::kMaxFrames ||
+		!state.executor.started || !state.executor.suspended)
+		return false;
+	for (uint i = 0; i < state.executor.frames.size(); ++i) {
+		const OldTotExecFrame &frame = state.executor.frames[i];
+		if (frame.kind < OldTotExecFrame::kDispatch ||
+			frame.kind > OldTotExecFrame::kSequence ||
+			frame.inputState < OldTotExecFrame::kInputInitial ||
+			frame.inputState > OldTotExecFrame::kInputReenter)
+			return false;
+	}
+	if (!validSurface(state.renderer.framebuffer, false) ||
+		state.renderer.savedRegions.size() != state.vmTransient.savedRegionDepth ||
+		state.renderer.activeObjects.size() > kMaxActiveObjects ||
+		!validSurface(state.renderer.amigaPresentedFrame, true))
+		return false;
+	for (uint i = 0; i < state.renderer.savedRegions.size(); ++i) {
+		if (!validSurface(state.renderer.savedRegions[i].surface, false))
+			return false;
+	}
+	for (uint i = 0; i < state.renderer.activeObjects.size(); ++i) {
+		const EmmanuelleActiveObjectState &object = state.renderer.activeObjects[i];
+		if (!validSurface(object.background, !object.active) ||
+			(object.active && (object.width != object.background.width ||
+			 object.height != object.background.height)))
+			return false;
+	}
+	if ((state.renderer.amigaPresentationMode != 0 &&
+		 state.renderer.amigaPresentationMode != 43 &&
+		 state.renderer.amigaPresentationMode != 44) ||
+		(state.platform != kOldTotPlatformAmiga &&
+		 state.renderer.amigaPresentationMode != 0) ||
+		state.renderer.amigaPresentationVariant != 0 ||
+		state.renderer.amigaPresentationPhase != 0 ||
+		state.renderer.amigaPresentationPending ||
+		state.renderer.amigaPresentationActive ||
+		state.renderer.amigaPaletteTransitionPending)
+		return false;
+	// ST restore accepts either a complete or a wholly silent sample bank.
+	if ((state.platform == kOldTotPlatformDOS &&
+		 (state.nativeState.sampleBank != 0 || state.nativeState.sampleCount != 0)) ||
+		(state.platform == kOldTotPlatformAtariST &&
+		 (state.nativeState.sampleBank != 2 ||
+		  (state.nativeState.sampleCount != 0 && state.nativeState.sampleCount != 19))) ||
+		(state.platform == kOldTotPlatformAmiga &&
+		 (state.nativeState.sampleBank != 2 || state.nativeState.sampleCount != 19)))
+		return false;
+	return state.platform == kOldTotPlatformAtariST
+		? state.nativeState.effectCommand == 0 ||
+		  state.nativeState.effectCommand == 43 || state.nativeState.effectCommand == 44
+		: state.nativeState.effectCommand == 0;
+}
 
 void writeBool(Common::WriteStream &stream, bool value) {
 	stream.writeByte(value ? 1 : 0);
@@ -90,15 +169,11 @@ bool readSurface(Common::ReadStream &stream,
 	const uint32 size = stream.readUint32LE();
 	if (stream.err())
 		return false;
-	if (surface.width == 0 || surface.height == 0) {
-		return allowEmpty && surface.width == 0 && surface.height == 0 &&
-			surface.bytesPerPixel == 0 && size == 0;
-	}
-	if (surface.width > 320 || surface.height > 200 ||
-		surface.bytesPerPixel < 1 || surface.bytesPerPixel > 4 ||
-		size != (uint32)surface.width * surface.height *
-			surface.bytesPerPixel || size > kMaxSurfaceBytes)
+	if (!validSurfaceLayout(surface.width, surface.height,
+			surface.bytesPerPixel, size, allowEmpty))
 		return false;
+	if (size == 0)
+		return true;
 	surface.pixels.resize(size);
 	return stream.read(&surface.pixels[0], size) == size && !stream.err();
 }
@@ -126,7 +201,10 @@ void writePayload(const EmmanuelleSaveState &state,
 	for (uint i = 0; i < state.vmTransient.schedulerTargets.size(); ++i)
 		stream.writeUint16LE(state.vmTransient.schedulerTargets[i]);
 
-	stream.writeByte(state.executor.frames.size());
+	// A suspended executor is never empty; zero represents its full stack.
+	// Earlier unreleased readers accepted at most 128 frames.
+	stream.writeByte(state.executor.frames.size() == OldTotExecutor::kMaxFrames
+		? 0 : state.executor.frames.size());
 	stream.writeUint32LE(state.executor.steps);
 	writeBool(stream, state.executor.started);
 	writeBool(stream, state.executor.suspended);
@@ -205,14 +283,10 @@ bool readPayload(Common::SeekableReadStream &stream,
 	state.module = (ModuleId)stream.readByte();
 	const byte reserved = stream.readByte();
 	if (stream.err() || reserved != 0 ||
-		!emmanuelleProfileMatchesPlatform(state.profile, state.platform) ||
-		!moduleFileStem(state.module) ||
-		!readString(stream, state.moduleFileStem, 15) ||
-		!state.moduleFileStem.equalsIgnoreCase(moduleFileStem(state.module)))
+		!readString(stream, state.moduleFileStem, 15))
 		return false;
 	state.moduleSize = stream.readUint32LE();
-	if (state.moduleSize == 0 || state.moduleSize > 0xFFFF ||
-		stream.read(state.moduleMD5, sizeof(state.moduleMD5)) !=
+	if (stream.read(state.moduleMD5, sizeof(state.moduleMD5)) !=
 			sizeof(state.moduleMD5))
 		return false;
 	for (uint i = 0; i < ARRAYSIZE(state.variables); ++i)
@@ -226,24 +300,21 @@ bool readPayload(Common::SeekableReadStream &stream,
 	state.vmTransient.schedulerIndex = stream.readByte();
 	state.vmTransient.schedulerReload = stream.readUint16LE();
 	state.vmTransient.schedulerCountdown = stream.readUint16LE();
-	if (stream.err() || schedulerCount > kMaxSchedulerTargets ||
-		state.vmTransient.savedRegionDepth > kMaxSavedRegions ||
-		(schedulerCount == 0 && state.vmTransient.schedulerIndex != 0) ||
-		(schedulerCount != 0 &&
-		 state.vmTransient.schedulerIndex >= schedulerCount))
+	if (stream.err())
 		return false;
 	state.vmTransient.schedulerTargets.resize(schedulerCount);
 	for (uint i = 0; i < schedulerCount; ++i)
 		state.vmTransient.schedulerTargets[i] = stream.readUint16LE();
 
-	const uint frameCount = stream.readByte();
+	const byte encodedFrameCount = stream.readByte();
+	const uint frameCount = encodedFrameCount
+		? encodedFrameCount : (uint)OldTotExecutor::kMaxFrames;
 	state.executor.steps = stream.readUint32LE();
 	if (!readBool(stream, state.executor.started) ||
 		!readBool(stream, state.executor.suspended))
 		return false;
 	state.executor.suspendedNode = stream.readUint16LE();
-	if (stream.err() || frameCount == 0 || frameCount > kMaxExecutorFrames ||
-		!state.executor.started || !state.executor.suspended)
+	if (stream.err())
 		return false;
 	state.executor.frames.resize(frameCount);
 	for (uint i = 0; i < frameCount; ++i) {
@@ -254,9 +325,6 @@ bool readPayload(Common::SeekableReadStream &stream,
 		frame.index = stream.readByte();
 		frame.count = stream.readByte();
 		frame.inputState = (OldTotExecFrame::InputState)stream.readByte();
-		if (frame.kind > OldTotExecFrame::kSequence ||
-			frame.inputState > OldTotExecFrame::kInputReenter)
-			return false;
 	}
 
 	state.randomState = stream.readUint32LE();
@@ -268,15 +336,13 @@ bool readPayload(Common::SeekableReadStream &stream,
 	state.cursorDescriptor = stream.readUint16LE();
 	if (!readBool(stream, state.cursorDefined) ||
 		!readBool(stream, state.cursorVisible) ||
-		reservedStartup != 0 ||
-		state.schedulerDebt > 1000000)
+		reservedStartup != 0)
 		return false;
 
 	if (!readSurface(stream, state.renderer.framebuffer, false))
 		return false;
 	const uint savedRegionCount = stream.readByte();
-	if (stream.err() || savedRegionCount > kMaxSavedRegions ||
-		savedRegionCount != state.vmTransient.savedRegionDepth)
+	if (stream.err() || savedRegionCount > kMaxSavedRegions)
 		return false;
 	state.renderer.savedRegions.resize(savedRegionCount);
 	for (uint i = 0; i < savedRegionCount; ++i) {
@@ -300,10 +366,7 @@ bool readPayload(Common::SeekableReadStream &stream,
 		object.y = stream.readSint16LE();
 		object.width = stream.readSint16LE();
 		object.height = stream.readSint16LE();
-		if (!readSurface(stream, object.background, !object.active) ||
-			(object.active &&
-			 (object.width != object.background.width ||
-			  object.height != object.background.height)))
+		if (!readSurface(stream, object.background, !object.active))
 			return false;
 	}
 	for (uint i = 0; i < ARRAYSIZE(state.renderer.atariPalette); ++i)
@@ -322,46 +385,23 @@ bool readPayload(Common::SeekableReadStream &stream,
 	state.renderer.amigaPresentationPhase = stream.readByte();
 	if (!readBool(stream, state.renderer.amigaPresentationPending) ||
 		!readBool(stream, state.renderer.amigaPresentationActive) ||
-		!readBool(stream, state.renderer.amigaPaletteTransitionPending) ||
-		(state.renderer.amigaPresentationMode != 0 &&
-		 state.renderer.amigaPresentationMode != 43) ||
-		(state.platform != kOldTotPlatformAmiga &&
-		 state.renderer.amigaPresentationMode != 0) ||
-		state.renderer.amigaPresentationVariant != 0 ||
-		state.renderer.amigaPresentationPhase != 0 ||
-		state.renderer.amigaPresentationPending ||
-		state.renderer.amigaPresentationActive ||
-		state.renderer.amigaPaletteTransitionPending)
+		!readBool(stream, state.renderer.amigaPaletteTransitionPending))
 		return false;
 	if (!readSurface(stream, state.renderer.amigaPresentedFrame, true))
 		return false;
 
 	state.nativeState.sampleBank = stream.readByte();
 	state.nativeState.sampleCount = stream.readByte();
-	// Idle ST saves are portable between complete and wholly silent sample
-	// sets. Restore prepares the destination's bank instead of its old count.
-	if ((state.platform == kOldTotPlatformDOS &&
-		 (state.nativeState.sampleBank != 0 || state.nativeState.sampleCount != 0)) ||
-		(state.platform == kOldTotPlatformAtariST &&
-		 (state.nativeState.sampleBank != 2 ||
-		  (state.nativeState.sampleCount != 0 && state.nativeState.sampleCount != 19))) ||
-		(state.platform == kOldTotPlatformAmiga &&
-		 (state.nativeState.sampleBank != 2 || state.nativeState.sampleCount != 19)))
-		return false;
 	if (!readBool(stream, state.nativeState.initialInitComplete) ||
 		!readBool(stream, state.nativeState.skipIntermediateSequenceNodes))
 		return false;
 	state.nativeState.effectCommand = stream.readByte();
-	if ((state.platform == kOldTotPlatformAtariST &&
-		 state.nativeState.effectCommand != 0 &&
-		 state.nativeState.effectCommand != 43) ||
-		(state.platform != kOldTotPlatformAtariST &&
-		 state.nativeState.effectCommand != 0))
-		return false;
 	if (!readBool(stream, state.nativeState.colorCycleEnabled))
 		return false;
 	state.nativeState.colorCycleCounter = stream.readByte();
-	return !stream.err() && stream.pos() == stream.size();
+	// Short scalar reads on memory streams set eos() without setting err().
+	return !stream.err() && !stream.eos() && stream.pos() == stream.size() &&
+		validateSaveState(state);
 }
 
 } // End of anonymous namespace
@@ -454,28 +494,19 @@ EmmanuelleSaveState::EmmanuelleSaveState() {
 		variables[i] = 0;
 }
 
-static bool validRendererSurface(const EmmanuelleSurfaceState &surface,
-		bool allowEmpty) {
-	if (surface.width == 0 || surface.height == 0)
-		return allowEmpty && surface.width == 0 && surface.height == 0 &&
-			surface.bytesPerPixel == 0 && surface.pixels.empty();
-	return surface.width <= 320 && surface.height <= 200 &&
-		surface.bytesPerPixel >= 1 && surface.bytesPerPixel <= 4 &&
-		surface.pixels.size() ==
-			(uint32)surface.width * surface.height * surface.bytesPerPixel;
-}
-
 bool validateEmmanuelleRendererState(const EmmanuelleRendererState &state,
 		uint16 width, uint16 height, byte bytesPerPixel,
 		byte atariPresentationMode) {
-	if (!validRendererSurface(state.framebuffer, false) ||
+	if (!validSurface(state.framebuffer, false) ||
 		state.framebuffer.width != width ||
 		state.framebuffer.height != height ||
 		state.framebuffer.bytesPerPixel != bytesPerPixel ||
 		state.savedRegions.size() > 10 ||
-		(atariPresentationMode != 0 && atariPresentationMode != 43) ||
+		(atariPresentationMode != 0 && atariPresentationMode != 43 &&
+		 atariPresentationMode != 44) ||
 		(state.amigaPresentationMode != 0 &&
-		 state.amigaPresentationMode != 43) ||
+		 state.amigaPresentationMode != 43 &&
+		 state.amigaPresentationMode != 44) ||
 		state.amigaPresentationVariant != 0 ||
 		state.amigaPresentationPhase != 0 ||
 		state.amigaPresentationPending || state.amigaPresentationActive ||
@@ -483,13 +514,13 @@ bool validateEmmanuelleRendererState(const EmmanuelleRendererState &state,
 		return false;
 	for (uint i = 0; i < state.savedRegions.size(); ++i) {
 		const EmmanuelleSavedRegionState &region = state.savedRegions[i];
-		if (!validRendererSurface(region.surface, false) || region.x < 0 ||
+		if (!validSurface(region.surface, false) || region.x < 0 ||
 			region.y < 0 || region.x + region.surface.width > width ||
 			region.y + region.surface.height > height)
 			return false;
 	}
 	if (!state.amigaPresentedFrame.pixels.empty() &&
-		(!validRendererSurface(state.amigaPresentedFrame, false) ||
+		(!validSurface(state.amigaPresentedFrame, false) ||
 		 state.amigaPresentedFrame.width != width ||
 		 state.amigaPresentedFrame.height != height ||
 		 state.amigaPresentedFrame.bytesPerPixel != bytesPerPixel))
@@ -567,12 +598,15 @@ bool emmanuelleProfileMatchesPlatform(EmmanuelleRuntimeProfile profile,
 
 bool encodeEmmanuelleSave(const EmmanuelleSaveState &state,
 						  Common::WriteStream &stream) {
+	// Validate before byte fields can truncate values or the destination changes.
+	if (!validateSaveState(state))
+		return false;
+
 	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
 	writePayload(state, payload);
 	if (payload.err() || payload.size() == 0 ||
 		payload.size() > kMaxPayloadSize)
 		return false;
-
 	Common::CRC32 crc;
 	const uint32 checksum = crc.crcFast(payload.getData(), payload.size());
 	stream.write("EMSV", 4);
