@@ -591,6 +591,20 @@ void PreGob_Emmanuelle::exportDiagnosticSnapshot(
 
 }
 
+bool PreGob_Emmanuelle::queryProtectionHint(
+	ProtectionChallenge &out) const {
+	uint16 node = 0;
+	if (!_tot || !_scriptVM || !_executor ||
+		!_executor->activeInputNode(node) || uint32(node) + 6U > _tot->size())
+		return false;
+
+	uint16 variables[7];
+	for (uint i = 0; i < ARRAYSIZE(variables); ++i)
+		variables[i] = _scriptVM->readVariable(i);
+	return buildProtectionHint(_moduleFileStem.equalsIgnoreCase("INIT"), true,
+		_tot->byteAt(node), _tot->byteAt(node + 5), variables, out);
+}
+
 void PreGob_Emmanuelle::setDiagnosticTraceEnabled(bool enabled) {
 	_diagnosticTraceEnabled = enabled;
 	debugC(1, kDebugGameFlow, "Emmanuelle: diagnostic trace %s",

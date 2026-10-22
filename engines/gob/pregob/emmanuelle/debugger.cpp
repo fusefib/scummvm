@@ -233,4 +233,31 @@ bool GobConsole::cmd_emmaTrace(int argc, const char **argv) {
 	return true;
 }
 
+bool GobConsole::cmd_cpSolve(int argc, const char **argv) {
+	if (!_emmanuelleDebugger) {
+		debugPrintf("No Emmanuelle runtime is active.\n");
+		return true;
+	}
+	if (argc != 1) {
+		debugPrintf("Usage: cpsolve\n");
+		return true;
+	}
+
+	Emmanuelle::ProtectionChallenge challenge;
+	if (!_emmanuelleDebugger->queryProtectionHint(challenge)) {
+		debugPrintf("No active copy-protection challenge\n");
+		return true;
+	}
+
+	debugPrintf("First: %c%u -> %s (region %u)\n",
+		(char)('A' + challenge.first.letter), (uint)challenge.first.box,
+		Emmanuelle::protectionColorName(challenge.first.color),
+		(uint)challenge.first.color);
+	debugPrintf("Second: %c%u -> %s (region %u)\n",
+		(char)('A' + challenge.second.letter), (uint)challenge.second.box,
+		Emmanuelle::protectionColorName(challenge.second.color),
+		(uint)challenge.second.color);
+	return true;
+}
+
 } // End of namespace Gob

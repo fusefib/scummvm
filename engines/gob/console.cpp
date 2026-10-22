@@ -51,6 +51,7 @@ GobConsole::GobConsole(GobEngine *vm) : GUI::Debugger(), _vm(vm),
 	registerCmd("emmaVars",     WRAP_METHOD(GobConsole, cmd_emmaVars));
 	registerCmd("emmaStack",    WRAP_METHOD(GobConsole, cmd_emmaStack));
 	registerCmd("emmaTrace",    WRAP_METHOD(GobConsole, cmd_emmaTrace));
+	registerCmd("cpsolve",      WRAP_METHOD(GobConsole, cmd_cpSolve));
 }
 
 GobConsole::~GobConsole() {
