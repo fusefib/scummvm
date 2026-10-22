@@ -46,4 +46,19 @@
 	"INIT.TOT",
 	0},
 
+{{"emmanuelle",
+	  nullptr,
+	  AD_ENTRY3s(
+		  "LOADER.PRG", "b642dcefc3544287508caa41350d6463", 69800,
+		  "INIT.TOT", "ad6cc0d8ba2964848250d56ca2e5a6ab", 26368,
+		  "INIT.I01", "b8fac1a5213832a0d3420b9ad42e7253", 36736),
+	  EN_ANY,
+	  kPlatformAtariST,
+	  ADGF_UNSTABLE,
+	  GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
+	 kFeaturesEGA | kFeatures16Colors,
+	 nullptr,
+	 "INIT.TOT",
+	 0},
+
 #endif // GOB_DETECTION_TABLES_EMMANUELLE_H
