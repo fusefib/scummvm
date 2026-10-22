@@ -81,6 +81,28 @@ void OldTotVM::storeVariables(uint16 *values, uint count) const {
 		values[i] = i < _variables.size() ? _variables[i] : 0;
 }
 
+void OldTotVM::exportTransientState(OldTotVMTransientState &out) const {
+	out.savedRegionDepth = _savedRegionDepth;
+	out.schedulerTargets = _schedulerTargets;
+	out.schedulerIndex = _schedulerIndex;
+	out.schedulerReload = _schedulerReload;
+	out.schedulerCountdown = _schedulerCountdown;
+}
+
+bool OldTotVM::importTransientState(const OldTotVMTransientState &in) {
+	if (!in.schedulerTargets.empty() && in.schedulerIndex >= in.schedulerTargets.size())
+		return false;
+	if (in.schedulerTargets.empty() && in.schedulerIndex != 0)
+		return false;
+	_savedRegionDepth = in.savedRegionDepth;
+	_schedulerTargets = in.schedulerTargets;
+	_schedulerIndex = in.schedulerIndex;
+	_schedulerReload = in.schedulerReload;
+	_schedulerCountdown = in.schedulerCountdown;
+	++_schedulerGeneration;
+	return true;
+}
+
 uint16 OldTotVM::subtractClamp(uint16 lhs, uint16 rhs) const {
 	const uint16 result = lhs - rhs;
 	return (int16)result < 0 ? 0 : result;
