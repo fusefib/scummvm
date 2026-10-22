@@ -30,6 +30,8 @@
 
 #include "common/str.h"
 #include "common/array.h"
+#include "common/error.h"
+#include "common/events.h"
 
 #include "gob/util.h"
 #include "gob/aniobject.h"
@@ -51,6 +53,13 @@ public:
 	virtual ~PreGob();
 
 	virtual void run() = 0;
+	virtual bool canSaveGameState(Common::U32String *msg = nullptr) const;
+	virtual bool canLoadGameState(Common::U32String *msg = nullptr) const;
+	virtual Common::Error saveGameStream(Common::WriteStream &stream,
+		bool isAutosave = false) const;
+	virtual Common::Error loadGameStream(Common::SeekableReadStream &stream);
+	/** Receive a mapped engine action from Gob's existing event owner. */
+	virtual void handleCustomAction(Common::CustomEventType action);
 
 	struct AnimProperties {
 		uint16 animation;
