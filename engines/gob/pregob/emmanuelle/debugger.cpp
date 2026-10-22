@@ -110,7 +110,9 @@ bool GobConsole::cmd_emmaState(int argc, const char **argv) {
 				 state.saveBoundary.canSave() ? 1U : 0U,
 				 Emmanuelle::emmanuelleSaveBoundaryBlockerName(
 					 state.saveBoundary.blocker()));
-	debugPrintf("native audio=%u kind=%u slot=%d frequency=%u repeat=%d blocking=%u active=%u saved=%u trace=%u\n",
+	debugPrintf("native bank=%u sounds=%u audio=%u kind=%u slot=%d frequency=%u repeat=%d blocking=%u active=%u saved=%u trace=%u\n",
+				(uint)state.native.sampleBank,
+				(uint)state.native.sampleCount,
 				state.native.audioActive ? 1U : 0U,
 				(uint)state.native.audioKind,
 				(int)state.native.audioSlot,

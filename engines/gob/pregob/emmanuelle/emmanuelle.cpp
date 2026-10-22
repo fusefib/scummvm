@@ -116,6 +116,13 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm) :
 	_audioActive = false;
 	_audioBlocking = false;
 
+	// Loaded samples outlive individual playback commands.
+	_sampleBank = 0;
+	_sampleCount = 0;
+
+	// -1 means the Atari intro sample sequence is idle.
+	_atariIntroPosition = -1;
+
 
 	_renderer.setPlatform(_platformTag);
 	_runtimeState.videoMode = dosVideoModeForRenderMode(
@@ -614,6 +621,8 @@ void PreGob_Emmanuelle::exportDiagnosticSnapshot(
 	out.native.audioActive = isAudioPlaying(_platformTag, _audioActive,
 		_vm->_sound->blasterPlayingSound());
 	out.native.audioBlocking = _audioBlocking && out.native.audioActive;
+	out.native.sampleBank = _sampleBank;
+	out.native.sampleCount = _sampleCount;
 	out.native.activeObjectCount = _active.activeCount();
 	out.native.savedRegionDepth = _renderer.savedRegionDepth();
 

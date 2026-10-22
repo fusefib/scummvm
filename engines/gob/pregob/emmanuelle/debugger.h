@@ -59,6 +59,8 @@ struct OldTotInputDiagnosticState {
 
 struct OldTotNativeDiagnosticState {
 	OldTotNativeDiagnosticState() {
+		sampleBank = 0;
+		sampleCount = 0;
 
 
 		audioKind = kOldTotAudioNone;
@@ -75,6 +77,8 @@ struct OldTotNativeDiagnosticState {
 
 	}
 
+	byte sampleBank;
+	byte sampleCount;
 	OldTotAudioKind audioKind;
 	int16 audioSlot;
 	uint16 audioFrequency;

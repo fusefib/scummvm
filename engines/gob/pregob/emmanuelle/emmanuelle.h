@@ -29,6 +29,7 @@
 #define GOB_PREGOB_EMMANUELLE_EMMANUELLE_H
 
 #include "gob/pregob/pregob.h"
+#include "gob/sound/sounddesc.h"
 
 #include "gob/pregob/emmanuelle/active.h"
 #include "gob/pregob/emmanuelle/debugger.h"
@@ -164,9 +165,20 @@ private:
 						 SurfacePtr &cell, FightActorPlacement &placement);
 	bool renderFightActors(const FightState &state);
 	void playDosFightTone(uint16 frequency);
+	void serviceAtariFightFrame(const FightState &state);
+	void startAtariFightConclusionAudio();
 	void setAudioState(OldTotAudioKind kind, int16 slot,
 							uint16 frequency, int16 repeatCount,
 							bool blocking, bool active);
+	bool loadSampleBank(byte bank);
+	const char *const *sampleBankNames(byte bank, byte &count) const;
+	const char *const *atariIntroSampleNames(byte &count) const;
+	bool prepareSampleBank(byte bank, SoundDesc *samples, byte &count) const;
+	void stopSampleAudio();
+	void serviceAtariAudio();
+	void waitAtariAudio();
+	bool playAtariSampleCommand(byte command);
+	bool playAtariIntro();
 	void serviceWaitColorCycle();
 	void setInputContext(EmmanuelleInputContext context);
 	EmmanuelleSaveBoundaryState saveBoundaryState() const;
@@ -231,6 +243,11 @@ private:
 	bool _audioActive;
 	bool _audioBlocking;
 
+	// Only one platform and one sample bank are live at a time.
+	SoundDesc _samples[19];
+	int16 _atariIntroPosition;
+	byte _sampleBank;
+	byte _sampleCount;
 
 };
 

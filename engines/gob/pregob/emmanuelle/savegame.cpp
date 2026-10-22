@@ -49,6 +49,7 @@ struct EmmanuellePreparedRestore {
 		active = nullptr;
 
 		cursorDefined = false;
+		sampleCount = 0;
 	}
 	~EmmanuellePreparedRestore() {
 		delete executor;
@@ -65,7 +66,9 @@ struct EmmanuellePreparedRestore {
 	ActiveSpriteLayer *active;
 	OldTotRendererPreparedState renderer;
 	SurfacePtr cursor;
+	SoundDesc samples[19];
 	bool cursorDefined;
+	byte sampleCount;
 };
 
 bool PreGob_Emmanuelle::moduleUsesLocalGraphics(
@@ -333,6 +336,10 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 	resetInitialStateAfterLoad();
 	_cursorDefined = false;
 	_cursorDescriptor = 0;
+	for (uint i = 0; i < ARRAYSIZE(_samples); ++i)
+		_samples[i].swap(prepared.samples[i]);
+	_sampleCount = prepared.sampleCount;
+	_atariIntroPosition = -1;
 	if (prepared.cursorDefined) {
 		setCursor(*prepared.cursor, 0, 0);
 		_cursorDefined = true;
