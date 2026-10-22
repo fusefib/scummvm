@@ -79,6 +79,7 @@ const Common::Language GobEngine::_gobToScummVMLang[] = {
 	Common::JA_JPN
 };
 
+
 class PauseDialog : public GUI::Dialog {
 public:
 	PauseDialog();
@@ -119,6 +120,7 @@ void PauseDialog::handleKeyDown(Common::KeyState state) {
 	if ((state.hasFlags(Common::KBD_CTRL)) && (state.keycode == Common::KEYCODE_p))
 		close();
 }
+
 
 GobEngine::GobEngine(OSystem *syst) : Engine(syst), _rnd("gob") {
 	_sound     = nullptr; _mult     = nullptr; _game    = nullptr;
@@ -420,6 +422,29 @@ Common::Error GobEngine::run() {
 	_init->initGame();
 
 	return Common::kNoError;
+}
+
+bool GobEngine::canSaveGameStateCurrently(Common::U32String *msg) {
+	return _gameType == kGameTypeEmmanuelle && _preGob &&
+		_preGob->canSaveGameState(msg);
+}
+
+bool GobEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+	return _gameType == kGameTypeEmmanuelle && _preGob &&
+		_preGob->canLoadGameState(msg);
+}
+
+Common::Error GobEngine::saveGameStream(Common::WriteStream *stream,
+		bool isAutosave) {
+	if (_gameType != kGameTypeEmmanuelle || !_preGob || !stream)
+		return Common::kWritingFailed;
+	return _preGob->saveGameStream(*stream, isAutosave);
+}
+
+Common::Error GobEngine::loadGameStream(Common::SeekableReadStream *stream) {
+	if (_gameType != kGameTypeEmmanuelle || !_preGob || !stream)
+		return Common::kReadingFailed;
+	return _preGob->loadGameStream(*stream);
 }
 
 void GobEngine::pauseEngineIntern(bool pause) {
