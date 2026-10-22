@@ -422,7 +422,7 @@ bool PreGob_Emmanuelle::executeLoadedModule() {
 	if (ok && !_vm->shouldQuit() && _initialInitPresentation &&
 		_moduleFileStem.equalsIgnoreCase("INIT"))
 		ensureInitialTomahawkHandoff();
-	if (ok && !_vm->shouldQuit() && _platformTag == kOldTotPlatformAtariST &&
+	if (ok && !_vm->shouldQuit() && _platformTag != kOldTotPlatformDOS &&
 		!_initialInitComplete && _currentModule == kModuleInit) {
 		_initialInitComplete = true;
 		ok = loadSampleBank(2);
@@ -593,6 +593,8 @@ const char *const *PreGob_Emmanuelle::sampleBankNames(byte bank, byte &count) co
 	}
 	if (_platformTag == kOldTotPlatformAtariST)
 		return atariIntroSampleNames(count);
+	if (_platformTag == kOldTotPlatformAmiga)
+		return amigaIntroSampleNames(count);
 	count = 0;
 	return nullptr;
 }
@@ -632,7 +634,8 @@ void PreGob_Emmanuelle::dispatchScheduled(uint16 target) {
 void PreGob_Emmanuelle::runFight(
 	uint16 leftMeterBonus, uint16 rightMeterBonus, uint16 leftDamageOption,
 	uint16 rightDamageOption, uint16 leftBaseMeter, uint16 rightBaseMeter) {
-	if (_platformTag == kOldTotPlatformAtariST)
+	if (_platformTag == kOldTotPlatformAtariST ||
+		_platformTag == kOldTotPlatformAmiga)
 		_skipIntermediateSequenceNodes = false;
 	if (!_recupTot || _recupRoots.size() != 40 || !_scriptVM)
 		return;
@@ -651,10 +654,16 @@ void PreGob_Emmanuelle::runFight(
 			   (int)state.rightMeter, (uint)leftDamageOption, (uint)rightDamageOption);
 	renderFightActors(state);
 	presentFrame(_platformTag != kOldTotPlatformAmiga);
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		_renderer.commitAmigaDirectFrame();
 	if (_platformTag == kOldTotPlatformDOS && !_vm->shouldQuit()) {
 		const uint16 initialHold = kDosFightInitialHoldMilliseconds;
 		delay(initialHold);
+	} else if (_platformTag == kOldTotPlatformAmiga &&
+			   !_vm->shouldQuit()) {
+		serviceAmigaFightFrame(state);
+		stopSampleAudio();
+		delay(amigaNativeDelayMilliseconds(1000));
 	}
 	processGameEvents();
 	FightInputState fightInput(_platformTag == kOldTotPlatformDOS);
@@ -665,7 +674,9 @@ void PreGob_Emmanuelle::runFight(
 		int16 mouseX = 0;
 		int16 mouseY = 0;
 		MouseButtons mouseButtons = kMouseButtonsNone;
-		int16 key = takePendingInput(mouseX, mouseY, mouseButtons);
+		int16 key = _platformTag == kOldTotPlatformAmiga
+			? pollInterpreterInput(mouseX, mouseY, mouseButtons, true)
+			: takePendingInput(mouseX, mouseY, mouseButtons);
 		if (key >= 'a' && key <= 'z')
 			key = (int16)(key - 'a' + 'A');
 		fightInput.noteKey(key);
@@ -685,18 +696,23 @@ void PreGob_Emmanuelle::runFight(
 
 		advanceFightFrame(state);
 		renderFightActors(state);
-
+		if (_platformTag == kOldTotPlatformAmiga) {
+			presentFrame(false);
+			_renderer.commitAmigaDirectFrame();
+		}
 		if (state.pendingLeftDamage != 0)
 			playDosFightTone(440);
 		if (state.pendingRightDamage != 0 && !_vm->shouldQuit())
 			playDosFightTone(1000);
 		if (!_vm->shouldQuit())
 			serviceAtariFightFrame(state);
-
+		if (!_vm->shouldQuit())
+			serviceAmigaFightFrame(state);
 		if (_vm->shouldQuit())
 			break;
 		result = applyFightDamage(state);
-		presentFrame(true);
+		if (_platformTag != kOldTotPlatformAmiga)
+			presentFrame(true);
 		processGameEvents();
 		if (_platformTag == kOldTotPlatformDOS && !_vm->shouldQuit())
 			waitForMinimumDuration(
@@ -711,18 +727,25 @@ void PreGob_Emmanuelle::runFight(
 			setFightConclusionFrame(
 				state, result, frame, (byte)(fightRandom(8) + 1));
 			renderFightActors(state);
-
-			delay(100);
+			if (_platformTag == kOldTotPlatformAmiga) {
+				presentFrame(false);
+				_renderer.commitAmigaDirectFrame();
+				serviceAmigaFightFrame(state);
+			} else
+				delay(100);
 			if (_vm->shouldQuit())
 				break;
-			presentFrame(true);
+			if (_platformTag != kOldTotPlatformAmiga)
+				presentFrame(true);
 			processGameEvents();
 		}
 		if (result == 4 || _platformTag == kOldTotPlatformAmiga)
 			stopSampleAudio();
 		if (!_vm->shouldQuit()) {
 			const uint16 terminalDelay =
-				2000;
+				_platformTag == kOldTotPlatformAmiga
+					? amigaNativeDelayMilliseconds(2000)
+					: 2000;
 			delay(terminalDelay);
 		}
 		if (!_vm->shouldQuit())
@@ -918,7 +941,7 @@ void PreGob_Emmanuelle::run() {
 				"without sound samples");
 	}
 	bool ready = loadSharedAssets();
-	if (ready && _platformTag == kOldTotPlatformAtariST)
+	if (ready && _platformTag != kOldTotPlatformDOS)
 		ready = loadSampleBank(1);
 	if (ready) {
 		_variables[0] = 0;

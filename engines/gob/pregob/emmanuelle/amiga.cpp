@@ -37,10 +37,53 @@
 namespace Gob {
 namespace Emmanuelle {
 
+const char *const *PreGob_Emmanuelle::amigaIntroSampleNames(byte &count) const {
+	static const char *const names[] = {"P1.SPL", "intro.spl"};
+	count = ARRAYSIZE(names);
+	return names;
+}
+
+void PreGob_Emmanuelle::serviceAmigaFightFrame(
+	const FightState &state) {
+	if (_platformTag != kOldTotPlatformAmiga)
+		return;
+
+	int16 slot = fightSampleSlot(
+		false, state.left.action, state.left.frame);
+	const int16 rightSlot = fightSampleSlot(
+		true, state.right.action, state.right.frame);
+	if (rightSlot >= 0)
+		slot = rightSlot;
+	if (slot >= 0 && slot < _sampleCount) {
+		stopSampleAudio();
+		_vm->_sound->blasterPlay(&_samples[slot], 1, 0);
+		setAudioState(kOldTotAudioAmigaSample, slot, 0, 1,
+							 false, true);
+	}
+	delay(amigaNativeDelayMilliseconds(200));
+}
+
 bool PreGob_Emmanuelle::handleAmigaFF0B(byte command) {
 	if (!amigaHandlesNativeCommand(command))
 		return false;
 	switch (command) {
+	case 80:
+		stopSampleAudio();
+		return true;
+	case 81:
+		if (_scriptVM && _scriptVM->readVariable(0) == 0)
+			playAmigaIntro();
+		return true;
+	case 82:
+	case 83:
+	case 85:
+	case 86:
+	case 89:
+	case 90:
+	case 91:
+	case 92:
+	case 94:
+		return playAmigaSampleCommand(command);
 	case 201:
 		if (_scriptVM && command201SkipsIntermediateNodes(
 						  _platformTag, _scriptVM->readVariable(0)))
@@ -65,6 +108,64 @@ void PreGob_Emmanuelle::fadeAmigaToBlack() {
 			break;
 		waitPresentationFrames();
 	}
+}
+
+bool PreGob_Emmanuelle::playAmigaIntro() {
+	if (_platformTag != kOldTotPlatformAmiga || _sampleBank != 1 ||
+		_sampleCount < 2)
+		return false;
+	if (_introSkip.fastForwarding()) {
+		stopSampleAudio();
+		return true;
+	}
+
+	stopSampleAudio();
+	_vm->_sound->blasterPlay(&_samples[1], -1, 0);
+	setAudioState(kOldTotAudioAmigaSample, 1, 0, -1, false, true);
+	while (!_vm->shouldQuit() && !_introSkip.fastForwarding()) {
+		_vm->_util->delay(1);
+		processGameEvents();
+		(void)randomBounded(100);
+		int16 mouseX = 0;
+		int16 mouseY = 0;
+		MouseButtons mouseButtons = kMouseButtonsNone;
+		const int16 key = takePendingInput(mouseX, mouseY, mouseButtons);
+		if (key != kKeyNone || mouseButtons != kMouseButtonsNone)
+			break;
+	}
+	stopSampleAudio();
+	return true;
+}
+
+bool PreGob_Emmanuelle::playAmigaSampleCommand(byte command) {
+	AmigaSampleCommand sampleCommand;
+	if (!getAmigaSampleCommand(command, sampleCommand))
+		return false;
+	if (_introSkip.fastForwarding()) {
+		stopSampleAudio();
+		return true;
+	}
+	if (sampleCommand.slot >= _sampleCount)
+		return true;
+
+	if (sampleCommand.stopAllFirst)
+		stopSampleAudio();
+	if (sampleCommand.preDelay)
+		delay(amigaNativeDelayMilliseconds(sampleCommand.preDelay));
+	if (_vm->shouldQuit())
+		return true;
+	if (_introSkip.fastForwarding()) {
+		stopSampleAudio();
+		return true;
+	}
+	stopSampleAudio();
+	_vm->_sound->blasterPlay(&_samples[sampleCommand.slot],
+							 sampleCommand.mixerRepeatCount, 0);
+	setAudioState(kOldTotAudioAmigaSample, sampleCommand.slot, 0,
+						 sampleCommand.mixerRepeatCount, false, true);
+	if (sampleCommand.postDelay)
+		delay(amigaNativeDelayMilliseconds(sampleCommand.postDelay));
+	return true;
 }
 
 void PreGob_Emmanuelle::waitAmigaInputRelease() {

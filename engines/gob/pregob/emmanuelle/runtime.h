@@ -37,7 +37,8 @@ namespace Emmanuelle {
 enum OldTotAudioKind {
 	kOldTotAudioNone = 0,
 	kOldTotAudioDosSpeaker,
-	kOldTotAudioAtariSample
+	kOldTotAudioAtariSample,
+	kOldTotAudioAmigaSample
 };
 
 struct ProtectionPrompt {

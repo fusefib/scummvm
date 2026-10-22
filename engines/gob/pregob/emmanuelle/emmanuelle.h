@@ -160,7 +160,7 @@ private:
 	int16 pollGameInput(int16 &mouseX, int16 &mouseY,
 						  MouseButtons &mouseButtons);
 	int16 pollInterpreterInput(int16 &mouseX, int16 &mouseY,
-		MouseButtons &mouseButtons);
+		MouseButtons &mouseButtons, bool inFight = false);
 	void applyInputBoundary(const InputBoundary &boundary);
 	void discardPendingInput();
 	void serviceInterpreterTimer();
@@ -178,12 +178,14 @@ private:
 	void playDosFightTone(uint16 frequency);
 	void serviceAtariFightFrame(const FightState &state);
 	void startAtariFightConclusionAudio();
+	void serviceAmigaFightFrame(const FightState &state);
 	void setAudioState(OldTotAudioKind kind, int16 slot,
 							uint16 frequency, int16 repeatCount,
 							bool blocking, bool active);
 	bool loadSampleBank(byte bank);
 	const char *const *sampleBankNames(byte bank, byte &count) const;
 	const char *const *atariIntroSampleNames(byte &count) const;
+	const char *const *amigaIntroSampleNames(byte &count) const;
 	bool prepareSampleBank(byte bank, SoundDesc *samples, byte &count) const;
 	bool hasAnyAtariSoundFile() const;
 	void stopSampleAudio();
@@ -197,6 +199,8 @@ private:
 	void fadeAtariToBlack();
 	void fadeAtariFromBlack();
 	void delayAtariAnimation(uint16 units);
+	bool playAmigaSampleCommand(byte command);
+	bool playAmigaIntro();
 	bool handleAmigaFF0B(byte command);
 	void fadeAmigaToBlack();
 	void fadeAmigaFromBlack();

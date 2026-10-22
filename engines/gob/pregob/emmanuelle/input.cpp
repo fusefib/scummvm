@@ -67,6 +67,11 @@ void PreGob_Emmanuelle::handleCustomAction(
 
 void PreGob_Emmanuelle::processGameEvents() {
 	_vm->_util->processInput();
+	if (_platformTag == kOldTotPlatformAmiga &&
+		_audioKind == kOldTotAudioAmigaSample && _audioActive &&
+		!_vm->_sound->blasterPlayingSound())
+		setAudioState(kOldTotAudioAmigaSample, _audioSlot, 0,
+			_audioRepeatCount, false, false);
 
 	int16 key = kKeyNone;
 	while (_vm->_util->checkKey(key)) {
@@ -108,7 +113,7 @@ int16 PreGob_Emmanuelle::pollGameInput(int16 &mouseX, int16 &mouseY,
 }
 
 int16 PreGob_Emmanuelle::pollInterpreterInput(
-	int16 &mouseX, int16 &mouseY, MouseButtons &mouseButtons) {
+	int16 &mouseX, int16 &mouseY, MouseButtons &mouseButtons, bool inFight) {
 	const bool atari = _platformTag == kOldTotPlatformAtariST;
 	if (!atari && _platformTag != kOldTotPlatformAmiga) {
 		const int16 key = pollGameInput(mouseX, mouseY, mouseButtons);
@@ -132,7 +137,8 @@ int16 PreGob_Emmanuelle::pollInterpreterInput(
 	}
 
 	const bool paced = servicePresentation();
-	if (!paced && !_vm->shouldQuit() &&
+	// Amiga fights perform their own frame pacing.
+	if ((atari || !inFight) && !paced && !_vm->shouldQuit() &&
 		!_introSkip.fastForwarding()) {
 		if (atari)
 			presentFrame(true);
