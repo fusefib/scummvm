@@ -60,7 +60,19 @@ void PreGob_Emmanuelle::setInputContext(EmmanuelleInputContext context) {
 
 void PreGob_Emmanuelle::handleCustomAction(
 		Common::CustomEventType action) {
-
+	if (action == (Common::CustomEventType)kEmmanuelleActionOpenMainMenu) {
+		const EmmanuelleSaveBoundaryState state = saveBoundaryState();
+		_mainMenuActionThisPoll = state.canHandoffMenu();
+		if (_diagnosticTraceEnabled && !_mainMenuActionThisPoll)
+			debugC(2, kDebugSaveLoad,
+				   "EMMA_TRACE event=menu_request result=ignored module=%s "
+				   "active_input=%u node=0x%04X suspended=%u blocker=%s",
+				   _moduleFileStem.c_str(), state.activeInput ? 1U : 0U,
+				   state.activeInputNode, state.suspendedWait ? 1U : 0U,
+				   emmanuelleSaveBoundaryBlockerName(
+					   state.blocker()));
+		return;
+	}
 	if (action == (Common::CustomEventType)kEmmanuelleActionSkipIntro)
 		_introSkip.request();
 }
@@ -224,13 +236,36 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 		stopSampleAudio();
 	_mainMenuActionThisPoll = false;
 	const int16 key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
+	const bool menuAction = _mainMenuActionThisPoll;
 	_mainMenuActionThisPoll = false;
 	if (_vm->shouldQuit()) {
-
+		if (menuAction && _diagnosticTraceEnabled)
+			debugC(2, kDebugSaveLoad,
+				   "EMMA_TRACE event=menu_request result=ignored reason=quit "
+				   "module=%s",
+				   _moduleFileStem.c_str());
 		_openMainMenuAfterSuspend = false;
 		setInputContext(kEmmanuelleInputNone);
 		return -3;
 	}
+	const EmmanuelleSaveBoundaryState boundary = saveBoundaryState();
+	if (menuAction && boundary.canHandoffMenu() &&
+		boundary.activeInputNode == nodeOffset) {
+		_openMainMenuAfterSuspend = true;
+		if (_diagnosticTraceEnabled)
+			debugC(2, kDebugSaveLoad,
+				   "EMMA_TRACE event=menu_request result=accepted module=%s "
+				   "node=0x%04X",
+				   _moduleFileStem.c_str(), nodeOffset);
+		setInputContext(kEmmanuelleInputNone);
+		return -3;
+	}
+	if (menuAction && _diagnosticTraceEnabled)
+		debugC(2, kDebugSaveLoad,
+			   "EMMA_TRACE event=menu_request result=ignored module=%s "
+			   "node=0x%04X blocker=%s",
+			   _moduleFileStem.c_str(), nodeOffset,
+			   emmanuelleSaveBoundaryBlockerName(boundary.blocker()));
 	const int16 cursorMinimum = minimumCursorOrigin(_platformTag);
 	int16 cursorX = CLIP<int16>(mouseX, cursorMinimum, 316);
 	int16 cursorY = CLIP<int16>(mouseY, cursorMinimum, 196);

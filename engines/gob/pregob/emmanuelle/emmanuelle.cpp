@@ -435,7 +435,26 @@ bool PreGob_Emmanuelle::executeLoadedModule() {
 
 	bool ok = _executor->runRoot();
 	while (ok && _executor->suspended() && !_vm->shouldQuit()) {
-
+		if (_openMainMenuAfterSuspend) {
+			const bool openMenu = saveBoundaryState().canOpenMenu();
+			_openMainMenuAfterSuspend = false;
+			if (openMenu) {
+				if (_diagnosticTraceEnabled)
+					debugC(2, kDebugSaveLoad,
+						   "EMMA_TRACE event=menu_open module=%s node=0x%04X",
+						   _moduleFileStem.c_str(), _executor->suspendedNode());
+				_vm->openMainMenuDialog();
+				_vm->getEventManager()->purgeKeyboardEvents();
+				_vm->getEventManager()->purgeMouseEvents();
+				discardPendingInput();
+				if (_diagnosticTraceEnabled)
+					debugC(2, kDebugSaveLoad,
+						   "EMMA_TRACE event=menu_close module=%s quit=%u",
+						   _moduleFileStem.c_str(), _vm->shouldQuit() ? 1U : 0U);
+				if (_vm->shouldQuit())
+					break;
+			}
+		}
 		ok = _executor->resume();
 	}
 
