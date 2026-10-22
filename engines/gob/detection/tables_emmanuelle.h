@@ -78,6 +78,23 @@
 
 {{"emmanuelle",
 	  nullptr,
+	  AD_ENTRY3s(
+		  "LOADER.PRG", "a0945e99fce671fb36298d1de01a432a", 69540,
+		  "INIT.TOT", "3c69239cbebe55c168cb73d10f8db855", 26752,
+		  "INIT.I01", "b8fac1a5213832a0d3420b9ad42e7253", 36736),
+	  FR_FRA,
+	  kPlatformAtariST,
+	  ADGF_UNSTABLE,
+	  GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
+	 kFeaturesEGA | kFeatures16Colors |
+		 kFeaturesEmmanuelleInlineLocalGraphics |
+		 kFeaturesEmmanuelleAlternateInputGeometry,
+	 nullptr,
+	 "INIT.TOT",
+	 0},
+
+{{"emmanuelle",
+	  nullptr,
 	  AD_ENTRY2s(
 		  "INIT.TOT", "ad6cc0d8ba2964848250d56ca2e5a6ab", 26368,
 		  "INIT.I01", "b8fac1a5213832a0d3420b9ad42e7253", 36736),
@@ -117,6 +134,23 @@
 	  ADGF_UNSTABLE,
 	  GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
 	 kFeaturesEGA | kFeatures16Colors |
+		 kFeaturesEmmanuelleOptionalAtariAudio,
+	 nullptr,
+	 "INIT.TOT",
+	 0},
+
+{{"emmanuelle",
+	  nullptr,
+	  AD_ENTRY2s(
+		  "INIT.TOT", "3c69239cbebe55c168cb73d10f8db855", 26752,
+		  "INIT.I01", "b8fac1a5213832a0d3420b9ad42e7253", 36736),
+	  FR_FRA,
+	  kPlatformAtariST,
+	  ADGF_UNSTABLE,
+	  GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
+	 kFeaturesEGA | kFeatures16Colors |
+		 kFeaturesEmmanuelleInlineLocalGraphics |
+		 kFeaturesEmmanuelleAlternateInputGeometry |
 		 kFeaturesEmmanuelleOptionalAtariAudio,
 	 nullptr,
 	 "INIT.TOT",

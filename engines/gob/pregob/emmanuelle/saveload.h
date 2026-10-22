@@ -48,6 +48,7 @@ enum EmmanuelleRuntimeProfile : byte {
 	kEmmanuelleProfileDosEnglish = 1,
 	kEmmanuelleProfileAtariEnglish = 4,
 	kEmmanuelleProfileAtariSpanish = 5,
+	kEmmanuelleProfileAtariFrench = 6,
 	kEmmanuelleProfileAmigaEnglish = 7
 };
 

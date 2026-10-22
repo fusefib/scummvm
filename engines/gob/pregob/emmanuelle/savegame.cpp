@@ -244,7 +244,7 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		return false;
 	}
 	if (moduleNeedsLocalGraphicsFile(state.module,
-			moduleUsesLocalGraphics(state.module), false)) {
+			moduleUsesLocalGraphics(state.module), _inlineLocalGraphics)) {
 		const char *ixxExtension = _platformTag == kOldTotPlatformAmiga
 			? ".IA0" : ".I00";
 		Common::SeekableReadStream *stream = openLoose(
