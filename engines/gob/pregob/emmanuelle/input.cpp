@@ -33,6 +33,7 @@
 #include "gob/gob.h"
 #include "gob/sound/sound.h"
 #include "gob/util.h"
+#include "gob/pregob/emmanuelle/atari.h"
 #include "gob/pregob/emmanuelle/dos.h"
 
 namespace Gob {
@@ -96,17 +97,48 @@ int16 PreGob_Emmanuelle::takePendingInput(
 
 int16 PreGob_Emmanuelle::pollGameInput(int16 &mouseX, int16 &mouseY,
 										 MouseButtons &mouseButtons) {
-	presentFrame(true);
+	serviceAtariAudio();
+	const bool paced = _platformTag == kOldTotPlatformAtariST &&
+		servicePresentation();
+	if (!paced)
+		presentFrame(true);
 	processGameEvents();
 	return takePendingInput(mouseX, mouseY, mouseButtons);
 }
 
 int16 PreGob_Emmanuelle::pollInterpreterInput(
 	int16 &mouseX, int16 &mouseY, MouseButtons &mouseButtons) {
+	if (_platformTag != kOldTotPlatformAtariST) {
+		const int16 key = pollGameInput(mouseX, mouseY, mouseButtons);
+		serviceInterpreterTimer();
+		return key;
+	}
 
-	const int16 key = pollGameInput(mouseX, mouseY, mouseButtons);
+	processGameEvents();
+	if (_vm->shouldQuit()) {
+		_schedulerDebt = 0;
+		return kKeyNone;
+	}
+
+	serviceAtariAudio();
+	serviceColorCycle();
 	serviceInterpreterTimer();
-	return key;
+	if (_vm->shouldQuit()) {
+		_schedulerDebt = 0;
+		return kKeyNone;
+	}
+
+	const bool paced = servicePresentation();
+	if (!paced && !_vm->shouldQuit() && !_introSkip.fastForwarding())
+		presentFrame(true);
+	if (!_vm->shouldQuit())
+		fadeAtariFromBlack();
+	if (_vm->shouldQuit()) {
+		_schedulerDebt = 0;
+		return kKeyNone;
+	}
+
+	return takePendingInput(mouseX, mouseY, mouseButtons);
 }
 
 void PreGob_Emmanuelle::serviceInterpreterTimer() {
@@ -142,7 +174,14 @@ void PreGob_Emmanuelle::applyInputBoundary(
 	}
 	if (boundary.discardStale)
 		discardPendingInput();
-
+	if (_platformTag == kOldTotPlatformAtariST && boundary.discardStale) {
+		int16 initialX = 0;
+		int16 initialY = 0;
+		_vm->_util->getMouseState(&initialX, &initialY, nullptr);
+		initialX = CLIP<int16>(initialX, 0, 304);
+		initialY = CLIP<int16>(initialY, 0, 184);
+		_vm->_util->setMousePos(initialX, initialY);
+	}
 	if (boundary.showCursor)
 		showCursor();
 }
@@ -164,7 +203,9 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 	int16 mouseY = 0;
 	MouseButtons mouseButtons = kMouseButtonsNone;
 	// Atari traite_souris_ stops an active sample on every input pass.
-
+	if (_platformTag == kOldTotPlatformAtariST &&
+		_vm->_sound && _vm->_sound->blasterPlayingSound())
+		stopSampleAudio();
 	_mainMenuActionThisPoll = false;
 	const int16 key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
 	_mainMenuActionThisPoll = false;
@@ -277,26 +318,39 @@ void PreGob_Emmanuelle::waitInputRelease() {
 
 void PreGob_Emmanuelle::waitOpcode03(byte arg) {
 	if (_introSkip.fastForwarding()) {
-
+		if (_platformTag == kOldTotPlatformAtariST)
+			servicePresentation();
 		processGameEvents();
 		return;
 	}
-
 	if (arg == 0) {
-		waitReturn();
+		if (_platformTag == kOldTotPlatformDOS)
+			waitReturn();
+		else
+			waitAtariContinuation();
 		return;
 	}
 	if (arg == 0xFF) {
-		waitInputRelease();
+		if (_platformTag == kOldTotPlatformDOS)
+			waitInputRelease();
+		else
+			waitAtariInputRelease();
 		return;
 	}
-
-	presentFrame(true);
+	if (_platformTag == kOldTotPlatformDOS) {
+		presentFrame(true);
+		noteInitialTomahawkVisible();
+		processGameEvents();
+		if (!_vm->shouldQuit())
+			delay(dosOpcode03DelayMilliseconds(arg));
+		return;
+	}
+	if (!servicePresentation())
+		presentFrame(true);
+	fadeAtariFromBlack();
 	noteInitialTomahawkVisible();
-	processGameEvents();
-	if (!_vm->shouldQuit())
-		delay(dosOpcode03DelayMilliseconds(arg));
-	return;
+	serviceWaitColorCycle();
+	delay(opcode03DelayUnits(arg));
 }
 
 void PreGob_Emmanuelle::delay(uint16 milliseconds) {
@@ -308,8 +362,16 @@ void PreGob_Emmanuelle::delay(uint16 milliseconds) {
 		const uint16 slice = milliseconds < 20 ? milliseconds : 20;
 		_vm->_util->delay(slice);
 		processGameEvents();
-
+		serviceAtariAudio();
 		milliseconds -= slice;
+	}
+}
+
+void PreGob_Emmanuelle::waitPresentationFrames(byte count) {
+	for (byte i = 0; i < count && !_vm->shouldQuit(); ++i) {
+		if (!_introSkip.fastForwarding())
+			_vm->_util->waitEndFrame(false);
+		processGameEvents();
 	}
 }
 

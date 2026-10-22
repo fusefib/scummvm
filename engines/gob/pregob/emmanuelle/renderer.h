@@ -77,7 +77,7 @@ public:
 	void setResourceBanks(const OldIxxBank *localBank, const OldIxxBank *sharedBank);
 	void setPlatform(OldTotPlatformTag platform) {
 		_platform = platform;
-
+		_presentation = PresentationState(platform);
 	}
 	bool applyDosPalette(const Common::String &moduleName, byte videoMode);
 	bool presentDosFrame(const Common::String &moduleName, byte videoMode);
@@ -85,9 +85,41 @@ public:
 	bool applyAtariModulePalette(const Common::String &moduleName);
 	bool selectAtariPalette(byte paletteNumber, bool makeVisible);
 	bool applyAtariPalette(byte paletteNumber);
+	bool applyAtariEffectWords(const uint16 words[4]);
+	bool rotateAtariEffectWords();
+	bool rotateAtariColorCycleWords();
 	/** Apply one of eight native palette phases without owning event pacing. */
+	bool presentAtariFadeToBlackStep(byte phase);
+	bool presentAtariFadeFromBlackStep(byte phase);
+	bool restoreAtariPaletteImmediately();
 	bool atariPaletteValid() const { return _atariPaletteValid; }
 	bool atariBlack() const { return _atariBlack; }
+	void armAtariTransition(byte mode);
+	void disarmAtariTransition();
+	void resetAtariModuleState();
+	void notePresentationDirtyRect(int16 left, int16 top, int16 right,
+		int16 bottom);
+	void captureAtariPresentedFrame();
+	bool nextPresentationStep(bool black, byte randomVariant,
+		PresentationStep &step);
+	bool beginAtariTransitionFrame();
+	bool presentAtariMode43Step(byte phase);
+	bool presentAtariMode44Step(byte variant, byte phase);
+	byte presentationMode() const { return _presentation.mode(); }
+	byte presentationVariant() const {
+		return _presentation.variant();
+	}
+	byte presentationPhase() const { return _presentation.phase(); }
+	bool presentationPending() const {
+		return _presentation.pending();
+	}
+	bool presentationActive() const {
+		return _presentation.active();
+	}
+	bool presentationQuiescent() const {
+		return !_presentation.active() &&
+			!_presentation.pending();
+	}
 
 
 	bool saveScreenRect(uint16 x, uint16 y, uint16 width, uint16 height);
@@ -121,6 +153,11 @@ public:
 private:
 	bool setAtariWords(const uint16 words[16], bool makeVisible);
 	void showAtariWords(const uint16 words[16]);
+	SurfacePtr clonePresentationFrame(const Surface &source) const;
+	void copyPresentationRect(const Surface &target, int16 left, int16 top,
+		int16 right, int16 bottom);
+	void finishAtariTransitionFrame();
+	void clearDirtyRect();
 
 	GobEngine *_vm;
 	OldTotPlatformTag _platform;
@@ -130,6 +167,14 @@ private:
 	uint16 _atariLogicalPalette[16];
 	bool _atariPaletteValid;
 	bool _atariBlack;
+	PresentationState _presentation;
+	SurfacePtr _atariPresentedSurface;
+	SurfacePtr _atariTransitionTarget;
+	bool _dirtyValid;
+	int16 _dirtyLeft;
+	int16 _dirtyTop;
+	int16 _dirtyRight;
+	int16 _dirtyBottom;
 };
 
 } // End of namespace Emmanuelle

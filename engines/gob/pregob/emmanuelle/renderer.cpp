@@ -35,6 +35,7 @@
 #include "gob/util.h"
 #include "gob/video.h"
 #include "gob/pregob/emmanuelle/animation.h"
+#include "gob/pregob/emmanuelle/atari.h"
 #include "gob/pregob/emmanuelle/dos.h"
 #include "gob/pregob/emmanuelle/emmanuelle.h"
 #include "gob/pregob/emmanuelle/fight.h"
@@ -45,7 +46,8 @@ namespace Gob {
 namespace Emmanuelle {
 
 OldTotRenderer::OldTotRenderer(GobEngine *vm) :
-	_vm(vm) {
+	_vm(vm), _presentation(kOldTotPlatformDOS),
+	_atariPresentedSurface(), _atariTransitionTarget() {
 	_platform = kOldTotPlatformDOS;
 
 	// The module host owns both resource banks.
@@ -56,6 +58,11 @@ OldTotRenderer::OldTotRenderer(GobEngine *vm) :
 	_atariPaletteValid = false;
 	_atariBlack = false;
 
+	_dirtyValid = false;
+	_dirtyLeft = 0;
+	_dirtyTop = 0;
+	_dirtyRight = 0;
+	_dirtyBottom = 0;
 
 
 	for (uint i = 0; i < ARRAYSIZE(_atariLogicalPalette); ++i)
@@ -119,8 +126,20 @@ bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
 void OldTotRenderer::commitState(OldTotRendererPreparedState &in) {
 	_vm->_draw->_backSurface->blit(*in.framebuffer);
 	_savedRegions.swap(in.savedRegions);
+	_presentation = PresentationState(_platform);
+	_atariPresentedSurface = _platform == kOldTotPlatformAtariST
+		? in.framebuffer : SurfacePtr();
+	_atariTransitionTarget.reset();
+	clearDirtyRect();
 
-
+	if (_platform == kOldTotPlatformAtariST && _atariPaletteValid) {
+		if (_atariBlack) {
+			uint16 black[16] = {0};
+			showAtariWords(black);
+		} else {
+			showAtariWords(_atariLogicalPalette);
+		}
+	}
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0,
 		in.framebuffer->getWidth() - 1, in.framebuffer->getHeight() - 1);
 }
@@ -129,6 +148,62 @@ void OldTotRenderer::setResourceBanks(const OldIxxBank *localBank,
 									  const OldIxxBank *sharedBank) {
 	_localBank = localBank;
 	_sharedBank = sharedBank;
+}
+
+bool OldTotRenderer::nextPresentationStep(bool black, byte randomVariant,
+		PresentationStep &step) {
+	return _platform != kOldTotPlatformDOS &&
+		_presentation.nextStep(black, randomVariant, step);
+}
+
+SurfacePtr OldTotRenderer::clonePresentationFrame(
+	const Surface &source) const {
+	SurfacePtr copy(new Surface(source.getWidth(), source.getHeight(),
+								source.getBPP()));
+	copy->blit(source, 0, 0);
+	return copy;
+}
+
+void OldTotRenderer::clearDirtyRect() {
+	_dirtyValid = false;
+	_dirtyLeft = 0;
+	_dirtyTop = 0;
+	_dirtyRight = 0;
+	_dirtyBottom = 0;
+}
+
+void OldTotRenderer::notePresentationDirtyRect(int16 left, int16 top,
+	int16 right, int16 bottom) {
+	if ((_platform != kOldTotPlatformAtariST &&
+		 _platform != kOldTotPlatformAmiga) || !_vm || !_vm->_draw ||
+		!_vm->_draw->_backSurface)
+		return;
+	const int16 width = (int16)_vm->_draw->_backSurface->getWidth();
+	const int16 height = (int16)_vm->_draw->_backSurface->getHeight();
+	if (right < 0 || bottom < 0 || left >= width || top >= height)
+		return;
+	left = MAX<int16>(left, 0);
+	top = MAX<int16>(top, 0);
+	right = MIN<int16>(right, width - 1);
+	bottom = MIN<int16>(bottom, height - 1);
+	if (left > right || top > bottom)
+		return;
+
+	_presentation.noteChange();
+	if (_presentation.mode() != 43)
+		return;
+	if (!_dirtyValid) {
+		_dirtyLeft = left;
+		_dirtyTop = top;
+		_dirtyRight = right;
+		_dirtyBottom = bottom;
+		_dirtyValid = true;
+		return;
+	}
+	_dirtyLeft = MIN(_dirtyLeft, left);
+	_dirtyTop = MIN(_dirtyTop, top);
+	_dirtyRight = MAX(_dirtyRight, right);
+	_dirtyBottom = MAX(_dirtyBottom, bottom);
 }
 
 bool OldTotRenderer::applyDosPalette(const Common::String &moduleName,
@@ -192,6 +267,22 @@ bool OldTotRenderer::presentDosFrame(const Common::String &moduleName,
 	return true;
 }
 
+void OldTotRenderer::copyPresentationRect(const Surface &target,
+	int16 left, int16 top, int16 right, int16 bottom) {
+	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface)
+		return;
+	Surface &back = *_vm->_draw->_backSurface;
+	left = MAX<int16>(left, 0);
+	top = MAX<int16>(top, 0);
+	right = MIN<int16>(right, back.getWidth() - 1);
+	bottom = MIN<int16>(bottom, back.getHeight() - 1);
+	if (left > right || top > bottom)
+		return;
+	back.blit(target, left, top, right, bottom, left, top);
+	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top,
+							right, bottom);
+}
+
 bool OldTotRenderer::saveScreenRect(uint16 x, uint16 y, uint16 width,
 									uint16 height) {
 	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface || width == 0 ||
@@ -216,7 +307,14 @@ bool OldTotRenderer::restoreScreenRect() {
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, saved.x, saved.y,
 							saved.x + saved.surface->getWidth() - 1,
 							saved.y + saved.surface->getHeight() - 1);
-
+	uint16 dirtyLeft = saved.x;
+	uint16 dirtyRight = saved.x + saved.surface->getWidth() - 1;
+	if (_platform == kOldTotPlatformAtariST)
+		getAtariStRestoredDirtyBounds(
+			saved.x, saved.surface->getWidth(),
+			_vm->_draw->_backSurface->getWidth(), dirtyLeft, dirtyRight);
+	notePresentationDirtyRect(dirtyLeft, saved.y, dirtyRight,
+					   saved.y + saved.surface->getHeight() - 1);
 	return true;
 }
 
@@ -228,6 +326,8 @@ void OldTotRenderer::fillScreen(byte color) {
 	back.fillRect(0, 0, back.getWidth() - 1, back.getHeight() - 1, color);
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0, back.getWidth() - 1,
 							back.getHeight() - 1);
+	notePresentationDirtyRect(0, 0, back.getWidth() - 1,
+		back.getHeight() - 1);
 }
 
 bool OldTotRenderer::drawPackedPayload(const Common::Array<byte> &payload,
@@ -268,6 +368,7 @@ bool OldTotRenderer::drawPackedPayload(const Common::Array<byte> &payload,
 
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y,
 							x + width - 1, y + height - 1);
+	notePresentationDirtyRect(x, y, x + width - 1, y + height - 1);
 	return true;
 }
 
@@ -384,14 +485,73 @@ void PreGob_Emmanuelle::presentFrame(bool waitForFrame, bool force) {
 	if (_introSkip.fastForwarding() && !force)
 		return;
 	_vm->_draw->blitInvalidated();
-	const byte videoMode = _scriptVM
-		? _scriptVM->runtimeState().videoMode : _runtimeState.videoMode;
-	_renderer.presentDosFrame(_moduleFileStem, videoMode);
-
+	if (_platformTag == kOldTotPlatformDOS) {
+		const byte videoMode = _scriptVM
+			? _scriptVM->runtimeState().videoMode : _runtimeState.videoMode;
+		_renderer.presentDosFrame(_moduleFileStem, videoMode);
+	}
+	if (_platformTag == kOldTotPlatformAtariST)
+		_renderer.captureAtariPresentedFrame();
 	if (waitForFrame)
 		_vm->_util->waitEndFrame(false);
 	else
 		_vm->_video->retrace();
+}
+
+bool PreGob_Emmanuelle::servicePresentation() {
+	if (_platformTag != kOldTotPlatformAtariST)
+		return false;
+
+	bool paced = false;
+	PresentationStep step;
+	while (!_vm->shouldQuit() && !_renderer.presentationQuiescent()) {
+		byte randomVariant = _renderer.presentationVariant();
+		if (!_renderer.presentationActive() &&
+			_renderer.presentationMode() == 44)
+			randomVariant = (byte)randomBounded(5);
+		if (!_renderer.nextPresentationStep(
+				_renderer.atariBlack(), randomVariant, step))
+			break;
+
+		bool rendered = true;
+		if (step.operation == kPresentationMode43 ||
+			step.operation == kPresentationMode44) {
+			if (step.phase == 0)
+				rendered = _renderer.beginAtariTransitionFrame();
+			if (rendered && step.operation == kPresentationMode43)
+				rendered = _renderer.presentAtariMode43Step(step.phase);
+			else if (rendered &&
+					 step.operation == kPresentationMode44)
+				rendered = _renderer.presentAtariMode44Step(
+					step.variant, step.phase);
+		}
+		if (!_introSkip.fastForwarding())
+			_vm->_draw->blitInvalidated();
+		waitPresentationFrames();
+		paced = true;
+		if (step.operation == kPresentationFadeFromBlack &&
+			!_vm->shouldQuit())
+			fadeAtariFromBlack();
+		if (step.complete && !_vm->shouldQuit())
+			_renderer.captureAtariPresentedFrame();
+		if (_diagnosticTraceEnabled &&
+			(!rendered || (step.operation != kPresentationFrame &&
+			 (step.phase == 0 || step.complete))))
+			debugC(3, kDebugGraphics,
+				   "EMMA_TRACE event=atari_present module=%s operation=%u "
+				   "variant=%u phase=%u complete=%u rendered=%u "
+				   "mode=%u pending=%u active=%u black=%u",
+				   _moduleFileStem.c_str(), (uint)step.operation,
+				   (uint)step.variant, (uint)step.phase,
+				   step.complete ? 1U : 0U, rendered ? 1U : 0U,
+				   (uint)_renderer.presentationMode(),
+				   _renderer.presentationPending() ? 1U : 0U,
+				   _renderer.presentationActive() ? 1U : 0U,
+				   _renderer.atariBlack() ? 1U : 0U);
+		if (!rendered || step.complete)
+			break;
+	}
+	return paced;
 }
 
 void PreGob_Emmanuelle::waitForMinimumDuration(
@@ -406,12 +566,16 @@ void PreGob_Emmanuelle::waitForMinimumDuration(
 		const uint16 slice = remaining < 20 ? (uint16)remaining : 20;
 		_vm->_util->delay(slice);
 		processGameEvents();
-
+		serviceAtariAudio();
 	}
 }
 
 bool PreGob_Emmanuelle::initialTomahawkPresentationVisible() const {
-	return true;
+	return isTitlePresentationVisible(
+		_platformTag,
+		_platformTag == kOldTotPlatformAtariST && _renderer.atariBlack(),
+		_renderer.presentationPending(),
+		_renderer.presentationActive(), false);
 }
 
 void PreGob_Emmanuelle::noteInitialTomahawkVisible() {
@@ -431,6 +595,7 @@ void PreGob_Emmanuelle::noteInitialTomahawkVisible() {
 void PreGob_Emmanuelle::ensureInitialTomahawkHandoff() {
 	if (_initialTitleState == kInitialTitleDrawn && !_vm->shouldQuit()) {
 		if (!initialTomahawkPresentationVisible())
+			resolveIntroPresentation();
 		noteInitialTomahawkVisible();
 	}
 }
@@ -453,6 +618,24 @@ void PreGob_Emmanuelle::completeInitialTomahawkHandoff(
 			(uint)_platformTag,
 			(uint)(g_system->getMillis() - _initialTomahawkVisibleStart),
 			(uint)minimum);
+}
+
+bool PreGob_Emmanuelle::resolveIntroPresentation() {
+	if (_vm->shouldQuit())
+		return false;
+	if (_platformTag == kOldTotPlatformAtariST) {
+		servicePresentation();
+		if (_renderer.atariBlack())
+			_renderer.restoreAtariPaletteImmediately();
+		if (!_renderer.presentationQuiescent() ||
+			_renderer.atariBlack())
+			return false;
+	}
+	presentFrame(false, true);
+	if (!_vm->shouldQuit() &&
+		_platformTag == kOldTotPlatformDOS && _initialInitPresentation)
+		_dosInitialFramePresented = true;
+	return !_vm->shouldQuit();
 }
 
 void PreGob_Emmanuelle::defineCursor(uint16 descriptorOffset) {
@@ -590,6 +773,9 @@ void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, plan.x, plan.y,
 							plan.x + plan.width - 1,
 							plan.y + plan.height - 1);
+	_renderer.notePresentationDirtyRect(plan.x, plan.y,
+								  plan.x + plan.width - 1,
+								  plan.y + plan.height - 1);
 }
 
 void PreGob_Emmanuelle::textNode(uint16 nodeOffset) {
@@ -618,9 +804,19 @@ bool PreGob_Emmanuelle::renderAnimationFrame(
 		descriptor.transparentZero());
 	if (!cell)
 		return false;
+	SpriteBounds previousBounds;
+	const bool hadPrevious = _active.bounds(setup.slot, previousBounds);
 	const bool composited = _active.composite(
 		setup.slot, *cell, framePlan.x, framePlan.y, 0xFF);
 	if (composited) {
+		if (hadPrevious)
+			_renderer.notePresentationDirtyRect(
+				previousBounds.x, previousBounds.y,
+				previousBounds.x + previousBounds.w - 1,
+				previousBounds.y + previousBounds.h - 1);
+		_renderer.notePresentationDirtyRect(
+			framePlan.x, framePlan.y, framePlan.x + framePlan.cellWidth - 1,
+			framePlan.y + framePlan.cellHeight - 1);
 	}
 	return composited;
 }
@@ -664,11 +860,19 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 					processGameEvents();
 				}
 
+				if (_platformTag == kOldTotPlatformAtariST && rendered) {
+					servicePresentation();
+					waitPresentationFrames(atariStAnimationVblCount());
+				}
 				if (_vm->shouldQuit())
 					break;
 				if (setup.frameDelay) {
 					const uint16 units = (uint16)setup.frameDelay * 10;
+					if (_platformTag == kOldTotPlatformAtariST)
+						delayAtariAnimation(units);
+					else {
 					delay(units);
+										}
 				}
 				if (_introSkip.fastForwarding())
 					processGameEvents();
@@ -676,7 +880,13 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 		}
 	}
 	if (setup.flags & kAnimClear) {
-		_active.restore(setup.slot);
+		SpriteBounds restoredBounds;
+		const bool hadActive = _active.bounds(setup.slot, restoredBounds);
+		if (_active.restore(setup.slot) && hadActive)
+			_renderer.notePresentationDirtyRect(
+				restoredBounds.x, restoredBounds.y,
+				restoredBounds.x + restoredBounds.w - 1,
+				restoredBounds.y + restoredBounds.h - 1);
 	}
 }
 
@@ -728,17 +938,42 @@ bool PreGob_Emmanuelle::renderFightActors(const FightState &state) {
 	if (!buildFightActor(false, state.left, leftCell, leftPlacement) ||
 		!buildFightActor(true, state.right, rightCell, rightPlacement))
 		return false;
+	SpriteBounds previousLeft;
+	SpriteBounds previousRight;
+	const bool hadPreviousLeft = _active.bounds(0, previousLeft);
+	const bool hadPreviousRight = _active.bounds(1, previousRight);
 
 	const bool composited = _active.compositePair(
 		0, *leftCell, leftPlacement.cellX, leftPlacement.cellY, 0xFF,
 		1, *rightCell, rightPlacement.cellX, rightPlacement.cellY, 0xFF);
 	if (composited) {
+		if (hadPreviousLeft)
+			_renderer.notePresentationDirtyRect(
+				previousLeft.x, previousLeft.y,
+				previousLeft.x + previousLeft.w - 1,
+				previousLeft.y + previousLeft.h - 1);
+		if (hadPreviousRight)
+			_renderer.notePresentationDirtyRect(
+				previousRight.x, previousRight.y,
+				previousRight.x + previousRight.w - 1,
+				previousRight.y + previousRight.h - 1);
+		_renderer.notePresentationDirtyRect(leftPlacement.cellX,
+			leftPlacement.cellY,
+			leftPlacement.cellX + leftPlacement.cellWidth - 1,
+			leftPlacement.cellY + leftPlacement.cellHeight - 1);
+		_renderer.notePresentationDirtyRect(rightPlacement.cellX,
+			rightPlacement.cellY,
+			rightPlacement.cellX + rightPlacement.cellWidth - 1,
+			rightPlacement.cellY + rightPlacement.cellHeight - 1);
 	}
 	return composited;
 }
 
 void PreGob_Emmanuelle::reinitializeVideoBackend(byte videoMode) {
-	_renderer.applyDosPalette(_moduleFileStem, videoMode);
+	if (_platformTag == kOldTotPlatformAtariST)
+			_renderer.applyAtariModulePalette(_moduleFileStem);
+		else
+			_renderer.applyDosPalette(_moduleFileStem, videoMode);
 }
 
 } // End of namespace Emmanuelle

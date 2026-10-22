@@ -32,6 +32,78 @@
 namespace Gob {
 namespace Emmanuelle {
 
+PresentationState::PresentationState(OldTotPlatformTag platform) :
+	_platform(platform) {
+	_mode = 0;
+	_variant = 0;
+	_phase = 0;
+
+	_pending = false;
+	_active = false;
+}
+
+void PresentationState::resetModule() {
+	_mode = 0;
+	_variant = 0;
+	_phase = 0;
+	_pending = false;
+	_active = false;
+}
+
+void PresentationState::arm(byte mode) {
+	_mode = mode == 43 || mode == 44 ? mode : 0;
+	_variant = 0;
+	_phase = 0;
+	_active = false;
+}
+
+void PresentationState::commitDirectFrame() {
+	_pending = false;
+	_active = false;
+	_phase = 0;
+}
+
+bool PresentationState::nextStep(bool black, byte randomVariant,
+		PresentationStep &step) {
+	step = PresentationStep();
+	if (!_pending && !_active)
+		return false;
+	if (!_active) {
+		_active = true;
+		_phase = 0;
+		_variant = _mode == 44 ? randomVariant : 0;
+	}
+
+		step.variant = _variant;
+	step.phase = _phase;
+	if (black) {
+		step.operation = kPresentationFadeFromBlack;
+		step.complete = true;
+	} else if (_mode == 43) {
+		step.operation = kPresentationMode43;
+		step.complete = _phase == 15;
+	} else if (_mode == 44) {
+		step.operation = kPresentationMode44;
+		const byte count = _variant == 0 ? 9 : (_variant < 5 ? 18 : 0);
+		step.complete = _phase + 1 == count;
+	} else {
+		step.operation = kPresentationFrame;
+		step.complete = true;
+	}
+
+	if (step.complete) {
+		_pending = false;
+		_active = false;
+		_phase = 0;
+		_variant = 0;
+		if (_mode == 44)
+			_mode = 0;
+	} else {
+		++_phase;
+	}
+	return true;
+}
+
 InputLatch::InputLatch() {
 	_key = 0;
 	_mouseX = 0;
@@ -132,6 +204,15 @@ bool isTitlePresentationVisible(OldTotPlatformTag platform,
 	if (platform == kOldTotPlatformAtariST)
 		return !black && !framePending && !presentationActive;
 	return false;
+}
+
+ColorCycleResult advanceColorCycle(byte counter, bool enabled,
+												uint16 selector) {
+	ColorCycleResult result;
+	result.counter = (byte)((counter + 1) % 6);
+	result.rotatePalette =
+		result.counter == 0 && enabled && selector == 10;
+	return result;
 }
 
 uint16 opcode03DelayUnits(byte arg) {

@@ -74,6 +74,13 @@ enum {
 	kInitialTomahawkMinimumMilliseconds = 2500
 };
 
+struct ColorCycleResult {
+	ColorCycleResult() : counter(0), rotatePalette(false) {}
+
+	byte counter;
+	bool rotatePalette;
+};
+
 struct InputBoundary {
 	InputBoundary() : nativeDelayUnits(0), discardStale(false),
 							showCursor(false) {}
@@ -81,6 +88,48 @@ struct InputBoundary {
 	uint16 nativeDelayUnits;
 	bool discardStale;
 	bool showCursor;
+};
+
+enum PresentationOperation {
+	kPresentationNone = 0,
+	kPresentationFrame,
+	kPresentationFadeFromBlack,
+	kPresentationMode43,
+	kPresentationMode44
+};
+
+struct PresentationStep {
+	PresentationStep() : operation(kPresentationNone),
+		variant(0), phase(0), complete(false) {}
+
+	PresentationOperation operation;
+	byte variant;
+	byte phase;
+	bool complete;
+};
+
+class PresentationState {
+public:
+	explicit PresentationState(OldTotPlatformTag platform);
+	void resetModule();
+	void arm(byte mode);
+	void disarm() { arm(0); }
+	void noteChange() { _pending = true; }
+	void commitDirectFrame();
+	bool nextStep(bool black, byte randomVariant, PresentationStep &step);
+
+	byte mode() const { return _mode; }
+	byte variant() const { return _variant; }
+	byte phase() const { return _phase; }
+	bool pending() const { return _pending; }
+	bool active() const { return _active; }
+private:
+	OldTotPlatformTag _platform;
+	byte _mode;
+	byte _variant;
+	byte _phase;
+	bool _pending;
+	bool _active;
 };
 
 /** Intro skip state, cleared at INIT's first input choice. */
@@ -114,6 +163,8 @@ bool isTitlePresentationVisible(OldTotPlatformTag platform,
 									   bool black, bool framePending,
 									   bool presentationActive,
 									   bool paletteTransitionPending);
+ColorCycleResult advanceColorCycle(byte counter, bool enabled,
+												uint16 selector);
 uint16 opcode03DelayUnits(byte arg);
 /** Delay before a fresh opcode-1B wait discards stale input. */
 uint16 inputEntryDelay(OldTotPlatformTag platform);

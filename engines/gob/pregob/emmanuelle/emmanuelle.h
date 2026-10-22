@@ -104,6 +104,7 @@ public:
 	void animationNode(uint16 nodeOffset) override;
 	void rememberNode24(uint16 nodeOffset) override { _node24Offset = nodeOffset; }
 	bool shouldAbortExecution() const override;
+	bool skipIntermediateSequenceNodes() const override;
 
 	void saveScreenRect(uint16 x, uint16 y, uint16 width,
 						uint16 height) override;
@@ -136,9 +137,11 @@ private:
 	bool loadRecupAssets();
 	void clearModuleObjects();
 
+	bool servicePresentation();
 	void presentFrame(bool waitForFrame, bool force = false);
 	void processGameEvents();
 	// Count frame boundaries, processing events after each wait.
+	void waitPresentationFrames(byte count = 1);
 	// Count event-processing time toward the minimum elapsed duration.
 	void waitForMinimumDuration(uint32 startTime, uint32 minimumMilliseconds);
 	bool initialTomahawkPresentationVisible() const;
@@ -147,6 +150,7 @@ private:
 	void completeInitialTomahawkHandoff(ModuleId moduleId);
 	void beginIntroFastForward();
 	void finishIntro();
+	bool resolveIntroPresentation();
 	int16 takePendingInput(int16 &mouseX, int16 &mouseY,
 						  MouseButtons &mouseButtons);
 	int16 pollGameInput(int16 &mouseX, int16 &mouseY,
@@ -157,6 +161,8 @@ private:
 	void discardPendingInput();
 	void serviceInterpreterTimer();
 	bool inputIdle(int16 key, MouseButtons mouseButtons) const;
+	void waitAtariContinuation();
+	void waitAtariInputRelease();
 	bool handleProtectionTextNode(uint16 nodeOffset);
 	void renderTextPlan(uint16 nodeOffset);
 	bool renderAnimationFrame(const OldTotAnimationSetup &setup, uint16 step,
@@ -179,7 +185,12 @@ private:
 	void waitAtariAudio();
 	bool playAtariSampleCommand(byte command);
 	bool playAtariIntro();
+	bool handleAtariFF0B(byte command);
+	void serviceColorCycle();
 	void serviceWaitColorCycle();
+	void fadeAtariToBlack();
+	void fadeAtariFromBlack();
+	void delayAtariAnimation(uint16 units);
 	void setInputContext(EmmanuelleInputContext context);
 	EmmanuelleSaveBoundaryState saveBoundaryState() const;
 	bool safeSaveBoundary(Common::U32String *msg) const;
@@ -248,6 +259,10 @@ private:
 	int16 _atariIntroPosition;
 	byte _sampleBank;
 	byte _sampleCount;
+	bool _initialInitComplete;
+	bool _skipIntermediateSequenceNodes;
+	bool _colorCycleEnabled;
+	byte _colorCycleCounter;
 
 };
 

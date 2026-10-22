@@ -62,6 +62,10 @@ struct OldTotNativeDiagnosticState {
 		sampleBank = 0;
 		sampleCount = 0;
 
+		presentationMode = 0;
+		presentationVariant = 0;
+		presentationPhase = 0;
+		colorCounter = 0;
 
 		audioKind = kOldTotAudioNone;
 		audioSlot = -1;
@@ -74,11 +78,21 @@ struct OldTotNativeDiagnosticState {
 		savedRegionDepth = 0;
 
 
+		initialInitComplete = false;
+		skipIntermediateSequenceNodes = false;
+		colorCycleEnabled = false;
 
+		presentationDirty = false;
+		presentationActive = false;
+		paletteBlack = false;
 	}
 
 	byte sampleBank;
 	byte sampleCount;
+	byte presentationMode;
+	byte presentationVariant;
+	byte presentationPhase;
+	byte colorCounter;
 	OldTotAudioKind audioKind;
 	int16 audioSlot;
 	uint16 audioFrequency;
@@ -87,6 +101,12 @@ struct OldTotNativeDiagnosticState {
 	uint savedRegionDepth;
 	bool audioActive;
 	bool audioBlocking;
+	bool initialInitComplete;
+	bool skipIntermediateSequenceNodes;
+	bool colorCycleEnabled;
+	bool presentationDirty;
+	bool presentationActive;
+	bool paletteBlack;
 };
 
 struct OldTotDiagnosticSnapshot {
