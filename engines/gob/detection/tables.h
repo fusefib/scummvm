@@ -68,6 +68,7 @@ static const PlainGameDescriptor gobGames[] = {
 	{"bambou", "Playtoons Limited Edition - Bambou le sauveur de la jungle"},
 	{"fascination", "Fascination"},
 	{"geisha", "Geisha"},
+	{"emmanuelle", "Emmanuelle"},
 	{"adi1", "ADI 1"},
 	{"adi2", "ADI 2"},
 	{"adi4", "ADI 4"},
@@ -134,6 +135,7 @@ static const GOBGameDescription gameDescriptions[] = {
 	#include "gob/detection/tables_nathanvacances.h" // Nathan Vacances series
 	#include "gob/detection/tables_fascin.h"    // Fascination
 	#include "gob/detection/tables_geisha.h"    // Geisha
+	#include "gob/detection/tables_emmanuelle.h" // Emmanuelle
 	#include "gob/detection/tables_inca2.h"     // Inca II: Wiracocha
 	#include "gob/detection/tables_woodruff.h"  // (The Bizarre Adventures of) Woodruff and the Schnibble (of Azimuth)
 	#include "gob/detection/tables_dynasty.h"   // The Last Dynasty
