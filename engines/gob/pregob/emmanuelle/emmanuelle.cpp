@@ -43,6 +43,7 @@
 #include "gob/util.h"
 #include "gob/video.h"
 
+#include "gob/pregob/emmanuelle/amiga.h"
 #include "gob/pregob/emmanuelle/atari.h"
 #include "gob/pregob/emmanuelle/dos.h"
 #include "gob/pregob/emmanuelle/oldixx.h"
@@ -55,7 +56,8 @@ namespace Emmanuelle {
 static OldTotPlatformTag detectPlatform(const GobEngine *vm) {
 	if (vm && vm->getPlatform() == Common::kPlatformAtariST)
 		return kOldTotPlatformAtariST;
-
+	if (vm && vm->getPlatform() == Common::kPlatformAmiga)
+		return kOldTotPlatformAmiga;
 	return kOldTotPlatformDOS;
 }
 
@@ -146,7 +148,8 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
 		_enhancedDosFights =
 			ConfMan.getBool("emmanuelle_enhanced_fights");
 	}
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		_randomState &= 0xFFFFU;
 	if (_vm->_console)
 		_vm->_console->registerEmmanuelleDebugger(this);
 }
@@ -226,7 +229,9 @@ bool PreGob_Emmanuelle::shouldAbortExecution() const {
 
 bool PreGob_Emmanuelle::loadRecupAssets() {
 	// RECUP stores forty big-endian draw roots at 0x11, after its count byte.
-	const char *fileName = "RECUP.TOT";
+	const char *fileName = _platformTag == kOldTotPlatformAmiga
+								   ? "RECUP.TOA"
+								   : "RECUP.TOT";
 	Common::String reason;
 	_recupTot = loadScriptResource(fileName, reason);
 	if (!_recupTot) {
@@ -256,7 +261,9 @@ bool PreGob_Emmanuelle::loadRecupAssets() {
 }
 
 bool PreGob_Emmanuelle::loadSharedAssets() {
-	const char *bankName = "INIT.I01";
+	const char *bankName = _platformTag == kOldTotPlatformAmiga
+							   ? "INIT.IA1"
+							   : "INIT.I01";
 	Common::SeekableReadStream *stream = openLoose(bankName);
 	if (!stream) {
 		debugC(1, kDebugFileIO, "Emmanuelle: %s is missing", bankName);
@@ -293,7 +300,12 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 void PreGob_Emmanuelle::clearModuleObjects() {
 	if (_platformTag == kOldTotPlatformAtariST)
 		_renderer.resetAtariModuleState();
-
+	if (_platformTag == kOldTotPlatformAmiga) {
+		_active.discardAll();
+		_renderer.resetAmigaModuleState();
+		_schedulerAccumulator = 0;
+		_schedulerDebt = 0;
+	}
 	delete _executor;
 	_executor = nullptr;
 	delete _scriptVM;
@@ -317,11 +329,16 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 	_moduleFileStem = stem;
 	_currentModule = moduleId;
 	_currentUsesLocalGraphics = usesLocalGraphics;
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		_renderer.beginAmigaModuleState();
 	debugC(2, kDebugGameFlow, "Emmanuelle: loading module %s", stem);
 
-	const char *totExtension = ".TOT";
-	const char *ixxExtension = ".I00";
+	const char *totExtension = _platformTag == kOldTotPlatformAmiga
+								   ? ".TOA"
+								   : ".TOT";
+	const char *ixxExtension = _platformTag == kOldTotPlatformAmiga
+								   ? ".IA0"
+								   : ".I00";
 	Common::String reason;
 	_tot = loadScriptResource(_moduleFileStem + totExtension, reason);
 	if (!_tot) {
@@ -352,15 +369,21 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 	if (_vm->shouldQuit())
 		return false;
 	bool paletteApplied = false;
-	if (_platformTag == kOldTotPlatformAtariST) {
-			if (_renderer.atariModulePaletteDiffers(_moduleFileStem) &&
-				!_renderer.atariBlack()) {
-				fadeAtariToBlack();
-			}
-			paletteApplied = _renderer.applyAtariModulePalette(_moduleFileStem);
-		} else
-			paletteApplied = _renderer.applyDosPalette(
-				_moduleFileStem, _runtimeState.videoMode);
+	if (_platformTag == kOldTotPlatformAmiga) {
+		if (_renderer.amigaModulePaletteDiffers(_moduleFileStem) &&
+			!_renderer.amigaBlack()) {
+			fadeAmigaToBlack();
+		}
+		paletteApplied = _renderer.applyAmigaModulePalette(_moduleFileStem);
+	} else if (_platformTag == kOldTotPlatformAtariST) {
+		if (_renderer.atariModulePaletteDiffers(_moduleFileStem) &&
+			!_renderer.atariBlack()) {
+			fadeAtariToBlack();
+		}
+		paletteApplied = _renderer.applyAtariModulePalette(_moduleFileStem);
+	} else
+		paletteApplied = _renderer.applyDosPalette(
+			_moduleFileStem, _runtimeState.videoMode);
 	if (!paletteApplied) {
 		debugC(1, kDebugGraphics,
 			   "Emmanuelle: no platform palette for module %s", stem);
@@ -375,7 +398,6 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 		debugC(2, kDebugGameFlow,
 			   "EMMA_TRACE event=module_load platform=%u module=%s size=%u",
 			   (uint)_platformTag, _moduleFileStem.c_str(), (uint)_tot->size());
-
 	return true;
 }
 
@@ -400,7 +422,7 @@ bool PreGob_Emmanuelle::executeLoadedModule() {
 	if (ok && !_vm->shouldQuit() && _initialInitPresentation &&
 		_moduleFileStem.equalsIgnoreCase("INIT"))
 		ensureInitialTomahawkHandoff();
-	if (ok && !_vm->shouldQuit() && _platformTag != kOldTotPlatformDOS &&
+	if (ok && !_vm->shouldQuit() && _platformTag == kOldTotPlatformAtariST &&
 		!_initialInitComplete && _currentModule == kModuleInit) {
 		_initialInitComplete = true;
 		ok = loadSampleBank(2);
@@ -422,12 +444,26 @@ void PreGob_Emmanuelle::unloadModule() {
 	_currentUsesLocalGraphics = false;
 }
 
+bool PreGob_Emmanuelle::applyInitialModuleSelectorPolicy(
+		ModuleId moduleId, uint16 &selector) {
+	if (_platformTag != kOldTotPlatformAmiga || moduleId != kModuleInit)
+		return false;
+
+	const uint16 scriptSelector = selector;
+	if (_diagnosticTraceEnabled)
+		debugC(2, kDebugGameFlow,
+			   "EMMA_TRACE event=amiga_initial_selector script=%u selected=%u",
+			   (uint)scriptSelector, (uint)selector);
+	return true;
+}
+
 uint16 PreGob_Emmanuelle::randomBounded(uint16 upperExclusive) {
 	if (_platformTag == kOldTotPlatformAtariST) {
 		return atariStRandomBounded(
 			_vm->_rnd.getRandomNumber(0xFFFFFFFFU), upperExclusive);
 	}
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		return amigaRandomBounded(_randomState, upperExclusive);
 	return dosRandomBounded(_randomState, upperExclusive);
 }
 
@@ -438,7 +474,11 @@ void PreGob_Emmanuelle::schedulerTiming(byte period, bool timingVariant,
 		getAtariStSchedulerTiming(period, reload, initialCountdown);
 		return;
 	}
-
+	if (_platformTag == kOldTotPlatformAmiga) {
+		(void)timingVariant;
+		getAmigaSchedulerTiming(period, reload, initialCountdown);
+		return;
+	}
 	getDosSchedulerTiming(period, timingVariant, reload, initialCountdown);
 }
 
@@ -460,8 +500,7 @@ void PreGob_Emmanuelle::finishIntro() {
 	setInputContext(kEmmanuelleInputNone);
 	if (fastForwarding) {
 		if (!resolved) {
-			if (_platformTag == kOldTotPlatformAtariST)
-				servicePresentation();
+			servicePresentation();
 			presentFrame(false, true);
 		}
 		discardPendingInput();
@@ -493,7 +532,9 @@ void PreGob_Emmanuelle::serviceColorCycle() {
 void PreGob_Emmanuelle::serviceWaitColorCycle() {
 	if (_platformTag == kOldTotPlatformDOS)
 		return;
-	_colorCycleCounter = prepareAtariStWaitColorCounter(_colorCycleCounter);
+	_colorCycleCounter = _platformTag == kOldTotPlatformAtariST
+		? prepareAtariStWaitColorCounter(_colorCycleCounter)
+		: prepareAmigaWaitColorCounter(_colorCycleCounter);
 	serviceColorCycle();
 }
 
@@ -552,7 +593,6 @@ const char *const *PreGob_Emmanuelle::sampleBankNames(byte bank, byte &count) co
 	}
 	if (_platformTag == kOldTotPlatformAtariST)
 		return atariIntroSampleNames(count);
-
 	count = 0;
 	return nullptr;
 }
@@ -610,7 +650,7 @@ void PreGob_Emmanuelle::runFight(
 			   (uint)_platformTag, _moduleFileStem.c_str(), (int)state.leftMeter,
 			   (int)state.rightMeter, (uint)leftDamageOption, (uint)rightDamageOption);
 	renderFightActors(state);
-	presentFrame(true);
+	presentFrame(_platformTag != kOldTotPlatformAmiga);
 
 	if (_platformTag == kOldTotPlatformDOS && !_vm->shouldQuit()) {
 		const uint16 initialHold = kDosFightInitialHoldMilliseconds;
@@ -711,7 +751,8 @@ void PreGob_Emmanuelle::runFight(
 
 bool PreGob_Emmanuelle::handleNativeFF0B(
 	byte command, OldTotRuntimeState &runtimeState) {
-
+	if (_platformTag == kOldTotPlatformAmiga)
+		return handleAmigaFF0B(command);
 	if (_platformTag == kOldTotPlatformAtariST)
 		return handleAtariFF0B(command);
 
@@ -777,13 +818,22 @@ void PreGob_Emmanuelle::exportDiagnosticSnapshot(
 	out.native.colorCounter = _colorCycleCounter;
 	out.native.activeObjectCount = _active.activeCount();
 	out.native.savedRegionDepth = _renderer.savedRegionDepth();
-	if (_platformTag == kOldTotPlatformAtariST) {
+	if (_platformTag == kOldTotPlatformAtariST ||
+		_platformTag == kOldTotPlatformAmiga) {
 		out.native.presentationMode = _renderer.presentationMode();
 		out.native.presentationVariant = _renderer.presentationVariant();
 		out.native.presentationPhase = _renderer.presentationPhase();
 		out.native.presentationDirty = _renderer.presentationPending();
 		out.native.presentationActive = _renderer.presentationActive();
+	}
+	if (_platformTag == kOldTotPlatformAtariST)
 		out.native.paletteBlack = _renderer.atariBlack();
+	else if (_platformTag == kOldTotPlatformAmiga) {
+		out.native.paletteTransition = _renderer.amigaPaletteTransitionPending();
+		out.native.paletteBlack = _renderer.amigaBlack();
+		out.native.presentedSnapshot = _renderer.amigaPresentedSnapshotValid();
+		out.native.moduleGeneration = _renderer.amigaModuleGeneration();
+		out.native.presentedGeneration = _renderer.amigaPresentedGeneration();
 	}
 }
 
@@ -805,7 +855,6 @@ void PreGob_Emmanuelle::setDiagnosticTraceEnabled(bool enabled) {
 	_diagnosticTraceEnabled = enabled;
 	debugC(1, kDebugGameFlow, "Emmanuelle: diagnostic trace %s",
 		   enabled ? "enabled" : "disabled");
-
 }
 
 void PreGob_Emmanuelle::playDosFightTone(uint16 frequency) {
@@ -869,7 +918,7 @@ void PreGob_Emmanuelle::run() {
 				"without sound samples");
 	}
 	bool ready = loadSharedAssets();
-	if (ready && _platformTag != kOldTotPlatformDOS)
+	if (ready && _platformTag == kOldTotPlatformAtariST)
 		ready = loadSampleBank(1);
 	if (ready) {
 		_variables[0] = 0;

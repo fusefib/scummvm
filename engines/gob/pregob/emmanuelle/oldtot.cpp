@@ -259,12 +259,12 @@ int16 hitTestOldTotInputRegions(const OldTotData &data, uint16 nodeOffset,
 	return selected;
 }
 
-bool OldTotData::getPackedPrefix(uint32 offset, uint32 expectedPixels, Common::Array<byte> &payload) const {
+bool OldTotData::getPackedPrefix(uint32 offset, uint32 expectedPixels, Common::Array<byte> &payload, bool amiga5Bit) const {
 	payload.clear();
 	uint32 pos = offset;
 	uint32 pixels = 0;
-	const byte shortFlag = 0x08;
-	const byte countMask = 0x07;
+	const byte shortFlag = amiga5Bit ? 0x04 : 0x08;
+	const byte countMask = amiga5Bit ? 0x03 : 0x07;
 	while (pixels < expectedPixels) {
 		if (!has(pos, 1)) {
 			payload.clear();

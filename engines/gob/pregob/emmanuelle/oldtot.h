@@ -145,7 +145,7 @@ public:
 	bool decodeAnimationSetup(uint16 offset, OldTotAnimationSetup &out) const;
 	bool decodeDrawDescriptor(uint16 offset, OldTotDrawDescriptor &out) const;
 	/** Copy one unframed packed-RLE sprite, delimited by decoded pixel count. */
-	bool getPackedPrefix(uint32 offset, uint32 expectedPixels, Common::Array<byte> &payload) const;
+	bool getPackedPrefix(uint32 offset, uint32 expectedPixels, Common::Array<byte> &payload, bool amiga5Bit = false) const;
 
 private:
 	bool has(uint32 offset, uint32 length) const;

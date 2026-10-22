@@ -110,28 +110,37 @@ bool GobConsole::cmd_emmaState(int argc, const char **argv) {
 				 state.saveBoundary.canSave() ? 1U : 0U,
 				 Emmanuelle::emmanuelleSaveBoundaryBlockerName(
 					 state.saveBoundary.blocker()));
-	debugPrintf("native bank=%u sounds=%u audio=%u kind=%u slot=%d frequency=%u repeat=%d blocking=%u init=%u skipIntermediateSequenceNodes=%u presentation=%u/%u/%u framePending=%u presentationActive=%u black=%u active=%u saved=%u cycle=%u/%u trace=%u\n",
-				(uint)state.native.sampleBank,
-				(uint)state.native.sampleCount,
-				state.native.audioActive ? 1U : 0U,
-				(uint)state.native.audioKind,
-				(int)state.native.audioSlot,
-				(uint)state.native.audioFrequency,
-				(int)state.native.audioRepeatCount,
-				state.native.audioBlocking ? 1U : 0U,
-				state.native.initialInitComplete ? 1U : 0U,
-				state.native.skipIntermediateSequenceNodes ? 1U : 0U,
-				(uint)state.native.presentationMode,
-				(uint)state.native.presentationVariant,
-				(uint)state.native.presentationPhase,
-				state.native.presentationDirty ? 1U : 0U,
-				state.native.presentationActive ? 1U : 0U,
-				state.native.paletteBlack ? 1U : 0U,
-				state.native.activeObjectCount,
-				state.native.savedRegionDepth,
-				state.native.colorCycleEnabled ? 1U : 0U,
-				(uint)state.native.colorCounter,
-				state.traceEnabled ? 1U : 0U);
+	debugPrintf("native bank=%u sounds=%u audio=%u kind=%u slot=%d "
+				 "frequency=%u repeat=%d blocking=%u init=%u "
+				 "skipIntermediateSequenceNodes=%u presentation=%u/%u/%u "
+				 "framePending=%u presentationActive=%u "
+				 "paletteTransition=%u black=%u "
+				 "active=%u saved=%u "
+				 "cycle=%u/%u trace=%u\n",
+				 (uint)state.native.sampleBank, (uint)state.native.sampleCount,
+				 state.native.audioActive ? 1U : 0U,
+				 (uint)state.native.audioKind, (int)state.native.audioSlot,
+				 (uint)state.native.audioFrequency,
+				 (int)state.native.audioRepeatCount,
+				 state.native.audioBlocking ? 1U : 0U,
+				 state.native.initialInitComplete ? 1U : 0U,
+				 state.native.skipIntermediateSequenceNodes ? 1U : 0U,
+				 (uint)state.native.presentationMode,
+				 (uint)state.native.presentationVariant,
+				 (uint)state.native.presentationPhase,
+				 state.native.presentationDirty ? 1U : 0U,
+				 state.native.presentationActive ? 1U : 0U,
+				 state.native.paletteTransition ? 1U : 0U,
+				 state.native.paletteBlack ? 1U : 0U,
+				 state.native.activeObjectCount,
+				 state.native.savedRegionDepth,
+				 state.native.colorCycleEnabled ? 1U : 0U,
+				 (uint)state.native.colorCounter, state.traceEnabled ? 1U : 0U);
+	debugPrintf("amiga moduleGeneration=%u snapshot=%u "
+				 "snapshotGeneration=%u\n",
+				 (uint)state.native.moduleGeneration,
+				 state.native.presentedSnapshot ? 1U : 0U,
+				 (uint)state.native.presentedGeneration);
 	return true;
 }
 

@@ -90,7 +90,7 @@ inline const char *emmanuelleSkipIntroControllerMapping() {
 }
 
 inline bool emmanuelleHasKeyboardCursor(Common::Platform platform) {
-	return true;
+	return platform != Common::kPlatformAmiga;
 }
 
 inline Common::EventType emmanuelleChoiceEventType() {

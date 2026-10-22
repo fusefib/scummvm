@@ -81,6 +81,8 @@ public:
 					bool usesLocalGraphics) override;
 	bool executeLoadedModule() override;
 	void unloadModule() override;
+	bool applyInitialModuleSelectorPolicy(ModuleId moduleId,
+										 uint16 &selector) override;
 	bool shouldQuit() const override;
 	ModuleId loadedModule() const override {
 		return _currentModule;
@@ -158,13 +160,14 @@ private:
 	int16 pollGameInput(int16 &mouseX, int16 &mouseY,
 						  MouseButtons &mouseButtons);
 	int16 pollInterpreterInput(int16 &mouseX, int16 &mouseY,
-							   MouseButtons &mouseButtons);
+		MouseButtons &mouseButtons);
 	void applyInputBoundary(const InputBoundary &boundary);
 	void discardPendingInput();
 	void serviceInterpreterTimer();
 	bool inputIdle(int16 key, MouseButtons mouseButtons) const;
 	void waitAtariContinuation();
 	void waitAtariInputRelease();
+	void waitAmigaInputRelease();
 	bool handleProtectionTextNode(uint16 nodeOffset);
 	void renderTextPlan(uint16 nodeOffset);
 	bool renderAnimationFrame(const OldTotAnimationSetup &setup, uint16 step,
@@ -194,6 +197,9 @@ private:
 	void fadeAtariToBlack();
 	void fadeAtariFromBlack();
 	void delayAtariAnimation(uint16 units);
+	bool handleAmigaFF0B(byte command);
+	void fadeAmigaToBlack();
+	void fadeAmigaFromBlack();
 	void setInputContext(EmmanuelleInputContext context);
 	EmmanuelleSaveBoundaryState saveBoundaryState() const;
 	bool safeSaveBoundary(Common::U32String *msg) const;

@@ -33,6 +33,7 @@
 #include "gob/gob.h"
 #include "gob/sound/sound.h"
 #include "gob/util.h"
+#include "gob/pregob/emmanuelle/amiga.h"
 #include "gob/pregob/emmanuelle/atari.h"
 #include "gob/pregob/emmanuelle/dos.h"
 
@@ -108,7 +109,8 @@ int16 PreGob_Emmanuelle::pollGameInput(int16 &mouseX, int16 &mouseY,
 
 int16 PreGob_Emmanuelle::pollInterpreterInput(
 	int16 &mouseX, int16 &mouseY, MouseButtons &mouseButtons) {
-	if (_platformTag != kOldTotPlatformAtariST) {
+	const bool atari = _platformTag == kOldTotPlatformAtariST;
+	if (!atari && _platformTag != kOldTotPlatformAmiga) {
 		const int16 key = pollGameInput(mouseX, mouseY, mouseButtons);
 		serviceInterpreterTimer();
 		return key;
@@ -120,7 +122,8 @@ int16 PreGob_Emmanuelle::pollInterpreterInput(
 		return kKeyNone;
 	}
 
-	serviceAtariAudio();
+	if (atari)
+		serviceAtariAudio();
 	serviceColorCycle();
 	serviceInterpreterTimer();
 	if (_vm->shouldQuit()) {
@@ -129,9 +132,14 @@ int16 PreGob_Emmanuelle::pollInterpreterInput(
 	}
 
 	const bool paced = servicePresentation();
-	if (!paced && !_vm->shouldQuit() && !_introSkip.fastForwarding())
-		presentFrame(true);
-	if (!_vm->shouldQuit())
+	if (!paced && !_vm->shouldQuit() &&
+		!_introSkip.fastForwarding()) {
+		if (atari)
+			presentFrame(true);
+		else
+			waitPresentationFrames();
+	}
+	if (atari && !_vm->shouldQuit())
 		fadeAtariFromBlack();
 	if (_vm->shouldQuit()) {
 		_schedulerDebt = 0;
@@ -169,7 +177,9 @@ void PreGob_Emmanuelle::applyInputBoundary(
 	const InputBoundary &boundary) {
 	if (boundary.nativeDelayUnits) {
 		const uint16 delayMilliseconds =
-			boundary.nativeDelayUnits;
+			_platformTag == kOldTotPlatformAmiga
+				? amigaNativeDelayMilliseconds(boundary.nativeDelayUnits)
+				: boundary.nativeDelayUnits;
 		delay(delayMilliseconds);
 	}
 	if (boundary.discardStale)
@@ -318,23 +328,33 @@ void PreGob_Emmanuelle::waitInputRelease() {
 
 void PreGob_Emmanuelle::waitOpcode03(byte arg) {
 	if (_introSkip.fastForwarding()) {
-		if (_platformTag == kOldTotPlatformAtariST)
-			servicePresentation();
+		servicePresentation();
 		processGameEvents();
 		return;
 	}
 	if (arg == 0) {
-		if (_platformTag == kOldTotPlatformDOS)
+		if (_platformTag == kOldTotPlatformAmiga ||
+			_platformTag == kOldTotPlatformDOS)
 			waitReturn();
 		else
 			waitAtariContinuation();
 		return;
 	}
 	if (arg == 0xFF) {
-		if (_platformTag == kOldTotPlatformDOS)
+		if (_platformTag == kOldTotPlatformAmiga)
+			waitAmigaInputRelease();
+		else if (_platformTag == kOldTotPlatformDOS)
 			waitInputRelease();
 		else
 			waitAtariInputRelease();
+		return;
+	}
+	if (_platformTag == kOldTotPlatformAmiga) {
+		servicePresentation();
+		noteInitialTomahawkVisible();
+		serviceWaitColorCycle();
+		delay(amigaNativeDelayMilliseconds(
+			opcode03DelayUnits(arg)));
 		return;
 	}
 	if (_platformTag == kOldTotPlatformDOS) {

@@ -77,6 +77,9 @@ struct OldTotNativeDiagnosticState {
 		activeObjectCount = 0;
 		savedRegionDepth = 0;
 
+		moduleGeneration = 0;
+		presentedGeneration = 0;
+		presentedSnapshot = false;
 
 		initialInitComplete = false;
 		skipIntermediateSequenceNodes = false;
@@ -84,6 +87,7 @@ struct OldTotNativeDiagnosticState {
 
 		presentationDirty = false;
 		presentationActive = false;
+		paletteTransition = false;
 		paletteBlack = false;
 	}
 
@@ -99,6 +103,8 @@ struct OldTotNativeDiagnosticState {
 	int16 audioRepeatCount;
 	uint activeObjectCount;
 	uint savedRegionDepth;
+	uint32 moduleGeneration;
+	uint32 presentedGeneration;
 	bool audioActive;
 	bool audioBlocking;
 	bool initialInitComplete;
@@ -106,7 +112,9 @@ struct OldTotNativeDiagnosticState {
 	bool colorCycleEnabled;
 	bool presentationDirty;
 	bool presentationActive;
+	bool paletteTransition;
 	bool paletteBlack;
+	bool presentedSnapshot;
 };
 
 struct OldTotDiagnosticSnapshot {

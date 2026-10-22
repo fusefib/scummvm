@@ -41,14 +41,17 @@ PresentationState::PresentationState(OldTotPlatformTag platform) :
 
 	_pending = false;
 	_active = false;
+	_paletteTransitionPending = false;
 }
 
 void PresentationState::resetModule() {
-	_mode = 0;
+	if (_platform != kOldTotPlatformAmiga)
+		_mode = 0;
 	_variant = 0;
 	_phase = 0;
 	_pending = false;
 	_active = false;
+	_paletteTransitionPending = false;
 }
 
 void PresentationState::arm(byte mode) {
@@ -75,9 +78,12 @@ bool PresentationState::nextStep(bool black, byte randomVariant,
 		_variant = _mode == 44 ? randomVariant : 0;
 	}
 
-		step.variant = _variant;
+	const bool atari = _platform == kOldTotPlatformAtariST;
+	step.variant = _variant;
 	step.phase = _phase;
-	if (black) {
+	// ST restores black before any transition; Amiga mode 43 takes priority.
+	if (black && (atari ||
+		(_mode != 43 && (_paletteTransitionPending || _mode == 44)))) {
 		step.operation = kPresentationFadeFromBlack;
 		step.complete = true;
 	} else if (_mode == 43) {
@@ -86,7 +92,8 @@ bool PresentationState::nextStep(bool black, byte randomVariant,
 	} else if (_mode == 44) {
 		step.operation = kPresentationMode44;
 		const byte count = _variant == 0 ? 9 : (_variant < 5 ? 18 : 0);
-		step.complete = _phase + 1 == count;
+		// Amiga presents stage zero before its counted waits.
+		step.complete = _phase + (atari ? 1 : 0) == count;
 	} else {
 		step.operation = kPresentationFrame;
 		// Amiga waits before publishing its buffers, then after copying them.
@@ -98,6 +105,7 @@ bool PresentationState::nextStep(bool black, byte randomVariant,
 		_active = false;
 		_phase = 0;
 		_variant = 0;
+		_paletteTransitionPending = false;
 		if (_mode == 44)
 			_mode = 0;
 	} else {

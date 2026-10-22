@@ -115,6 +115,7 @@ public:
 	void arm(byte mode);
 	void disarm() { arm(0); }
 	void noteChange() { _pending = true; }
+	void notePaletteTransition() { _paletteTransitionPending = true; }
 	void commitDirectFrame();
 	bool nextStep(bool black, byte randomVariant, PresentationStep &step);
 
@@ -123,6 +124,8 @@ public:
 	byte phase() const { return _phase; }
 	bool pending() const { return _pending; }
 	bool active() const { return _active; }
+	bool paletteTransitionPending() const { return _paletteTransitionPending; }
+
 private:
 	OldTotPlatformTag _platform;
 	byte _mode;
@@ -130,6 +133,7 @@ private:
 	byte _phase;
 	bool _pending;
 	bool _active;
+	bool _paletteTransitionPending;
 };
 
 /** Intro skip state, cleared at INIT's first input choice. */

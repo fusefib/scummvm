@@ -126,6 +126,26 @@ public:
 		return !_presentation.active() &&
 			!_presentation.pending();
 	}
+	bool amigaModulePaletteDiffers(const Common::String &moduleName) const;
+	bool applyAmigaModulePalette(const Common::String &moduleName);
+	bool applyAmigaPalette(byte paletteNumber, bool makeVisible = true);
+	/** Apply one of sixteen native palette phases without owning events. */
+	bool presentAmigaFadeToBlackStep(byte phase);
+	bool presentAmigaFadeFromBlackStep(byte phase);
+	bool restoreAmigaPaletteImmediately();
+	bool amigaPaletteValid() const { return _amigaPaletteValid; }
+	bool amigaBlack() const { return _amigaBlack; }
+	bool amigaPaletteTransitionPending() const {
+		return _presentation.paletteTransitionPending();
+	}
+
+	void noteAmigaPaletteTransition();
+	void beginAmigaModuleState();
+	// Module changes discard transient backing stores without restoring them.
+	// The displayed snapshot remains the source for a native transition.
+	void resetAmigaModuleState();
+	void captureAmigaPresentedFrame();
+	void commitAmigaDirectFrame();
 
 
 	bool saveScreenRect(uint16 x, uint16 y, uint16 width, uint16 height);
@@ -151,6 +171,13 @@ public:
 
 	uint savedRegionDepth() const { return _savedRegions.size(); }
 
+	bool amigaPresentedSnapshotValid() const {
+		return (bool)_amigaPresentedSurface;
+	}
+	uint32 amigaModuleGeneration() const { return _amigaModuleGeneration; }
+	uint32 amigaPresentedGeneration() const {
+		return _amigaPresentedGeneration;
+	}
 	bool exportState(EmmanuelleRendererState &out) const;
 	bool prepareState(const EmmanuelleRendererState &in,
 		byte atariPresentationMode,
@@ -160,6 +187,11 @@ public:
 private:
 	bool setAtariWords(const uint16 words[16], bool makeVisible);
 	void showAtariWords(const uint16 words[16]);
+	bool setAmigaWords(const uint16 words[32], bool makeVisible);
+	void showAmigaWords(const uint16 words[32]);
+	bool decodeAmigaPackedPayload(const Common::Array<byte> &payload,
+								  uint16 width, uint16 height,
+								  Surface &out) const;
 	SurfacePtr clonePresentationFrame(const Surface &source) const;
 	void copyPresentationRect(const Surface &target, int16 left, int16 top,
 		int16 right, int16 bottom);
@@ -182,6 +214,12 @@ private:
 	int16 _dirtyTop;
 	int16 _dirtyRight;
 	int16 _dirtyBottom;
+	uint16 _amigaLogicalPalette[32];
+	bool _amigaPaletteValid;
+	bool _amigaBlack;
+	SurfacePtr _amigaPresentedSurface;
+	uint32 _amigaModuleGeneration;
+	uint32 _amigaPresentedGeneration;
 };
 
 } // End of namespace Emmanuelle
