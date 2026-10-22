@@ -95,6 +95,7 @@ MODULE_OBJS := \
 	pregob/emmanuelle/fight.o \
 	pregob/emmanuelle/gameflow.o \
 	pregob/emmanuelle/input.o \
+	pregob/emmanuelle/input_keymaps.o \
 	pregob/emmanuelle/interpreter.o \
 	pregob/emmanuelle/oldixx.o \
 	pregob/emmanuelle/oldtot.o \

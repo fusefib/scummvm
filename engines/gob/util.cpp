@@ -39,6 +39,7 @@
 #include "gob/video.h"
 #include "gob/videoplayer.h"
 #include "gob/sound/sound.h"
+#include "gob/pregob/pregob.h"
 
 namespace Gob {
 
@@ -139,6 +140,10 @@ void Util::processInput(bool scroll) {
 			break;
 		case Common::EVENT_KEYUP:
 			keyUp(event);
+			break;
+		case Common::EVENT_CUSTOM_ENGINE_ACTION_START:
+			if (_vm->_preGob)
+				_vm->_preGob->handleCustomAction(event.customType);
 			break;
 		default:
 			break;
