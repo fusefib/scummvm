@@ -101,6 +101,7 @@ MODULE_OBJS := \
 	pregob/emmanuelle/oldtot.o \
 	pregob/emmanuelle/renderer.o \
 	pregob/emmanuelle/runtime.o \
+	pregob/emmanuelle/savegame.o \
 	pregob/emmanuelle/saveload.o \
 	pregob/emmanuelle/text.o \
 	pregob/onceupon/onceupon.o \
