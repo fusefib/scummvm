@@ -96,6 +96,7 @@ public:
 		int slot) const override;
 	Common::String getSavegameFile(int saveGameIdx,
 		const char *target = nullptr) const override;
+	int getAutosaveSlot() const override { return 0; }
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const Gob::GOBGameDescription *desc) const override;
 
