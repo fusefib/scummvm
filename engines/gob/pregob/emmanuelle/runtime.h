@@ -152,7 +152,7 @@ private:
 
 bool isAudioPlaying(OldTotPlatformTag platform, bool speakerActive,
 	bool samplePlaying);
-/** Native timer quanta per 50 Hz input pass. */
+/** Native timer quanta per 50 Hz input pass; Amiga retains a remainder. */
 uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
 									 uint32 &accumulator);
 /** Return only the time still needed to satisfy a minimum duration. */

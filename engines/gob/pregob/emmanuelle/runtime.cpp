@@ -27,6 +27,7 @@
 
 #include "gob/pregob/emmanuelle/runtime.h"
 #include "gob/pregob/emmanuelle/atari.h"
+#include "gob/pregob/emmanuelle/amiga.h"
 #include "gob/util.h"
 
 namespace Gob {
@@ -88,7 +89,8 @@ bool PresentationState::nextStep(bool black, byte randomVariant,
 		step.complete = _phase + 1 == count;
 	} else {
 		step.operation = kPresentationFrame;
-		step.complete = true;
+		// Amiga waits before publishing its buffers, then after copying them.
+		step.complete = _platform != kOldTotPlatformAmiga || _phase == 1;
 	}
 
 	if (step.complete) {
@@ -182,9 +184,10 @@ bool isAudioPlaying(OldTotPlatformTag platform, bool speakerActive,
 
 uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
 									 uint32 &accumulator) {
-	// DOS services 5000 calibrated units/s; ST services one tick per VBL.
+	// DOS services 5000 calibrated units/s, ST one tick per VBL, and Amiga
+	// 20 ticks/s. Host pacing stays at 50 Hz on all three platforms.
 	accumulator += platform == kOldTotPlatformDOS ? 5000 :
-		50;
+		(platform == kOldTotPlatformAtariST ? 50 : 20);
 	const uint16 quanta = (uint16)(accumulator / kHostFrameRate);
 	accumulator %= kHostFrameRate;
 	return quanta;
@@ -203,6 +206,9 @@ bool isTitlePresentationVisible(OldTotPlatformTag platform,
 		return true;
 	if (platform == kOldTotPlatformAtariST)
 		return !black && !framePending && !presentationActive;
+	if (platform == kOldTotPlatformAmiga)
+		return !black && !framePending && !presentationActive &&
+			!paletteTransitionPending;
 	return false;
 }
 
@@ -249,7 +255,7 @@ int16 minimumCursorOrigin(OldTotPlatformTag platform) {
 }
 
 bool recentersMouseOnModuleLoad(OldTotPlatformTag platform) {
-	return true;
+	return platform != kOldTotPlatformAmiga;
 }
 
 bool schedulerChecksZeroBeforeDecrement(OldTotPlatformTag platform) {
@@ -601,6 +607,306 @@ bool getAtariStMode44Rect(byte variant, byte phase,
 
 byte atariStAnimationVblCount() {
 	return 4;
+}
+
+// Amiga policy.
+
+namespace {
+
+const uint16 kAmigaPalettes[5][32] = {
+	{0x000, 0xFEE, 0xF00, 0x4F0, 0x211, 0x311, 0x511, 0x700,
+	 0xD00, 0xF0C, 0xB08, 0x705, 0x041, 0x061, 0x191, 0x3B2,
+	 0x420, 0x900, 0xC40, 0xE61, 0xE83, 0xFB4, 0xFD6, 0xFE8,
+	 0x113, 0x309, 0x45F, 0x0CF, 0x334, 0x557, 0x889, 0xBBC},
+	{0x000, 0xFFF, 0xF00, 0x4F0, 0x211, 0x9EF, 0xBFF, 0xDFF,
+	 0xD00, 0xF0C, 0xB08, 0x705, 0x041, 0x061, 0x191, 0x3B2,
+	 0x420, 0x900, 0xC40, 0xE71, 0xE83, 0xFB4, 0xFD6, 0xFE8,
+	 0x113, 0x309, 0x45F, 0x0CF, 0x334, 0x557, 0x889, 0xBBC},
+	{0x000, 0xFEE, 0x000, 0x000, 0x000, 0x446, 0x99B, 0xDDF,
+	 0xD00, 0xF0C, 0x000, 0x223, 0x041, 0x061, 0x191, 0x3B2,
+	 0x420, 0x900, 0xC40, 0xE61, 0xE83, 0xFB4, 0xFD6, 0xFE8,
+	 0x113, 0x309, 0x45F, 0x0CF, 0x334, 0x557, 0x889, 0xBBC},
+	{0x021, 0xFFF, 0x003, 0x004, 0x006, 0x009, 0x02B, 0x05D,
+	 0x08F, 0x2AF, 0x7BF, 0x9CF, 0xADF, 0xDEF, 0x400, 0x600,
+	 0x800, 0xB21, 0xE62, 0xE83, 0xFA4, 0xFC8, 0xF00, 0xF6A,
+	 0xF9C, 0xF99, 0x072, 0x0A2, 0x0E4, 0x0F6, 0x777, 0x888},
+	{0x000, 0x88A, 0xFF7, 0xFFF, 0x001, 0x004, 0x036, 0x306,
+	 0xF00, 0xFF0, 0xFBF, 0xF0B, 0x031, 0x051, 0x181, 0x5F3,
+	 0x310, 0x600, 0x200, 0x210, 0x421, 0x622, 0x652, 0xFF7,
+	 0x004, 0x024, 0x306, 0x0BE, 0x003, 0x226, 0x447, 0x558}};
+
+const uint16 kAmigaEffect45Sets[3][5] = {
+	{0x8EF, 0x0AF, 0x03F, 0x008, 0x003},
+	{0xFF9, 0xFB0, 0xF30, 0x800, 0x300},
+	{0xFF7, 0x9F0, 0x0F0, 0x080, 0x030}};
+
+const byte kAmigaMode43Order[16] = {
+	0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15};
+
+} // End of anonymous namespace
+
+bool getAmigaSampleCommand(byte command, AmigaSampleCommand &out) {
+	out = AmigaSampleCommand();
+	switch (command) {
+	case 82:
+		out.slot = 0;
+		out.mixerRepeatCount = 2;
+		out.preDelay = 50;
+		out.postDelay = 100;
+		out.stopAllFirst = true;
+		return true;
+	case 83:
+		out.slot = 1;
+		out.mixerRepeatCount = -1;
+		return true;
+	case 85:
+		out.slot = 16;
+		out.mixerRepeatCount = 2;
+		return true;
+	case 86:
+		out.slot = 2;
+		out.mixerRepeatCount = -1;
+		return true;
+	case 89:
+		out.slot = 3;
+		out.mixerRepeatCount = 2;
+		out.postDelay = 100;
+		return true;
+	case 90:
+		out.slot = 4;
+		out.mixerRepeatCount = -1;
+		return true;
+	case 91:
+		out.slot = 5;
+		out.mixerRepeatCount = -1;
+		return true;
+	case 92:
+		out.slot = 6;
+		out.mixerRepeatCount = 2;
+		out.postDelay = 100;
+		return true;
+	case 94:
+		out.slot = 7;
+		out.mixerRepeatCount = 2;
+		out.postDelay = 100;
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool amigaHandlesNativeCommand(byte command) {
+	switch (command) {
+	case 40:
+	case 41:
+	case 42:
+	case 43:
+	case 44:
+	case 45:
+	case 46:
+	case 47:
+	case 80:
+	case 81:
+	case 82:
+	case 83:
+	case 85:
+	case 86:
+	case 89:
+	case 90:
+	case 91:
+	case 92:
+	case 94:
+	case 201:
+		return true;
+	default:
+		return false;
+	}
+}
+
+uint16 amigaNativeRand(uint32 &state) {
+	state = state * 0x41C64E6DU + 0x3039U;
+	return (uint16)((state >> 16) & 0x7FFFU);
+}
+
+uint16 amigaRandomBounded(uint32 &state, uint16 upperExclusive) {
+	const uint16 value = amigaNativeRand(state);
+	return upperExclusive
+			   ? (uint16)((value & 0x0FFFU) % upperExclusive)
+			   : 0;
+}
+
+uint16 amigaNativeDelayMilliseconds(uint16 units) {
+	return (uint16)(units / 30U) * 20U;
+}
+
+void getAmigaSchedulerTiming(byte period, uint16 &reload,
+							 uint16 &initialCountdown) {
+	reload = period == 200 ? 60 : 25;
+	initialCountdown = 0;
+}
+
+bool decodeAmigaPackedPixels(const Common::Array<byte> &payload,
+							 uint16 width, uint16 height, Common::Array<byte> &pixels) {
+	pixels.clear();
+	if (width == 0 || height == 0)
+		return false;
+	const uint32 expected = (uint32)width * height;
+	if (expected / width != height)
+		return false;
+	pixels.resize(expected);
+
+	uint32 pixel = 0;
+	uint32 position = 0;
+	while (pixel < expected) {
+		if (position >= payload.size()) {
+			pixels.clear();
+			return false;
+		}
+		const byte value = payload[position++];
+		const byte color = value >> 3;
+		uint32 run = 0;
+		if (value & 0x04) {
+			run = (value & 0x03) + 1;
+		} else {
+			if (position >= payload.size()) {
+				pixels.clear();
+				return false;
+			}
+			run = ((((uint32)value & 0x03) << 8) |
+				   payload[position++]) +
+				  1;
+		}
+		const uint32 remaining = expected - pixel;
+		const uint32 count = run < remaining ? run : remaining;
+		for (uint32 i = 0; i < count; ++i)
+			pixels[pixel++] = color;
+	}
+	return true;
+}
+
+static byte amigaModulePaletteNumber(const Common::String &moduleName) {
+	byte paletteNumber = 0;
+	if (moduleName.equalsIgnoreCase("INIT") ||
+		moduleName.equalsIgnoreCase("INIT.TOA")) {
+		paletteNumber = 5;
+	} else if (moduleName.equalsIgnoreCase("LOADCHUT") ||
+			   moduleName.equalsIgnoreCase("LOADCHUT.TOA")) {
+		paletteNumber = 3;
+	} else if (moduleName.equalsIgnoreCase("LOADPLA") ||
+			   moduleName.equalsIgnoreCase("LOADPLA.TOA") ||
+			   moduleName.equalsIgnoreCase("LOADAERO") ||
+			   moduleName.equalsIgnoreCase("LOADAERO.TOA") ||
+			   moduleName.equalsIgnoreCase("LOADGAR") ||
+			   moduleName.equalsIgnoreCase("LOADGAR.TOA")) {
+		paletteNumber = 2;
+	} else if (moduleName.equalsIgnoreCase("LOADHOT") ||
+			   moduleName.equalsIgnoreCase("LOADHOT.TOA") ||
+			   moduleName.equalsIgnoreCase("LOADCAS") ||
+			   moduleName.equalsIgnoreCase("LOADCAS.TOA") ||
+			   moduleName.equalsIgnoreCase("LOADFAV") ||
+			   moduleName.equalsIgnoreCase("LOADFAV.TOA")) {
+		paletteNumber = 1;
+	}
+	return paletteNumber;
+}
+
+bool getAmigaModulePalette(const Common::String &moduleName,
+						   uint16 words[32]) {
+	return getAmigaNumberedPalette(amigaModulePaletteNumber(moduleName), words);
+}
+
+bool getAmigaTextColorTable(const Common::String &moduleName, byte colors[16]) {
+	// The Amiga loader selects logical text colors with each module. These
+	// remain selected when a script temporarily changes the visible palette.
+	static const byte tables[4][16] = {
+		{0, 1, 25, 26, 26, 12, 13, 31, 1, 2, 0, 9, 17, 21, 22, 23},
+		{0, 10, 25, 26, 26, 12, 13, 31, 1, 2, 0, 9, 17, 21, 22, 23},
+		{0, 5, 25, 26, 26, 12, 13, 31, 1, 2, 0, 31, 17, 21, 22, 23},
+		{0, 30, 25, 29, 31, 12, 13, 14, 2, 8, 0, 11, 26, 2, 22, 3}
+	};
+	const byte palette = amigaModulePaletteNumber(moduleName);
+	if (palette == 0 || palette == 4)
+		return false;
+	memcpy(colors, tables[palette == 5 ? 3 : palette - 1], 16);
+	return true;
+}
+
+bool getAmigaNumberedPalette(byte paletteNumber, uint16 words[32]) {
+	if (!words || paletteNumber < 1 || paletteNumber > 5)
+		return false;
+	copyWords(kAmigaPalettes[paletteNumber - 1], 32, words);
+	return true;
+}
+
+bool getAmigaEffect45(byte variant, uint16 words[5]) {
+	if (!words || variant >= ARRAYSIZE(kAmigaEffect45Sets))
+		return false;
+	copyWords(kAmigaEffect45Sets[variant], 5, words);
+	return true;
+}
+
+byte amigaPaletteComponent(uint16 word, byte shift) {
+	const byte nibble = (byte)((word >> shift) & 0x0F);
+	return (byte)((nibble << 2) | (nibble >> 2));
+}
+
+uint16 dimAmigaPaletteWord(uint16 word, byte steps) {
+	byte red = (word >> 8) & 0x0F;
+	byte green = (word >> 4) & 0x0F;
+	byte blue = word & 0x0F;
+	while (steps--) {
+		if (red)
+			--red;
+		if (green)
+			--green;
+		if (blue)
+			--blue;
+	}
+	return (uint16)((red << 8) | (green << 4) | blue);
+}
+
+byte prepareAmigaWaitColorCounter(byte counter) {
+	counter %= 6;
+	return counter < 4 ? 4 : counter;
+}
+
+byte amigaMode43PixelOffset(byte phase, uint32 wordOrdinal) {
+	return kAmigaMode43Order[(phase + wordOrdinal) & 15];
+}
+
+byte amigaMode44WaitCount(byte variant) {
+	return variant == 0 ? 9 : (variant < 5 ? 18 : 0);
+}
+
+bool getAmigaMode44Rect(byte variant, byte stage, AmigaMode44Rect &out) {
+	const byte maxStage = amigaMode44WaitCount(variant);
+	if (variant >= 5 || stage > maxStage)
+		return false;
+	if (variant == 0) {
+		out.x = 144 - (int16)stage * 16;
+		out.y = 90 - (int16)stage * 10;
+		out.width = (uint16)(32 + stage * 32);
+		out.height = (uint16)(20 + stage * 20);
+	} else {
+		out.width = (uint16)(32 + stage * 16);
+		out.height = (uint16)(20 + stage * 10);
+		out.x = variant == 1 || variant == 2
+					? 288 - (int16)stage * 16
+					: 0;
+		out.y = variant == 2 || variant == 4
+					? 180 - (int16)stage * 10
+					: 0;
+	}
+	return true;
+}
+
+bool amigaSnapshotGenerationUsable(
+	uint32 moduleGeneration, uint32 presentedGeneration, bool hasSnapshot) {
+	if (!hasSnapshot || moduleGeneration == 0 || presentedGeneration == 0)
+		return false;
+	return presentedGeneration == moduleGeneration ||
+		(moduleGeneration > 1 &&
+		 presentedGeneration == moduleGeneration - 1);
 }
 
 } // namespace Emmanuelle
