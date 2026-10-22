@@ -29,8 +29,11 @@
 #define GOB_PREGOB_EMMANUELLE_OLDTOT_H
 
 #include "common/array.h"
+#include "common/language.h"
 #include "common/scummsys.h"
 #include "common/stream.h"
+
+#include "gob/pregob/emmanuelle/platform.h"
 
 namespace Gob {
 namespace Emmanuelle {
@@ -129,6 +132,9 @@ public:
 	bool valid() const { return !_data.empty(); }
 	uint32 size() const { return _data.size(); }
 	bool computeMD5(byte digest[16]) const;
+	/** Apply known corrections to owned bytes; return whether anything changed. */
+	bool applyScriptPatches(OldTotPlatformTag platform, Common::Language language,
+			const Common::String &resourceName);
 
 	byte byteAt(uint32 offset) const;
 	uint16 uint16BEAt(uint32 offset) const;
