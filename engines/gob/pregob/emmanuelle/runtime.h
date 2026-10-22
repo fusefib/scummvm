@@ -76,6 +76,11 @@ uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
 /** Return only the time still needed to satisfy a minimum duration. */
 uint32 minimumDurationRemaining(uint32 elapsed,
 									  uint32 minimumDuration);
+/** Whether the first complete title frame has reached a visible state. */
+bool isTitlePresentationVisible(OldTotPlatformTag platform,
+									   bool black, bool framePending,
+									   bool presentationActive,
+									   bool paletteTransitionPending);
 uint16 opcode03DelayUnits(byte arg);
 /** Delay before a fresh opcode-1B wait discards stale input. */
 uint16 inputEntryDelay(OldTotPlatformTag platform);

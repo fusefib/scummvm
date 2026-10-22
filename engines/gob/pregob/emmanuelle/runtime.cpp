@@ -93,6 +93,13 @@ uint32 minimumDurationRemaining(uint32 elapsed,
 	return elapsed < minimumDuration ? minimumDuration - elapsed : 0;
 }
 
+bool isTitlePresentationVisible(OldTotPlatformTag platform,
+									   bool black, bool framePending,
+									   bool presentationActive,
+									   bool paletteTransitionPending) {
+	return platform == kOldTotPlatformDOS;
+}
+
 uint16 opcode03DelayUnits(byte arg) {
 	return arg == 0 || arg == 0xFF ? 0 : (uint16)arg * 5;
 }
