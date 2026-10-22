@@ -162,5 +162,69 @@ bool command201SkipsIntermediateNodes(OldTotPlatformTag platform,
 	return false;
 }
 
+bool decodeProtectionPrompt(const byte raw[4], ProtectionPrompt &out) {
+	out.letter = (raw[0] & 0xC0) >> 6;
+	const uint16 packed = ((uint16)raw[1] << 8) | raw[2];
+	const int32 box = (int32)packed - 0x1C20 - ((int32)raw[1] << 5);
+	out.box = box < 0 ? 0 : (uint16)box;
+	out.color = (raw[3] & 0x70) >> 4;
+	return out.letter < 4 && out.color < 8;
+}
+
+bool decodeProtectionRecord(const byte raw[8], ProtectionChallenge &out) {
+	return decodeProtectionPrompt(raw, out.first) && decodeProtectionPrompt(raw + 4, out.second);
+}
+
+void installProtectionChallenge(const ProtectionChallenge &c, uint16 vars[7]) {
+	vars[1] = c.first.letter;
+	vars[2] = c.first.box;
+	vars[3] = c.first.color;
+	vars[4] = c.second.letter;
+	vars[5] = c.second.box;
+	vars[6] = c.second.color;
+}
+
+const char *protectionColorName(byte color) {
+	switch (color) {
+	case 0:
+		return "white";
+	case 1:
+		return "black";
+	case 2:
+		return "yellow";
+	case 3:
+		return "green";
+	case 4:
+		return "blue";
+	case 5:
+		return "red";
+	case 6:
+		return "grey";
+	case 7:
+		return "brown";
+	default:
+		return nullptr;
+	}
+}
+
+bool buildProtectionHint(bool initModule, bool suspended, byte opcode,
+						 byte regionCount, const uint16 vars[7],
+						 ProtectionChallenge &out) {
+	if (!initModule || !suspended || opcode != 0x1B || regionCount != 8 ||
+		!vars || vars[1] >= 4 || vars[3] >= 8 || vars[4] >= 4 ||
+		vars[6] >= 8)
+		return false;
+
+	ProtectionChallenge challenge;
+	challenge.first.letter = (byte)vars[1];
+	challenge.first.box = vars[2];
+	challenge.first.color = (byte)vars[3];
+	challenge.second.letter = (byte)vars[4];
+	challenge.second.box = vars[5];
+	challenge.second.color = (byte)vars[6];
+	out = challenge;
+	return true;
+}
+
 } // namespace Emmanuelle
 } // namespace Gob
