@@ -160,21 +160,14 @@ bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
 	for (uint i = 0; i < in.savedRegions.size(); ++i) {
 		const EmmanuelleSavedRegionState &state = in.savedRegions[i];
 		SurfacePtr surface;
-		if (!importOldTotSurface(state.surface, surface) ||
-			state.x < 0 || state.y < 0 ||
-			state.x + state.surface.width > in.framebuffer.width ||
-			state.y + state.surface.height > in.framebuffer.height)
+		if (!importOldTotSurface(state.surface, surface))
 			return false;
 		prepared.savedRegions.push_back(OldTotPreparedSavedRegion(
 			surface, state.x, state.y));
 	}
 	if (!in.amigaPresentedFrame.pixels.empty() &&
-		(!importOldTotSurface(in.amigaPresentedFrame,
-			 prepared.amigaPresentedFrame) ||
-		 in.amigaPresentedFrame.width != in.framebuffer.width ||
-		 in.amigaPresentedFrame.height != in.framebuffer.height ||
-		 in.amigaPresentedFrame.bytesPerPixel !=
-			in.framebuffer.bytesPerPixel))
+		!importOldTotSurface(in.amigaPresentedFrame,
+			prepared.amigaPresentedFrame))
 		return false;
 	for (uint i = 0; i < ARRAYSIZE(prepared.atariPalette); ++i)
 		prepared.atariPalette[i] = in.atariPalette[i];
@@ -217,9 +210,13 @@ void OldTotRenderer::commitState(OldTotRendererPreparedState &in) {
 	_atariPaletteValid = in.atariPaletteValid;
 	_atariBlack = in.atariBlack;
 	_presentation = PresentationState(_platform);
-	if ((_platform == kOldTotPlatformAtariST && in.atariPresentationMode == 43) ||
-		(_platform == kOldTotPlatformAmiga && in.amigaPresentationMode == 43))
-		_presentation.arm(43);
+	// An armed transition is idle. Choose its variant on the next draw,
+	// preserving the RNG state saved at the input boundary.
+	const byte mode = _platform == kOldTotPlatformAtariST
+		? in.atariPresentationMode : (_platform == kOldTotPlatformAmiga
+			? in.amigaPresentationMode : 0);
+	if (mode == 43 || mode == 44)
+		_presentation.arm(mode);
 	_atariPresentedSurface = _platform == kOldTotPlatformAtariST
 		? in.framebuffer : SurfacePtr();
 	_atariTransitionTarget.reset();

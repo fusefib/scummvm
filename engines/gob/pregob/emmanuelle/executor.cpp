@@ -64,7 +64,7 @@ OldTotExecutor::OldTotExecutor(const OldTotData &data, OldTotVM &vm,
 
 	// Input waits may synchronously dispatch a scheduler child. Keep references
 	// to the active frame stable up to the executor's enforced stack limit.
-	_frames.reserve(256);
+	_frames.reserve(kMaxFrames);
 }
 
 bool OldTotExecutor::valid(uint32 o, uint32 n) const {
@@ -104,7 +104,7 @@ bool OldTotExecutor::pushDispatch(uint16 offset) {
 		return true;
 	if (!valid(offset))
 		return stop(kOldTotExecutorMalformedData);
-	if (_frames.size() >= 256)
+	if (_frames.size() >= kMaxFrames)
 		return stop(kOldTotExecutorStackOverflow);
 	OldTotExecFrame f;
 	f.kind = OldTotExecFrame::kDispatch;
@@ -146,7 +146,7 @@ bool OldTotExecutor::exportSuspendedInputState(
 }
 
 bool OldTotExecutor::importState(const OldTotExecutorState &in) {
-	if (in.frames.size() > 256)
+	if (in.frames.size() > kMaxFrames)
 		return false;
 	for (uint i = 0; i < in.frames.size(); ++i) {
 		const OldTotExecFrame &f = in.frames[i];

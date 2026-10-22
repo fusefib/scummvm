@@ -296,21 +296,12 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		return false;
 	}
 	if (_platformTag == kOldTotPlatformAtariST &&
-		(!state.renderer.atariPaletteValid || state.renderer.atariBlack ||
-		 (state.nativeState.effectCommand != 0 &&
-		  state.nativeState.effectCommand != 43))) {
+		(!state.renderer.atariPaletteValid || state.renderer.atariBlack)) {
 		reason = "invalid Atari presentation state";
 		return false;
 	}
 	if (_platformTag == kOldTotPlatformAmiga &&
-		(!state.renderer.amigaPaletteValid || state.renderer.amigaBlack ||
-		 state.renderer.amigaPresentationPending ||
-		 state.renderer.amigaPresentationActive ||
-		 state.renderer.amigaPaletteTransitionPending ||
-		 state.renderer.amigaPresentationVariant != 0 ||
-		 state.renderer.amigaPresentationPhase != 0 ||
-		 (state.renderer.amigaPresentationMode != 0 &&
-		  state.renderer.amigaPresentationMode != 43))) {
+		(!state.renderer.amigaPaletteValid || state.renderer.amigaBlack)) {
 		reason = "invalid Amiga presentation state";
 		return false;
 	}
