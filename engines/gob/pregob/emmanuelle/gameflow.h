@@ -65,6 +65,9 @@ struct ModuleTransition {
 
 ModuleTransition moduleTransition(uint16 selector);
 const char *moduleFileStem(ModuleId module);
+bool moduleNeedsLocalGraphicsFile(ModuleId module,
+									bool usesLocalGraphics,
+									bool inlineAeroAndPla);
 void resetInitVariables(uint16 *variables, uint count);
 uint16 adjustModuleSelector(uint16 *variables, uint count);
 

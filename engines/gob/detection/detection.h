@@ -77,6 +77,8 @@ enum Features {
 	kFeaturesTrueColor = 1 << 7,
 	kFeatures16Colors  = 1 << 8,
 	kFeatures640x400   = 1 << 9,
+	kFeaturesEmmanuelleInlineLocalGraphics = 1 << 10,
+	kFeaturesEmmanuelleAlternateInputGeometry = 1 << 11,
 	kFeaturesEmmanuelleOptionalAtariAudio = 1 << 12,
 };
 

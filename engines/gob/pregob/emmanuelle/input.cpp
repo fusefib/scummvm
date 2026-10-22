@@ -270,8 +270,8 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 
 	const int16 region = hitTestOldTotInputRegions(
 		*_tot, nodeOffset, count, cursorX, cursorY,
-		1,
-		8);
+		_alternateInputGeometry ? 0 : 1,
+		_alternateInputGeometry ? 6 : 8);
 	if (_diagnosticTraceEnabled)
 		debugC(3, kDebugGameFlow,
 			   "EMMA_TRACE event=input_region module=%s node=0x%04X count=%u x=%d y=%d region=%d",

@@ -123,6 +123,16 @@ const char *moduleFileStem(ModuleId module) {
 	}
 }
 
+bool moduleNeedsLocalGraphicsFile(ModuleId module,
+									bool usesLocalGraphics,
+									bool inlineAeroAndPla) {
+	if (!usesLocalGraphics)
+		return false;
+	if (!inlineAeroAndPla)
+		return true;
+	return module != kModuleLoadAero && module != kModuleLoadPla;
+}
+
 void resetInitVariables(uint16 *variables, uint count) {
 	if (!variables)
 		return;

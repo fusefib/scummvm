@@ -64,7 +64,9 @@ class PreGob_Emmanuelle : public PreGob,
 						  public FightRandomSource,
 						  public OldTotDebugProvider {
 public:
-	PreGob_Emmanuelle(GobEngine *vm, bool optionalAtariAudio);
+	PreGob_Emmanuelle(GobEngine *vm, bool inlineLocalGraphics,
+					bool alternateInputGeometry,
+					bool optionalAtariAudio);
 	~PreGob_Emmanuelle() override;
 
 	void run() override;
@@ -223,6 +225,8 @@ private:
 	uint16 _node24Offset;
 	uint32 _randomState;
 	OldTotPlatformTag _platformTag;
+	bool _inlineLocalGraphics;
+	bool _alternateInputGeometry;
 	bool _optionalAtariAudio;
 	bool _silentAtariAudio;
 	bool _enhancedDosFights;

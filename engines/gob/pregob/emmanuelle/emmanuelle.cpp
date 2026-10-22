@@ -60,10 +60,14 @@ static OldTotPlatformTag detectPlatform(const GobEngine *vm) {
 }
 
 PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
+									 bool inlineLocalGraphics,
+									 bool alternateInputGeometry,
 									 bool optionalAtariAudio) :
 	PreGob(vm), _renderer(vm), _active(vm, 20), _moduleFileStem(),
 	_randomState(vm->_rnd.getRandomNumber(0xFFFFFFFFU)),
 	_platformTag(detectPlatform(vm)),
+	_inlineLocalGraphics(inlineLocalGraphics),
+	_alternateInputGeometry(alternateInputGeometry),
 	_optionalAtariAudio(optionalAtariAudio),
 	_dosInitialFrameCoverage() {
 	// Owned scripts, sprite banks, fonts, and execution objects.
@@ -326,7 +330,8 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 		return false;
 	}
 
-	if (usesLocalGraphics) {
+	if (moduleNeedsLocalGraphicsFile(moduleId, usesLocalGraphics,
+									 _inlineLocalGraphics)) {
 		Common::SeekableReadStream *stream = openLoose(_moduleFileStem + ixxExtension);
 		if (!stream) {
 			debugC(1, kDebugFileIO, "Emmanuelle: %s%s is missing", stem,

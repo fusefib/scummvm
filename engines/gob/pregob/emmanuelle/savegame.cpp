@@ -241,7 +241,8 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		reason = "invalid suspended instruction";
 		return false;
 	}
-	if (moduleUsesLocalGraphics(state.module)) {
+	if (moduleNeedsLocalGraphicsFile(state.module,
+			moduleUsesLocalGraphics(state.module), _inlineLocalGraphics)) {
 		const char *ixxExtension = ".I00";
 		Common::SeekableReadStream *stream = openLoose(
 			Common::String(stem) + ixxExtension);
