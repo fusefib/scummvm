@@ -79,7 +79,7 @@ private:
 	bool cmd_emmaVars(int argc, const char **argv);
 	bool cmd_emmaStack(int argc, const char **argv);
 	bool cmd_emmaTrace(int argc, const char **argv);
-
+	bool cmd_cpSolve(int argc, const char **argv);
 };
 
 } // End of namespace Gob
