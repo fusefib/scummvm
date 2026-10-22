@@ -82,7 +82,8 @@ bool PreGob_Emmanuelle::computeModuleIdentity(ModuleId module,
 	const char *stem = moduleFileStem(module);
 	if (!stem || !digest)
 		return false;
-	const char *extension = ".TOT";
+	const char *extension = _platformTag == kOldTotPlatformAmiga
+		? ".TOA" : ".TOT";
 	Common::SeekableReadStream *stream = openLoose(
 		Common::String(stem) + extension);
 	if (!stream || stream->size() <= 0 || stream->size() > 0xFFFFFFFFU) {
@@ -227,7 +228,8 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		reason = "invalid module";
 		return false;
 	}
-	const char *extension = ".TOT";
+	const char *extension = _platformTag == kOldTotPlatformAmiga
+		? ".TOA" : ".TOT";
 	uint32 size = 0;
 	byte digest[16];
 	prepared.tot = loadScriptResource(Common::String(stem) + extension,
@@ -247,7 +249,8 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 	}
 	if (moduleNeedsLocalGraphicsFile(state.module,
 			moduleUsesLocalGraphics(state.module), _inlineLocalGraphics)) {
-		const char *ixxExtension = ".I00";
+		const char *ixxExtension = _platformTag == kOldTotPlatformAmiga
+			? ".IA0" : ".I00";
 		Common::SeekableReadStream *stream = openLoose(
 			Common::String(stem) + ixxExtension);
 		if (!stream) {
@@ -297,6 +300,18 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		 (state.nativeState.effectCommand != 0 &&
 		  state.nativeState.effectCommand != 43))) {
 		reason = "invalid Atari presentation state";
+		return false;
+	}
+	if (_platformTag == kOldTotPlatformAmiga &&
+		(!state.renderer.amigaPaletteValid || state.renderer.amigaBlack ||
+		 state.renderer.amigaPresentationPending ||
+		 state.renderer.amigaPresentationActive ||
+		 state.renderer.amigaPaletteTransitionPending ||
+		 state.renderer.amigaPresentationVariant != 0 ||
+		 state.renderer.amigaPresentationPhase != 0 ||
+		 (state.renderer.amigaPresentationMode != 0 &&
+		  state.renderer.amigaPresentationMode != 43))) {
+		reason = "invalid Amiga presentation state";
 		return false;
 	}
 	if (!state.nativeState.initialInitComplete) {

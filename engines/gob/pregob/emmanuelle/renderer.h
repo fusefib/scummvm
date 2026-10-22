@@ -65,10 +65,17 @@ struct OldTotRendererPreparedState {
 
 	SurfacePtr framebuffer;
 	Common::Array<OldTotPreparedSavedRegion> savedRegions;
+	SurfacePtr amigaPresentedFrame;
 	uint16 atariPalette[16];
+	uint16 amigaPalette[32];
 	bool atariPaletteValid;
 	bool atariBlack;
+	bool amigaPaletteValid;
+	bool amigaBlack;
+	uint32 amigaModuleGeneration;
+	uint32 amigaPresentedGeneration;
 	byte atariPresentationMode;
+	byte amigaPresentationMode;
 };
 
 bool prepareOldTotRendererState(const EmmanuelleRendererState &in,

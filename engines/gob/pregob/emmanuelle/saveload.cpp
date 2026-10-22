@@ -172,8 +172,21 @@ void writePayload(const EmmanuelleSaveState &state,
 	}
 	for (uint i = 0; i < ARRAYSIZE(state.renderer.atariPalette); ++i)
 		stream.writeUint16LE(state.renderer.atariPalette[i]);
+	for (uint i = 0; i < ARRAYSIZE(state.renderer.amigaPalette); ++i)
+		stream.writeUint16LE(state.renderer.amigaPalette[i]);
 	writeBool(stream, state.renderer.atariPaletteValid);
 	writeBool(stream, state.renderer.atariBlack);
+	writeBool(stream, state.renderer.amigaPaletteValid);
+	writeBool(stream, state.renderer.amigaBlack);
+	stream.writeUint32LE(state.renderer.amigaModuleGeneration);
+	stream.writeUint32LE(state.renderer.amigaPresentedGeneration);
+	stream.writeByte(state.renderer.amigaPresentationMode);
+	stream.writeByte(state.renderer.amigaPresentationVariant);
+	stream.writeByte(state.renderer.amigaPresentationPhase);
+	writeBool(stream, state.renderer.amigaPresentationPending);
+	writeBool(stream, state.renderer.amigaPresentationActive);
+	writeBool(stream, state.renderer.amigaPaletteTransitionPending);
+	writeSurface(stream, state.renderer.amigaPresentedFrame);
 
 	stream.writeByte(state.nativeState.sampleBank);
 	stream.writeByte(state.nativeState.sampleCount);
@@ -294,17 +307,46 @@ bool readPayload(Common::SeekableReadStream &stream,
 	}
 	for (uint i = 0; i < ARRAYSIZE(state.renderer.atariPalette); ++i)
 		state.renderer.atariPalette[i] = stream.readUint16LE();
+	for (uint i = 0; i < ARRAYSIZE(state.renderer.amigaPalette); ++i)
+		state.renderer.amigaPalette[i] = stream.readUint16LE();
 	if (!readBool(stream, state.renderer.atariPaletteValid) ||
-		!readBool(stream, state.renderer.atariBlack))
+		!readBool(stream, state.renderer.atariBlack) ||
+		!readBool(stream, state.renderer.amigaPaletteValid) ||
+		!readBool(stream, state.renderer.amigaBlack))
 		return false;
+	state.renderer.amigaModuleGeneration = stream.readUint32LE();
+	state.renderer.amigaPresentedGeneration = stream.readUint32LE();
+	state.renderer.amigaPresentationMode = stream.readByte();
+	state.renderer.amigaPresentationVariant = stream.readByte();
+	state.renderer.amigaPresentationPhase = stream.readByte();
+	if (!readBool(stream, state.renderer.amigaPresentationPending) ||
+		!readBool(stream, state.renderer.amigaPresentationActive) ||
+		!readBool(stream, state.renderer.amigaPaletteTransitionPending) ||
+		(state.renderer.amigaPresentationMode != 0 &&
+		 state.renderer.amigaPresentationMode != 43) ||
+		(state.platform != kOldTotPlatformAmiga &&
+		 state.renderer.amigaPresentationMode != 0) ||
+		state.renderer.amigaPresentationVariant != 0 ||
+		state.renderer.amigaPresentationPhase != 0 ||
+		state.renderer.amigaPresentationPending ||
+		state.renderer.amigaPresentationActive ||
+		state.renderer.amigaPaletteTransitionPending)
+		return false;
+	if (!readSurface(stream, state.renderer.amigaPresentedFrame, true))
+		return false;
+
 	state.nativeState.sampleBank = stream.readByte();
 	state.nativeState.sampleCount = stream.readByte();
+	// Idle ST saves are portable between complete and wholly silent sample
+	// sets. Restore prepares the destination's bank instead of its old count.
 	if ((state.platform == kOldTotPlatformDOS &&
 		 (state.nativeState.sampleBank != 0 || state.nativeState.sampleCount != 0)) ||
 		(state.platform == kOldTotPlatformAtariST &&
-		 (state.nativeState.sampleBank != 2 || (state.nativeState.sampleCount != 0 && state.nativeState.sampleCount != 19))))
+		 (state.nativeState.sampleBank != 2 ||
+		  (state.nativeState.sampleCount != 0 && state.nativeState.sampleCount != 19))) ||
+		(state.platform == kOldTotPlatformAmiga &&
+		 (state.nativeState.sampleBank != 2 || state.nativeState.sampleCount != 19)))
 		return false;
-
 	if (!readBool(stream, state.nativeState.initialInitComplete) ||
 		!readBool(stream, state.nativeState.skipIntermediateSequenceNodes))
 		return false;
@@ -354,12 +396,24 @@ bool importOldTotSurface(const EmmanuelleSurfaceState &in,
 EmmanuelleRendererState::EmmanuelleRendererState() {
 	atariPaletteValid = false;
 	atariBlack = false;
+	amigaPaletteValid = false;
+	amigaBlack = false;
 
+	amigaModuleGeneration = 0;
+	amigaPresentedGeneration = 0;
 
+	amigaPresentationMode = 0;
+	amigaPresentationVariant = 0;
+	amigaPresentationPhase = 0;
 
+	amigaPresentationPending = false;
+	amigaPresentationActive = false;
+	amigaPaletteTransitionPending = false;
 
 	for (uint i = 0; i < ARRAYSIZE(atariPalette); ++i)
 		atariPalette[i] = 0;
+	for (uint i = 0; i < ARRAYSIZE(amigaPalette); ++i)
+		amigaPalette[i] = 0;
 }
 
 EmmanuelleNativeState::EmmanuelleNativeState() {
@@ -418,7 +472,13 @@ bool validateEmmanuelleRendererState(const EmmanuelleRendererState &state,
 		state.framebuffer.height != height ||
 		state.framebuffer.bytesPerPixel != bytesPerPixel ||
 		state.savedRegions.size() > 10 ||
-		(atariPresentationMode != 0 && atariPresentationMode != 43))
+		(atariPresentationMode != 0 && atariPresentationMode != 43) ||
+		(state.amigaPresentationMode != 0 &&
+		 state.amigaPresentationMode != 43) ||
+		state.amigaPresentationVariant != 0 ||
+		state.amigaPresentationPhase != 0 ||
+		state.amigaPresentationPending || state.amigaPresentationActive ||
+		state.amigaPaletteTransitionPending)
 		return false;
 	for (uint i = 0; i < state.savedRegions.size(); ++i) {
 		const EmmanuelleSavedRegionState &region = state.savedRegions[i];
@@ -427,6 +487,12 @@ bool validateEmmanuelleRendererState(const EmmanuelleRendererState &state,
 			region.y + region.surface.height > height)
 			return false;
 	}
+	if (!state.amigaPresentedFrame.pixels.empty() &&
+		(!validRendererSurface(state.amigaPresentedFrame, false) ||
+		 state.amigaPresentedFrame.width != width ||
+		 state.amigaPresentedFrame.height != height ||
+		 state.amigaPresentedFrame.bytesPerPixel != bytesPerPixel))
+		return false;
 	return true;
 }
 
@@ -443,6 +509,9 @@ EmmanuelleRuntimeProfile emmanuelleRuntimeProfile(
 		if (language == Common::FR_FRA)
 			return kEmmanuelleProfileAtariFrench;
 		return kEmmanuelleProfileAtariEnglish;
+	}
+	if (platform == kOldTotPlatformAmiga) {
+		return kEmmanuelleProfileAmigaEnglish;
 	}
 	return kEmmanuelleProfileInvalid;
 }
@@ -479,6 +548,8 @@ bool emmanuelleProfileMatchesPlatform(EmmanuelleRuntimeProfile profile,
 	case kEmmanuelleProfileAtariSpanish:
 	case kEmmanuelleProfileAtariFrench:
 		return platform == kOldTotPlatformAtariST;
+	case kEmmanuelleProfileAmigaEnglish:
+		return platform == kOldTotPlatformAmiga;
 	default:
 		return false;
 	}

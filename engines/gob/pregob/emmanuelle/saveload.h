@@ -49,7 +49,8 @@ enum EmmanuelleRuntimeProfile : byte {
 	kEmmanuelleProfileDosSpanish = 2,
 	kEmmanuelleProfileAtariEnglish = 4,
 	kEmmanuelleProfileAtariSpanish = 5,
-	kEmmanuelleProfileAtariFrench = 6
+	kEmmanuelleProfileAtariFrench = 6,
+	kEmmanuelleProfileAmigaEnglish = 7
 };
 
 EmmanuelleRuntimeProfile emmanuelleRuntimeProfile(
@@ -177,8 +178,20 @@ struct EmmanuelleRendererState {
 	Common::Array<EmmanuelleSavedRegionState> savedRegions;
 	Common::Array<EmmanuelleActiveObjectState> activeObjects;
 	uint16 atariPalette[16];
+	uint16 amigaPalette[32];
 	bool atariPaletteValid;
 	bool atariBlack;
+	bool amigaPaletteValid;
+	bool amigaBlack;
+	uint32 amigaModuleGeneration;
+	uint32 amigaPresentedGeneration;
+	byte amigaPresentationMode;
+	byte amigaPresentationVariant;
+	byte amigaPresentationPhase;
+	bool amigaPresentationPending;
+	bool amigaPresentationActive;
+	bool amigaPaletteTransitionPending;
+	EmmanuelleSurfaceState amigaPresentedFrame;
 };
 
 struct EmmanuelleNativeState {

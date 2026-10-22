@@ -49,12 +49,19 @@ namespace Emmanuelle {
 OldTotRendererPreparedState::OldTotRendererPreparedState() {
 	atariPaletteValid = false;
 	atariBlack = false;
+	amigaPaletteValid = false;
+	amigaBlack = false;
 
+	amigaModuleGeneration = 0;
+	amigaPresentedGeneration = 0;
 
 	atariPresentationMode = 0;
+	amigaPresentationMode = 0;
 
 	for (uint i = 0; i < ARRAYSIZE(atariPalette); ++i)
 		atariPalette[i] = 0;
+	for (uint i = 0; i < ARRAYSIZE(amigaPalette); ++i)
+		amigaPalette[i] = 0;
 }
 
 OldTotRenderer::OldTotRenderer(GobEngine *vm) :
@@ -106,9 +113,25 @@ bool OldTotRenderer::exportState(EmmanuelleRendererState &out) const {
 	}
 	for (uint i = 0; i < ARRAYSIZE(out.atariPalette); ++i)
 		out.atariPalette[i] = _atariLogicalPalette[i];
+	for (uint i = 0; i < ARRAYSIZE(out.amigaPalette); ++i)
+		out.amigaPalette[i] = _amigaLogicalPalette[i];
 	out.atariPaletteValid = _atariPaletteValid;
 	out.atariBlack = _atariBlack;
+	out.amigaPaletteValid = _amigaPaletteValid;
+	out.amigaBlack = _amigaBlack;
+	out.amigaModuleGeneration = _amigaModuleGeneration;
+	out.amigaPresentedGeneration = _amigaPresentedGeneration;
 	if (_platform == kOldTotPlatformAmiga) {
+		out.amigaPresentationMode = _presentation.mode();
+		out.amigaPresentationVariant = _presentation.variant();
+		out.amigaPresentationPhase = _presentation.phase();
+		out.amigaPresentationPending = _presentation.pending();
+		out.amigaPresentationActive = _presentation.active();
+		out.amigaPaletteTransitionPending =
+			_presentation.paletteTransitionPending();
+		if (_amigaPresentedSurface)
+			exportOldTotSurface(*_amigaPresentedSurface,
+				out.amigaPresentedFrame);
 	}
 	return true;
 }
@@ -145,19 +168,42 @@ bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
 		prepared.savedRegions.push_back(OldTotPreparedSavedRegion(
 			surface, state.x, state.y));
 	}
+	if (!in.amigaPresentedFrame.pixels.empty() &&
+		(!importOldTotSurface(in.amigaPresentedFrame,
+			 prepared.amigaPresentedFrame) ||
+		 in.amigaPresentedFrame.width != in.framebuffer.width ||
+		 in.amigaPresentedFrame.height != in.framebuffer.height ||
+		 in.amigaPresentedFrame.bytesPerPixel !=
+			in.framebuffer.bytesPerPixel))
+		return false;
 	for (uint i = 0; i < ARRAYSIZE(prepared.atariPalette); ++i)
 		prepared.atariPalette[i] = in.atariPalette[i];
+	for (uint i = 0; i < ARRAYSIZE(prepared.amigaPalette); ++i)
+		prepared.amigaPalette[i] = in.amigaPalette[i];
 	prepared.atariPaletteValid = in.atariPaletteValid;
 	prepared.atariBlack = in.atariBlack;
+	prepared.amigaPaletteValid = in.amigaPaletteValid;
+	prepared.amigaBlack = in.amigaBlack;
+	prepared.amigaModuleGeneration = in.amigaModuleGeneration;
+	prepared.amigaPresentedGeneration = in.amigaPresentedGeneration;
 	prepared.atariPresentationMode = atariPresentationMode;
+	prepared.amigaPresentationMode = in.amigaPresentationMode;
 
 	out.framebuffer = prepared.framebuffer;
 	out.savedRegions.swap(prepared.savedRegions);
+	out.amigaPresentedFrame = prepared.amigaPresentedFrame;
 	for (uint i = 0; i < ARRAYSIZE(out.atariPalette); ++i)
 		out.atariPalette[i] = prepared.atariPalette[i];
+	for (uint i = 0; i < ARRAYSIZE(out.amigaPalette); ++i)
+		out.amigaPalette[i] = prepared.amigaPalette[i];
 	out.atariPaletteValid = prepared.atariPaletteValid;
 	out.atariBlack = prepared.atariBlack;
+	out.amigaPaletteValid = prepared.amigaPaletteValid;
+	out.amigaBlack = prepared.amigaBlack;
+	out.amigaModuleGeneration = prepared.amigaModuleGeneration;
+	out.amigaPresentedGeneration = prepared.amigaPresentedGeneration;
 	out.atariPresentationMode = prepared.atariPresentationMode;
+	out.amigaPresentationMode = prepared.amigaPresentationMode;
 	return true;
 }
 
@@ -166,17 +212,24 @@ void OldTotRenderer::commitState(OldTotRendererPreparedState &in) {
 	_savedRegions.swap(in.savedRegions);
 	for (uint i = 0; i < ARRAYSIZE(_atariLogicalPalette); ++i)
 		_atariLogicalPalette[i] = in.atariPalette[i];
+	for (uint i = 0; i < ARRAYSIZE(_amigaLogicalPalette); ++i)
+		_amigaLogicalPalette[i] = in.amigaPalette[i];
 	_atariPaletteValid = in.atariPaletteValid;
 	_atariBlack = in.atariBlack;
 	_presentation = PresentationState(_platform);
-	if (_platform == kOldTotPlatformAtariST &&
-		in.atariPresentationMode == 43)
+	if ((_platform == kOldTotPlatformAtariST && in.atariPresentationMode == 43) ||
+		(_platform == kOldTotPlatformAmiga && in.amigaPresentationMode == 43))
 		_presentation.arm(43);
 	_atariPresentedSurface = _platform == kOldTotPlatformAtariST
 		? in.framebuffer : SurfacePtr();
 	_atariTransitionTarget.reset();
 	clearDirtyRect();
+	_amigaPaletteValid = in.amigaPaletteValid;
+	_amigaBlack = in.amigaBlack;
+	_amigaPresentedSurface = in.amigaPresentedFrame;
 	_amigaTransitionTarget.reset();
+	_amigaModuleGeneration = in.amigaModuleGeneration;
+	_amigaPresentedGeneration = in.amigaPresentedGeneration;
 
 	if (_platform == kOldTotPlatformAtariST && _atariPaletteValid) {
 		if (_atariBlack) {
