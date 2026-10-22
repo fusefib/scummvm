@@ -87,6 +87,8 @@ MODULE_OBJS := \
 	pregob/txtfile.o \
 	pregob/gctfile.o \
 	pregob/seqfile.o \
+	pregob/emmanuelle/oldixx.o \
+	pregob/emmanuelle/oldtot.o \
 	pregob/onceupon/onceupon.o \
 	pregob/onceupon/abracadabra.o \
 	pregob/onceupon/babayaga.o \
