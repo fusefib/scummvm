@@ -525,7 +525,8 @@ void PreGob_Emmanuelle::serviceColorCycle() {
 	if (result.rotatePalette) {
 		if (_platformTag == kOldTotPlatformAtariST)
 			_renderer.rotateAtariColorCycleWords();
-
+		else
+			_renderer.rotateAmigaColorCycle();
 	}
 }
 

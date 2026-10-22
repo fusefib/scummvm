@@ -60,7 +60,7 @@ OldTotRendererPreparedState::OldTotRendererPreparedState() {
 OldTotRenderer::OldTotRenderer(GobEngine *vm) :
 	_vm(vm), _presentation(kOldTotPlatformDOS),
 	_atariPresentedSurface(), _atariTransitionTarget(),
-	_amigaPresentedSurface() {
+	_amigaPresentedSurface(), _amigaTransitionTarget() {
 	_platform = kOldTotPlatformDOS;
 
 	// The module host owns both resource banks.
@@ -176,6 +176,7 @@ void OldTotRenderer::commitState(OldTotRendererPreparedState &in) {
 		? in.framebuffer : SurfacePtr();
 	_atariTransitionTarget.reset();
 	clearDirtyRect();
+	_amigaTransitionTarget.reset();
 
 	if (_platform == kOldTotPlatformAtariST && _atariPaletteValid) {
 		if (_atariBlack) {
@@ -605,18 +606,22 @@ bool PreGob_Emmanuelle::servicePresentation() {
 		if (step.operation == kPresentationMode43 ||
 			step.operation == kPresentationMode44) {
 			if (step.phase == 0)
-				rendered = _renderer.beginAtariTransitionFrame();
+				rendered = amiga ? _renderer.beginAmigaTransitionFrame() :
+					_renderer.beginAtariTransitionFrame();
 			if (rendered && step.operation == kPresentationMode43)
-				rendered = _renderer.presentAtariMode43Step(step.phase);
+				rendered = amiga ? _renderer.presentAmigaMode43Step(step.phase) :
+					_renderer.presentAtariMode43Step(step.phase);
 			else if (rendered && step.operation == kPresentationMode44)
-				rendered = _renderer.presentAtariMode44Step(step.variant, step.phase);
+				rendered = amiga
+					? _renderer.presentAmigaMode44Step(step.variant, step.phase) :
+					_renderer.presentAtariMode44Step(step.variant, step.phase);
 		}
 		// Ordinary Amiga phase zero waits before buffer publication (native
 		// 0x1136A); phase one publishes, waits again (0x113CE), then captures.
 		if (!_introSkip.fastForwarding() &&
 			(!amiga || step.operation != kPresentationFrame || step.phase != 0))
 			_vm->_draw->blitInvalidated();
-		const byte hostWaits = 1;
+		const byte hostWaits = amiga && step.operation == kPresentationMode44 && step.phase == 0 ? 0 : 1;
 		waitPresentationFrames(hostWaits);
 		// Report requested waits even when quitting interrupts them.
 		if (hostWaits != 0)

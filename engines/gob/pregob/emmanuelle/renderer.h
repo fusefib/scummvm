@@ -129,6 +129,9 @@ public:
 	bool amigaModulePaletteDiffers(const Common::String &moduleName) const;
 	bool applyAmigaModulePalette(const Common::String &moduleName);
 	bool applyAmigaPalette(byte paletteNumber, bool makeVisible = true);
+	bool applyAmigaEffect45(const uint16 words[5]);
+	bool rotateAmigaEffect46();
+	bool rotateAmigaColorCycle();
 	/** Apply one of sixteen native palette phases without owning events. */
 	bool presentAmigaFadeToBlackStep(byte phase);
 	bool presentAmigaFadeFromBlackStep(byte phase);
@@ -139,6 +142,8 @@ public:
 		return _presentation.paletteTransitionPending();
 	}
 
+	void armAmigaTransition(byte mode);
+	void disarmAmigaTransition();
 	void noteAmigaPaletteTransition();
 	void beginAmigaModuleState();
 	// Module changes discard transient backing stores without restoring them.
@@ -147,6 +152,9 @@ public:
 	void captureAmigaPresentedFrame();
 	void commitAmigaDirectFrame();
 
+	bool beginAmigaTransitionFrame();
+	bool presentAmigaMode43Step(byte phase);
+	bool presentAmigaMode44Step(byte variant, byte phase);
 
 	bool saveScreenRect(uint16 x, uint16 y, uint16 width, uint16 height);
 	bool restoreScreenRect();
@@ -197,6 +205,7 @@ private:
 		int16 right, int16 bottom);
 	void finishAtariTransitionFrame();
 	void clearDirtyRect();
+	void finishAmigaTransitionFrame();
 
 	GobEngine *_vm;
 	OldTotPlatformTag _platform;
@@ -218,6 +227,7 @@ private:
 	bool _amigaPaletteValid;
 	bool _amigaBlack;
 	SurfacePtr _amigaPresentedSurface;
+	SurfacePtr _amigaTransitionTarget;
 	uint32 _amigaModuleGeneration;
 	uint32 _amigaPresentedGeneration;
 };

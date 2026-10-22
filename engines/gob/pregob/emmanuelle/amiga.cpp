@@ -67,6 +67,42 @@ bool PreGob_Emmanuelle::handleAmigaFF0B(byte command) {
 	if (!amigaHandlesNativeCommand(command))
 		return false;
 	switch (command) {
+	case 40:
+		_colorCycleEnabled = false;
+		if (_scriptVM && _scriptVM->readVariable(0) == 10)
+			_renderer.applyAmigaPalette(3, true);
+		return true;
+	case 41:
+		_colorCycleEnabled = true;
+		return true;
+	case 42:
+		_renderer.disarmAmigaTransition();
+		return true;
+	case 43:
+		servicePresentation();
+		_renderer.armAmigaTransition(43);
+		return true;
+	case 44:
+		_renderer.armAmigaTransition(44);
+		return true;
+	case 45: {
+		uint16 words[5];
+		const byte variant = (byte)randomBounded(3);
+		if (getAmigaEffect45(variant, words))
+			_renderer.applyAmigaEffect45(words);
+		return true;
+	}
+	case 46:
+		for (byte i = 0; i < 4 && !_vm->shouldQuit(); ++i) {
+			_renderer.rotateAmigaEffect46();
+			delay(amigaNativeDelayMilliseconds(250));
+		}
+		return true;
+	case 47:
+		_renderer.noteAmigaPaletteTransition();
+		fadeAmigaToBlack();
+		_renderer.applyAmigaPalette(4, false);
+		return true;
 	case 80:
 		stopSampleAudio();
 		return true;
@@ -191,9 +227,86 @@ bool OldTotRenderer::decodeAmigaPackedPayload(
 	return true;
 }
 
+bool OldTotRenderer::presentAmigaMode44Step(byte variant, byte phase) {
+	if (_platform != kOldTotPlatformAmiga || variant >= 5 ||
+		!_amigaTransitionTarget || !_vm || !_vm->_draw ||
+		!_vm->_draw->_backSurface)
+		return false;
+
+	AmigaMode44Rect rect;
+	if (!getAmigaMode44Rect(variant, phase, rect))
+		return false;
+	copyPresentationRect(*_amigaTransitionTarget, rect.x, rect.y,
+							rect.x + rect.width - 1,
+							rect.y + rect.height - 1);
+	if (phase == amigaMode44WaitCount(variant))
+		finishAmigaTransitionFrame();
+	return true;
+}
+
+bool OldTotRenderer::presentAmigaMode43Step(byte phase) {
+	if (_platform != kOldTotPlatformAmiga || phase >= 16 ||
+		!_amigaTransitionTarget || !_vm || !_vm->_draw ||
+		!_vm->_draw->_backSurface)
+		return false;
+	Surface &back = *_vm->_draw->_backSurface;
+	if (!_dirtyValid) {
+		finishAmigaTransitionFrame();
+		return true;
+	}
+	const int16 left = (_dirtyLeft / 16) * 16;
+	int16 right = ((_dirtyRight / 16) + 1) * 16 - 1;
+	right = MIN<int16>(right, back.getWidth() - 1);
+	uint32 ordinal = 0;
+	for (int16 y = _dirtyTop; y <= _dirtyBottom; ++y) {
+		for (int16 wordX = left; wordX <= right;
+			 wordX += 16, ++ordinal) {
+			const int16 x = wordX +
+				amigaMode43PixelOffset(phase, ordinal);
+			if (x <= right && x < (int16)back.getWidth())
+				back.putPixelRaw(
+					x, y, _amigaTransitionTarget->get(x, y).get());
+		}
+	}
+	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left,
+							_dirtyTop, right, _dirtyBottom);
+	if (phase == 15)
+		finishAmigaTransitionFrame();
+	return true;
+}
+
+void OldTotRenderer::finishAmigaTransitionFrame() {
+	if (!_amigaTransitionTarget || !_vm || !_vm->_draw ||
+		!_vm->_draw->_backSurface)
+		return;
+	_vm->_draw->_backSurface->blit(*_amigaTransitionTarget, 0, 0);
+	_amigaPresentedSurface = _amigaTransitionTarget;
+	_amigaTransitionTarget.reset();
+	clearDirtyRect();
+}
+
+bool OldTotRenderer::beginAmigaTransitionFrame() {
+	if (_platform != kOldTotPlatformAmiga || !_vm || !_vm->_draw ||
+		!_vm->_draw->_backSurface)
+		return false;
+	Surface &back = *_vm->_draw->_backSurface;
+	_amigaTransitionTarget = clonePresentationFrame(back);
+	if (!amigaSnapshotGenerationUsable(
+			_amigaModuleGeneration, _amigaPresentedGeneration,
+			(bool)_amigaPresentedSurface) ||
+		_amigaPresentedSurface->getWidth() != back.getWidth() ||
+		_amigaPresentedSurface->getHeight() != back.getHeight())
+		_amigaPresentedSurface = clonePresentationFrame(back);
+	back.blit(*_amigaPresentedSurface, 0, 0);
+	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0,
+							back.getWidth() - 1, back.getHeight() - 1);
+	return true;
+}
+
 void OldTotRenderer::resetAmigaModuleState() {
 	_savedRegions.clear();
 	_presentation.resetModule();
+	_amigaTransitionTarget.reset();
 	clearDirtyRect();
 }
 
@@ -207,10 +320,29 @@ void OldTotRenderer::noteAmigaPaletteTransition() {
 		_presentation.notePaletteTransition();
 }
 
+void OldTotRenderer::disarmAmigaTransition() {
+	_presentation.disarm();
+	clearDirtyRect();
+	_amigaTransitionTarget.reset();
+}
+
+void OldTotRenderer::armAmigaTransition(byte mode) {
+	if (_platform != kOldTotPlatformAmiga || (mode != 43 && mode != 44))
+		return;
+	if (!amigaSnapshotGenerationUsable(
+			_amigaModuleGeneration, _amigaPresentedGeneration,
+			(bool)_amigaPresentedSurface))
+		captureAmigaPresentedFrame();
+	_presentation.arm(mode);
+	_amigaTransitionTarget.reset();
+	clearDirtyRect();
+}
+
 void OldTotRenderer::commitAmigaDirectFrame() {
 	if (_platform != kOldTotPlatformAmiga)
 		return;
 	_presentation.commitDirectFrame();
+	_amigaTransitionTarget.reset();
 	clearDirtyRect();
 	captureAmigaPresentedFrame();
 }
@@ -259,6 +391,45 @@ bool OldTotRenderer::presentAmigaFadeToBlackStep(byte phase) {
 	showAmigaWords(work);
 	if (phase == 15)
 		_amigaBlack = true;
+	return true;
+}
+
+bool OldTotRenderer::rotateAmigaColorCycle() {
+	if (!_amigaPaletteValid)
+		return false;
+	const uint16 old7 = _amigaLogicalPalette[7];
+	_amigaLogicalPalette[7] = _amigaLogicalPalette[6];
+	_amigaLogicalPalette[6] = _amigaLogicalPalette[5];
+	_amigaLogicalPalette[5] = _amigaLogicalPalette[4];
+	_amigaLogicalPalette[4] = old7;
+	showAmigaWords(_amigaLogicalPalette);
+	return true;
+}
+
+bool OldTotRenderer::rotateAmigaEffect46() {
+	if (!_amigaPaletteValid)
+		return false;
+	// Native command 46 moves 15 -> 3 -> 9 -> 10 -> 11 -> 15. Reversing it
+	// leaves Cupid with the wrong colours on the following protection screen.
+	const uint16 old15 = _amigaLogicalPalette[15];
+	_amigaLogicalPalette[15] = _amigaLogicalPalette[11];
+	_amigaLogicalPalette[11] = _amigaLogicalPalette[10];
+	_amigaLogicalPalette[10] = _amigaLogicalPalette[9];
+	_amigaLogicalPalette[9] = _amigaLogicalPalette[3];
+	_amigaLogicalPalette[3] = old15;
+	showAmigaWords(_amigaLogicalPalette);
+	return true;
+}
+
+bool OldTotRenderer::applyAmigaEffect45(const uint16 words[5]) {
+	if (!_amigaPaletteValid || !words)
+		return false;
+	_amigaLogicalPalette[3] = words[0];
+	_amigaLogicalPalette[9] = words[1];
+	_amigaLogicalPalette[10] = words[2];
+	_amigaLogicalPalette[11] = words[3];
+	_amigaLogicalPalette[15] = words[4];
+	showAmigaWords(_amigaLogicalPalette);
 	return true;
 }
 
