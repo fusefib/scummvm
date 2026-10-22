@@ -88,6 +88,7 @@ MODULE_OBJS := \
 	pregob/gctfile.o \
 	pregob/seqfile.o \
 	pregob/emmanuelle/animation.o \
+	pregob/emmanuelle/dos.o \
 	pregob/emmanuelle/executor.o \
 	pregob/emmanuelle/fight.o \
 	pregob/emmanuelle/gameflow.o \
