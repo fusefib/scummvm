@@ -874,7 +874,13 @@ void PreGob_Emmanuelle::run() {
 	setInputContext(kEmmanuelleInputNone);
 	hideCursor();
 	_vm->_util->setFrameRate(kHostFrameRate);
-
+	if (_platformTag == kOldTotPlatformAtariST &&
+		atariStAudioPolicy(_optionalAtariAudio,
+						   hasAnyAtariSoundFile()) == kAtariStAudioSilent) {
+		_silentAtariAudio = true;
+		warning("Emmanuelle: running the loader-free Atari ST profile "
+				"without sound samples");
+	}
 	bool ready = loadSharedAssets();
 	if (ready && _platformTag != kOldTotPlatformDOS)
 		ready = loadSampleBank(1);
