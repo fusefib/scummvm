@@ -75,6 +75,40 @@ int16 InputLatch::take(int16 &x, int16 &y, byte &buttons) {
 	return key;
 }
 
+bool isAudioPlaying(OldTotPlatformTag platform, bool speakerActive,
+		bool samplePlaying) {
+	return samplePlaying || (platform == kOldTotPlatformDOS && speakerActive);
+}
+
+uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
+									 uint32 &accumulator) {
+	// DOS services 5000 calibrated units/s, ST one tick per VBL, and Amiga
+	// 20 ticks/s. Host pacing stays at 50 Hz on all three platforms.
+	accumulator += platform == kOldTotPlatformDOS ? 5000 :
+		(platform == kOldTotPlatformAtariST ? 50 : 20);
+	const uint16 quanta = (uint16)(accumulator / kHostFrameRate);
+	accumulator %= kHostFrameRate;
+	return quanta;
+}
+
+uint32 minimumDurationRemaining(uint32 elapsed,
+									  uint32 minimumDuration) {
+	return elapsed < minimumDuration ? minimumDuration - elapsed : 0;
+}
+
+ColorCycleResult advanceColorCycle(byte counter, bool enabled,
+												uint16 selector) {
+	ColorCycleResult result;
+	result.counter = (byte)((counter + 1) % 6);
+	result.rotatePalette =
+		result.counter == 0 && enabled && selector == 10;
+	return result;
+}
+
+uint16 opcode03DelayUnits(byte arg) {
+	return arg == 0 || arg == 0xFF ? 0 : (uint16)arg * 5;
+}
+
 uint16 inputEntryDelay(OldTotPlatformTag platform) {
 	return platform == kOldTotPlatformDOS ? 0 : 100;
 }
@@ -106,6 +140,15 @@ int16 minimumCursorOrigin(OldTotPlatformTag platform) {
 
 bool recentersMouseOnModuleLoad(OldTotPlatformTag platform) {
 	return platform != kOldTotPlatformAmiga;
+}
+
+bool schedulerChecksZeroBeforeDecrement(OldTotPlatformTag platform) {
+	return platform != kOldTotPlatformDOS;
+}
+
+bool command201SkipsIntermediateNodes(OldTotPlatformTag platform,
+									 uint16 moduleSelector) {
+	return platform != kOldTotPlatformDOS && moduleSelector == 3;
 }
 
 } // namespace Emmanuelle
