@@ -54,6 +54,11 @@ private:
 	byte _mouseButtons;
 };
 
+enum {
+	kHostFrameRate = 50,
+	kInitialTomahawkMinimumMilliseconds = 2500
+};
+
 struct InputBoundary {
 	InputBoundary() : nativeDelayUnits(0), discardStale(false),
 							showCursor(false) {}
@@ -63,6 +68,15 @@ struct InputBoundary {
 	bool showCursor;
 };
 
+bool isAudioPlaying(OldTotPlatformTag platform, bool speakerActive,
+	bool samplePlaying);
+/** Native timer quanta per 50 Hz input pass. */
+uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
+									 uint32 &accumulator);
+/** Return only the time still needed to satisfy a minimum duration. */
+uint32 minimumDurationRemaining(uint32 elapsed,
+									  uint32 minimumDuration);
+uint16 opcode03DelayUnits(byte arg);
 /** Delay before a fresh opcode-1B wait discards stale input. */
 uint16 inputEntryDelay(OldTotPlatformTag platform);
 InputBoundary choiceInputBoundary(OldTotPlatformTag platform,
@@ -72,6 +86,11 @@ byte keyboardCursorStep(OldTotPlatformTag platform);
 /** Lowest cursor origin accepted by the native input service. */
 int16 minimumCursorOrigin(OldTotPlatformTag platform);
 bool recentersMouseOnModuleLoad(OldTotPlatformTag platform);
+/** Native callback countdown ordering. */
+bool schedulerChecksZeroBeforeDecrement(OldTotPlatformTag platform);
+/** Host command 201 enables intermediate sequence suppression in selector 3. */
+bool command201SkipsIntermediateNodes(OldTotPlatformTag platform,
+									 uint16 moduleSelector);
 
 } // namespace Emmanuelle
 } // namespace Gob

@@ -75,6 +75,28 @@ int16 InputLatch::take(int16 &x, int16 &y, byte &buttons) {
 	return key;
 }
 
+bool isAudioPlaying(OldTotPlatformTag platform, bool speakerActive,
+		bool samplePlaying) {
+	return platform == kOldTotPlatformDOS && speakerActive;
+}
+
+uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
+									 uint32 &accumulator) {
+	accumulator += 5000;
+	const uint16 quanta = (uint16)(accumulator / kHostFrameRate);
+	accumulator %= kHostFrameRate;
+	return quanta;
+}
+
+uint32 minimumDurationRemaining(uint32 elapsed,
+									  uint32 minimumDuration) {
+	return elapsed < minimumDuration ? minimumDuration - elapsed : 0;
+}
+
+uint16 opcode03DelayUnits(byte arg) {
+	return arg == 0 || arg == 0xFF ? 0 : (uint16)arg * 5;
+}
+
 uint16 inputEntryDelay(OldTotPlatformTag platform) {
 	return 0;
 }
@@ -96,6 +118,15 @@ int16 minimumCursorOrigin(OldTotPlatformTag platform) {
 
 bool recentersMouseOnModuleLoad(OldTotPlatformTag platform) {
 	return true;
+}
+
+bool schedulerChecksZeroBeforeDecrement(OldTotPlatformTag platform) {
+	return false;
+}
+
+bool command201SkipsIntermediateNodes(OldTotPlatformTag platform,
+									 uint16 moduleSelector) {
+	return false;
 }
 
 } // namespace Emmanuelle
