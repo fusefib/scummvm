@@ -441,8 +441,33 @@ void PreGob_Emmanuelle::drawNode(uint16 nodeOffset) {
 	const int16 y = descriptor.yIndirect()
 						? (int16)_scriptVM->readVariable(descriptor.y)
 						: (int16)descriptor.y;
-	_renderer.drawSprite(*_tot, descriptor, x, y);
+	const bool drawn = _renderer.drawSprite(*_tot, descriptor, x, y);
 
+	if (drawn && _platformTag == kOldTotPlatformDOS &&
+		_initialInitPresentation &&
+		!_introSkip.fastForwarding()) {
+		// DOS draws directly to video memory. Reproduce that visibility and
+		// decoding time throughout fresh INIT, including the Tomahawk title.
+		const byte videoMode = _scriptVM->runtimeState().videoMode;
+		const uint16 drawDelay = dosIntroDrawDelayMilliseconds(
+			videoMode, descriptor.width, descriptor.height);
+		const bool assemblingInitialFrame = !_dosInitialFramePresented;
+		const bool initialFrameComplete = assemblingInitialFrame &&
+			extendDosInitialFrameCoverage(_dosInitialFrameCoverage,
+				_dosInitialFrameHasCoverage, x, y, descriptor.width,
+				descriptor.height);
+		if (assemblingInitialFrame) {
+			delay(drawDelay);
+			if (initialFrameComplete && !_vm->shouldQuit()) {
+				presentFrame(false);
+				_dosInitialFramePresented = true;
+			}
+		} else {
+			presentFrame(false);
+
+			delay(drawDelay);
+		}
+	}
 }
 
 bool PreGob_Emmanuelle::handleProtectionTextNode(uint16 nodeOffset) {
