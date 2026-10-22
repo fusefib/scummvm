@@ -321,6 +321,7 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 	}
 
 	_renderer.setResourceBanks(_localI00, _sharedI01);
+	completeInitialTomahawkHandoff(moduleId);
 	if (_vm->shouldQuit())
 		return false;
 	bool paletteApplied = false;
@@ -364,6 +365,7 @@ bool PreGob_Emmanuelle::executeLoadedModule() {
 			   oldTotExecutorStopReasonName(_executor->stopReason()));
 	if (ok && !_vm->shouldQuit() && _initialInitPresentation &&
 		_moduleFileStem.equalsIgnoreCase("INIT"))
+		ensureInitialTomahawkHandoff();
 
 	if (ok && !_vm->shouldQuit() &&
 		_initialInitPresentation &&

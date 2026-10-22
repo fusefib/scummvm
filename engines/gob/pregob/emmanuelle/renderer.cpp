@@ -399,6 +399,51 @@ void PreGob_Emmanuelle::waitForMinimumDuration(
 	}
 }
 
+bool PreGob_Emmanuelle::initialTomahawkPresentationVisible() const {
+	return true;
+}
+
+void PreGob_Emmanuelle::noteInitialTomahawkVisible() {
+	if (_initialTitleState != kInitialTitleDrawn ||
+		!_initialInitPresentation || _introSkip.fastForwarding() ||
+		!initialTomahawkPresentationVisible())
+		return;
+
+	_initialTitleState = kInitialTitleVisible;
+	_initialTomahawkVisibleStart = g_system->getMillis();
+	if (_diagnosticTraceEnabled)
+		debugC(2, kDebugGraphics,
+			"EMMA_TRACE event=tomahawk_visible platform=%u time_ms=%u",
+			(uint)_platformTag, (uint)_initialTomahawkVisibleStart);
+}
+
+void PreGob_Emmanuelle::ensureInitialTomahawkHandoff() {
+	if (_initialTitleState == kInitialTitleDrawn && !_vm->shouldQuit()) {
+		if (!initialTomahawkPresentationVisible())
+		noteInitialTomahawkVisible();
+	}
+}
+
+void PreGob_Emmanuelle::completeInitialTomahawkHandoff(
+	ModuleId moduleId) {
+	if (_initialTitleState != kInitialTitleVisible)
+		return;
+	_initialTitleState = kInitialTitleNone;
+	if (moduleId != kModuleLoadHot)
+		return;
+	const uint16 minimum = kInitialTomahawkMinimumMilliseconds;
+	if (!_vm->shouldQuit())
+		waitForMinimumDuration(_initialTomahawkVisibleStart, minimum);
+	discardPendingInput();
+	if (_diagnosticTraceEnabled)
+		debugC(2, kDebugFileIO,
+			"EMMA_TRACE event=tomahawk_handoff_end platform=%u "
+			"visible_elapsed_ms=%u minimum_ms=%u",
+			(uint)_platformTag,
+			(uint)(g_system->getMillis() - _initialTomahawkVisibleStart),
+			(uint)minimum);
+}
+
 void PreGob_Emmanuelle::defineCursor(uint16 descriptorOffset) {
 	if (!_tot)
 		return;
@@ -442,7 +487,11 @@ void PreGob_Emmanuelle::drawNode(uint16 nodeOffset) {
 						? (int16)_scriptVM->readVariable(descriptor.y)
 						: (int16)descriptor.y;
 	const bool drawn = _renderer.drawSprite(*_tot, descriptor, x, y);
-
+	const bool initialTomahawkDraw = drawn && _initialInitPresentation &&
+		!_introSkip.available() && descriptor.width == 320 &&
+		descriptor.height == 200;
+	if (initialTomahawkDraw && _initialTitleState == kInitialTitleNone)
+		_initialTitleState = kInitialTitleDrawn;
 	if (drawn && _platformTag == kOldTotPlatformDOS &&
 		_initialInitPresentation &&
 		!_introSkip.fastForwarding()) {
@@ -464,7 +513,8 @@ void PreGob_Emmanuelle::drawNode(uint16 nodeOffset) {
 			}
 		} else {
 			presentFrame(false);
-
+			if (initialTomahawkDraw)
+				noteInitialTomahawkVisible();
 			delay(drawDelay);
 		}
 	}
