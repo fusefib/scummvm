@@ -107,6 +107,7 @@ public:
 
 bool GobMetaEngine::hasFeature(MetaEngineFeature f) const {
 	return f == kSupportsListSaves ||
+		f == kSupportsLoadingDuringStartup ||
 		f == kSupportsDeleteSave ||
 		f == kSavesSupportMetaInfo ||
 		f == kSavesSupportThumbnail ||
@@ -169,6 +170,7 @@ Common::Error GobMetaEngine::createInstance(OSystem *syst, Engine **engine, cons
 	return Common::kNoError;
 }
 
+
 #if PLUGIN_ENABLED_DYNAMIC(GOB)
 	REGISTER_PLUGIN_DYNAMIC(GOB, PLUGIN_TYPE_ENGINE, GobMetaEngine);
 #else
@@ -195,6 +197,7 @@ bool GobEngine::gameTypeHasAddOns() const {
 			getGameType() == kGameTypeAdi2 ||
 			getGameType() == kGameTypeAdi4;
 }
+
 
 // Accelerator, to discard some directories we know have no chance to be add-ons
 bool GobEngine::dirCanBeGameAddOn(const Common::FSDirectory &dir) const {

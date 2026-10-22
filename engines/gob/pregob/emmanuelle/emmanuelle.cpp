@@ -36,6 +36,8 @@
 
 #include "graphics/cursorman.h"
 
+#include "gui/message.h"
+
 #include "gob/console.h"
 #include "gob/dataio.h"
 #include "gob/gob.h"
@@ -970,17 +972,42 @@ void PreGob_Emmanuelle::run() {
 	if (ready && _platformTag != kOldTotPlatformDOS)
 		ready = loadSampleBank(1);
 	if (ready) {
-		_variables[0] = 0;
-		_initialTitleState = kInitialTitleNone;
-		_initialTomahawkVisibleStart = 0;
-		_introSkip.begin();
-		_initialInitPresentation = true;
-		_dosInitialFrameCoverage = Common::Rect();
-		_dosInitialFrameHasCoverage = false;
-		_dosInitialFramePresented = false;
-		setInputContext(kEmmanuelleInputIntro);
-		const ModuleLoopResult result = runModuleLoop(
-			*this, _variables, ARRAYSIZE(_variables));
+		ModuleLoopResult result;
+		int startupSlot = -1;
+		if (ConfMan.hasKey("save_slot", Common::ConfigManager::kTransientDomain)) {
+			startupSlot = ConfMan.getInt(
+				"save_slot", Common::ConfigManager::kTransientDomain);
+			ConfMan.removeKey(
+				"save_slot", Common::ConfigManager::kTransientDomain);
+		}
+		if (startupSlot >= 0) {
+			const Common::Error error = _vm->loadGameState(startupSlot);
+			if (error.getCode() != Common::kNoError) {
+				debugC(1, kDebugSaveLoad,
+					"Emmanuelle: failed to load startup slot %d",
+					startupSlot);
+				// Launcher loads bypass the in-game load dialog's error reporting.
+				GUI::MessageDialog dialog(error.getTranslatedDesc());
+				dialog.runModal();
+				result = kModuleLoopLoadError;
+			} else {
+				result = resumeModuleLoop(
+					*this, _variables, ARRAYSIZE(_variables),
+					_currentModule, _currentUsesLocalGraphics);
+			}
+		} else {
+			_variables[0] = 0;
+			_initialTitleState = kInitialTitleNone;
+			_initialTomahawkVisibleStart = 0;
+			_introSkip.begin();
+			_initialInitPresentation = true;
+			_dosInitialFrameCoverage = Common::Rect();
+			_dosInitialFrameHasCoverage = false;
+			_dosInitialFramePresented = false;
+			setInputContext(kEmmanuelleInputIntro);
+			result = runModuleLoop(
+				*this, _variables, ARRAYSIZE(_variables));
+		}
 		debugC(1, kDebugGameFlow, "Emmanuelle: runtime stopped: %s",
 			   loopResultDescription(result));
 		_active.restoreAll();
