@@ -495,6 +495,87 @@ void PreGob_Emmanuelle::textNode(uint16 nodeOffset) {
 		renderTextPlan(nodeOffset);
 }
 
+bool PreGob_Emmanuelle::renderAnimationFrame(
+	const OldTotAnimationSetup &setup, uint16 step, byte frame,
+	int16 baseX, int16 baseY) {
+	if (!_tot || !_scriptVM ||
+		!setup.hasDescriptor || setup.slot >= 20)
+		return false;
+
+	AnimationFramePlan framePlan;
+	if (!planAnimationFrame(setup, baseX, baseY, step, frame, framePlan))
+		return false;
+	OldTotDrawDescriptor descriptor;
+	if (!_tot->decodeDrawDescriptor(framePlan.descriptorOffset, descriptor))
+		return false;
+	SurfacePtr sprite = _renderer.decodeSpriteSurface(*_tot, descriptor);
+	if (!sprite)
+		return false;
+	SurfacePtr cell = _renderer.buildMaskedCell(
+		*sprite, framePlan.cellWidth, framePlan.cellHeight, 0, 0,
+		descriptor.transparentZero());
+	if (!cell)
+		return false;
+	const bool composited = _active.composite(
+		setup.slot, *cell, framePlan.x, framePlan.y, 0xFF);
+	return composited;
+}
+
+void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
+	OldTotAnimationSetup setup;
+	if (!_tot || !_scriptVM ||
+		!_tot->decodeAnimationSetup(nodeOffset, setup))
+		return;
+
+	int16 baseX = 0;
+	int16 baseY = 0;
+	uint16 firstDescriptor = 0;
+	if (setup.originX) {
+		baseX = (int16)_scriptVM->readVariable(setup.originX);
+		baseY = (int16)_scriptVM->readVariable(setup.originY);
+	} else if (setup.descriptorForFrame(1, firstDescriptor)) {
+		OldTotDrawDescriptor descriptor;
+		if (_tot->decodeDrawDescriptor(firstDescriptor, descriptor)) {
+			baseX = descriptor.xIndirect()
+						? (int16)_scriptVM->readVariable(descriptor.x)
+						: (int16)descriptor.x;
+			baseY = descriptor.yIndirect()
+						? (int16)_scriptVM->readVariable(descriptor.y)
+						: (int16)descriptor.y;
+		}
+	}
+
+	if (setup.flags & kAnimStepped) {
+		for (uint16 step = 0; step < setup.stepCount && !_vm->shouldQuit();
+			 ++step) {
+			// Known animations use up to 8 frames; a wider counter also
+			// handles the inclusive byte limit without wrapping.
+			for (uint16 frame = 1;
+				 frame <= setup.frameMax && !_vm->shouldQuit(); ++frame) {
+				const bool rendered = renderAnimationFrame(
+					setup, step, (byte)frame, baseX, baseY);
+				if (_platformTag == kOldTotPlatformDOS && rendered &&
+					!_introSkip.fastForwarding()) {
+					presentFrame(true);
+					processGameEvents();
+				}
+
+				if (_vm->shouldQuit())
+					break;
+				if (setup.frameDelay) {
+					const uint16 units = (uint16)setup.frameDelay * 10;
+					delay(units);
+				}
+				if (_introSkip.fastForwarding())
+					processGameEvents();
+			}
+		}
+	}
+	if (setup.flags & kAnimClear) {
+		_active.restore(setup.slot);
+	}
+}
+
 void PreGob_Emmanuelle::saveScreenRect(uint16 x, uint16 y, uint16 width,
 									   uint16 height) {
 	_renderer.saveScreenRect(x, y, width, height);
