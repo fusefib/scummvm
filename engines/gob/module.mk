@@ -91,6 +91,7 @@ MODULE_OBJS := \
 	pregob/emmanuelle/interpreter.o \
 	pregob/emmanuelle/oldixx.o \
 	pregob/emmanuelle/oldtot.o \
+	pregob/emmanuelle/text.o \
 	pregob/onceupon/onceupon.o \
 	pregob/onceupon/abracadabra.o \
 	pregob/onceupon/babayaga.o \
