@@ -144,6 +144,36 @@ void getDosSchedulerTiming(byte period, bool alternateTiming,
 	initialCountdown = 1;
 }
 
+uint16 dosOpcode03DelayMilliseconds(byte argument) {
+	return (uint16)argument * 3;
+}
+
+uint16 dosIntroDrawDelayMilliseconds(byte videoMode, uint16 width,
+									 uint16 height) {
+	const uint32 pixels = (uint32)width * height;
+	if (videoMode == 1)
+		return (uint16)(48U + (pixels * 16U + 500U) / 1000U);
+	return (uint16)(155U + (pixels * 35U + 500U) / 1000U);
+}
+
+bool extendDosInitialFrameCoverage(Common::Rect &coverage, bool &hasCoverage,
+								   int16 x, int16 y, uint16 width,
+								   uint16 height) {
+	Common::Rect drawRect(x, y, x + width, y + height);
+	drawRect.clip(Common::Rect(0, 0, 320, 200));
+	if (drawRect.isEmpty())
+		return false;
+
+	if (hasCoverage)
+		coverage.extend(drawRect);
+	else {
+		coverage = drawRect;
+		hasCoverage = true;
+	}
+	return coverage.left == 0 && coverage.top == 0 &&
+		coverage.right == 320 && coverage.bottom == 200;
+}
+
 byte dosEgaPaletteIndex(byte registerValue) {
 	return (registerValue & 0x07) |
 		   ((registerValue & 0x10) ? 0x08 : 0x00);
