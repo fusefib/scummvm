@@ -27,6 +27,9 @@
 
 #include "gob/pregob/emmanuelle/oldtot.h"
 
+#include "common/md5.h"
+#include "common/memstream.h"
+
 namespace Gob {
 namespace Emmanuelle {
 
@@ -81,6 +84,13 @@ OldTotData::OldTotData(Common::SeekableReadStream &stream) {
 	stream.seek(0);
 	if (stream.read(&_data[0], _data.size()) != _data.size())
 		_data.clear();
+}
+
+bool OldTotData::computeMD5(byte digest[16]) const {
+	if (!valid())
+		return false;
+	Common::MemoryReadStream stream(&_data[0], _data.size());
+	return Common::computeStreamMD5(stream, digest);
 }
 
 bool OldTotData::has(uint32 offset, uint32 length) const {

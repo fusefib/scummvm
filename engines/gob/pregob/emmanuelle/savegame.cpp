@@ -27,7 +27,6 @@
 
 #include "gob/pregob/emmanuelle/emmanuelle.h"
 
-#include "common/md5.h"
 #include "common/translation.h"
 #include "gob/draw.h"
 #include "gob/gob.h"
@@ -75,25 +74,6 @@ bool PreGob_Emmanuelle::moduleUsesLocalGraphics(
 		ModuleId module) const {
 	return module == kModuleLoadHot || module == kModuleLoadPla ||
 		module == kModuleLoadCas || module == kModuleLoadAero;
-}
-
-bool PreGob_Emmanuelle::computeModuleIdentity(ModuleId module,
-		uint32 &size, byte digest[16]) const {
-	const char *stem = moduleFileStem(module);
-	if (!stem || !digest)
-		return false;
-	const char *extension = _platformTag == kOldTotPlatformAmiga
-		? ".TOA" : ".TOT";
-	Common::SeekableReadStream *stream = openLoose(
-		Common::String(stem) + extension);
-	if (!stream || stream->size() <= 0 || stream->size() > 0xFFFFFFFFU) {
-		delete stream;
-		return false;
-	}
-	size = (uint32)stream->size();
-	const bool valid = Common::computeStreamMD5(*stream, digest);
-	delete stream;
-	return valid;
 }
 
 EmmanuelleSaveBoundaryState PreGob_Emmanuelle::saveBoundaryState() const {
@@ -158,8 +138,10 @@ bool PreGob_Emmanuelle::exportSaveState(
 	state.profile = emmanuelleRuntimeProfile(_platformTag, _vm->_language);
 	state.module = _currentModule;
 	state.moduleFileStem = _moduleFileStem;
-	if (!computeModuleIdentity(state.module, state.moduleSize,
-			state.moduleMD5))
+	// Reopening this module could identify replacement data rather than the
+	// script still running. Save the size and hash of its owned bytes.
+	state.moduleSize = _tot->size();
+	if (!_tot->computeMD5(state.moduleMD5))
 		return false;
 	_scriptVM->storeVariables(state.variables, ARRAYSIZE(state.variables));
 	state.runtime = _scriptVM->runtimeState();
@@ -230,13 +212,13 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 	}
 	const char *extension = _platformTag == kOldTotPlatformAmiga
 		? ".TOA" : ".TOT";
-	uint32 size = 0;
 	byte digest[16];
 	prepared.tot = loadScriptResource(Common::String(stem) + extension,
-		reason, &size, digest);
+		reason);
 	if (!prepared.tot)
 		return false;
-	if (size != state.moduleSize ||
+	if (prepared.tot->size() != state.moduleSize ||
+		!prepared.tot->computeMD5(digest) ||
 		memcmp(digest, state.moduleMD5, sizeof(digest)) != 0) {
 		reason = _s("This save uses a different version of the game scripts. "
 			"Try an earlier saved game.");

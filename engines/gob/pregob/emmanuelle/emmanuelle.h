@@ -135,8 +135,7 @@ public:
 private:
 	Common::SeekableReadStream *openLoose(const Common::String &name) const;
 	OldTotData *loadScriptResource(const Common::String &name,
-		Common::String &reason, uint32 *sourceSize = nullptr,
-		byte *sourceMD5 = nullptr) const;
+		Common::String &reason) const;
 	bool loadSharedAssets();
 	bool loadRecupAssets();
 	void clearModuleObjects();
@@ -207,8 +206,6 @@ private:
 	void setInputContext(EmmanuelleInputContext context);
 	EmmanuelleSaveBoundaryState saveBoundaryState() const;
 	bool safeSaveBoundary(Common::U32String *msg) const;
-	bool computeModuleIdentity(ModuleId module, uint32 &size,
-		byte digest[16]) const;
 	bool exportSaveState(EmmanuelleSaveState &state) const;
 	bool prepareRestore(const EmmanuelleSaveState &state,
 		EmmanuellePreparedRestore &prepared, Common::String &reason);
