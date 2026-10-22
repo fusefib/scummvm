@@ -25,8 +25,8 @@
  *
  */
 
-#ifndef GOB_PREGOB_EMMANUELLE_DIAGNOSTICS_H
-#define GOB_PREGOB_EMMANUELLE_DIAGNOSTICS_H
+#ifndef GOB_PREGOB_EMMANUELLE_DEBUGGER_H
+#define GOB_PREGOB_EMMANUELLE_DEBUGGER_H
 
 #include "common/array.h"
 #include "common/scummsys.h"
@@ -131,4 +131,4 @@ public:
 } // End of namespace Emmanuelle
 } // End of namespace Gob
 
-#endif // GOB_PREGOB_EMMANUELLE_DIAGNOSTICS_H
+#endif // GOB_PREGOB_EMMANUELLE_DEBUGGER_H

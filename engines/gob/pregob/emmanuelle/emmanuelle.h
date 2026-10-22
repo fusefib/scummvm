@@ -31,7 +31,7 @@
 #include "gob/pregob/pregob.h"
 
 #include "gob/pregob/emmanuelle/active.h"
-#include "gob/pregob/emmanuelle/diagnostics.h"
+#include "gob/pregob/emmanuelle/debugger.h"
 #include "gob/pregob/emmanuelle/executor.h"
 #include "gob/pregob/emmanuelle/gameflow.h"
 #include "gob/pregob/emmanuelle/interpreter.h"

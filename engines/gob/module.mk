@@ -89,6 +89,7 @@ MODULE_OBJS := \
 	pregob/seqfile.o \
 	pregob/emmanuelle/active.o \
 	pregob/emmanuelle/animation.o \
+	pregob/emmanuelle/debugger.o \
 	pregob/emmanuelle/dos.o \
 	pregob/emmanuelle/emmanuelle.o \
 	pregob/emmanuelle/executor.o \

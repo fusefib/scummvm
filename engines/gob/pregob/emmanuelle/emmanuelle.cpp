@@ -123,9 +123,13 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm) :
 	_enhancedDosFights =
 		ConfMan.getBool("emmanuelle_enhanced_fights");
 
+	if (_vm->_console)
+		_vm->_console->registerEmmanuelleDebugger(this);
 }
 
 PreGob_Emmanuelle::~PreGob_Emmanuelle() {
+	if (_vm->_console)
+		_vm->_console->unregisterEmmanuelleDebugger();
 	_introSkip.finish();
 	setInputContext(kEmmanuelleInputNone);
 
@@ -537,6 +541,61 @@ bool PreGob_Emmanuelle::handleNativeFF0B(
 		runtimeState.videoInitMarker = 0x28;
 	}
 	return true;
+}
+
+void PreGob_Emmanuelle::exportDiagnosticSnapshot(
+	OldTotDiagnosticSnapshot &out) const {
+	out = OldTotDiagnosticSnapshot();
+	out.platform = _platformTag;
+	out.module = _moduleFileStem;
+	out.input.key = _pendingInput.peek(out.input.mouseX, out.input.mouseY,
+		out.input.mouseButtons);
+	out.cursorVisible = CursorMan.isVisible();
+	out.saveBoundary = saveBoundaryState();
+	out.traceEnabled = _diagnosticTraceEnabled;
+	out.schedulerAccumulator = _schedulerAccumulator;
+	out.schedulerDebt = _schedulerDebt;
+	out.variables.resize(ARRAYSIZE(_variables));
+	if (_scriptVM) {
+		out.hasVM = true;
+		_scriptVM->exportTransientState(out.vm);
+		_scriptVM->storeVariables(out.variables.data(), out.variables.size());
+	} else {
+		for (uint i = 0; i < ARRAYSIZE(_variables); ++i)
+			out.variables[i] = _variables[i];
+	}
+	if (_executor) {
+		out.hasExecutor = true;
+		_executor->exportState(out.executor);
+	}
+	// Selector resolution updates variables, so use a copy of the snapshot.
+	uint16 policyVariables[ARRAYSIZE(_variables)];
+	out.selector = out.variables[0];
+	for (uint i = 0; i < out.variables.size(); ++i)
+		policyVariables[i] = out.variables[i];
+	out.postPolicySelector = adjustModuleSelector(
+		policyVariables, ARRAYSIZE(policyVariables));
+	const ModuleTransition transition =
+		moduleTransition(out.postPolicySelector);
+	out.nextModule = moduleFileStem(transition.module);
+
+	out.native.audioKind = _audioKind;
+	out.native.audioSlot = _audioSlot;
+	out.native.audioFrequency = _audioFrequency;
+	out.native.audioRepeatCount = _audioRepeatCount;
+	out.native.audioActive = isAudioPlaying(_platformTag, _audioActive,
+		_vm->_sound->blasterPlayingSound());
+	out.native.audioBlocking = _audioBlocking && out.native.audioActive;
+	out.native.activeObjectCount = _active.activeCount();
+	out.native.savedRegionDepth = _renderer.savedRegionDepth();
+
+}
+
+void PreGob_Emmanuelle::setDiagnosticTraceEnabled(bool enabled) {
+	_diagnosticTraceEnabled = enabled;
+	debugC(1, kDebugGameFlow, "Emmanuelle: diagnostic trace %s",
+		   enabled ? "enabled" : "disabled");
+
 }
 
 void PreGob_Emmanuelle::playDosFightTone(uint16 frequency) {

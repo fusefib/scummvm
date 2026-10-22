@@ -34,7 +34,8 @@
 
 namespace Gob {
 
-GobConsole::GobConsole(GobEngine *vm) : GUI::Debugger(), _vm(vm), _cheater(nullptr) {
+GobConsole::GobConsole(GobEngine *vm) : GUI::Debugger(), _vm(vm),
+		_cheater(nullptr), _emmanuelleDebugger(nullptr) {
 	registerCmd("continue",     WRAP_METHOD(GobConsole, cmdExit));
 	registerCmd("help",      	WRAP_METHOD(GobConsole, cmd_Help));
 	registerCmd("varSize",      WRAP_METHOD(GobConsole, cmd_varSize));
@@ -46,6 +47,10 @@ GobConsole::GobConsole(GobEngine *vm) : GUI::Debugger(), _vm(vm), _cheater(nullp
 	registerCmd("cheat",        WRAP_METHOD(GobConsole, cmd_cheat));
 	registerCmd("listArchives", WRAP_METHOD(GobConsole, cmd_listArchives));
 	registerCmd("gobStack",     WRAP_METHOD(GobConsole, cmd_gobStack));
+	registerCmd("emmaState",    WRAP_METHOD(GobConsole, cmd_emmaState));
+	registerCmd("emmaVars",     WRAP_METHOD(GobConsole, cmd_emmaVars));
+	registerCmd("emmaStack",    WRAP_METHOD(GobConsole, cmd_emmaStack));
+	registerCmd("emmaTrace",    WRAP_METHOD(GobConsole, cmd_emmaTrace));
 }
 
 GobConsole::~GobConsole() {
@@ -57,6 +62,13 @@ void GobConsole::registerCheater(Cheater *cheater) {
 
 void GobConsole::unregisterCheater() {
 	_cheater = nullptr;
+}
+
+bool GobConsole::requireInterVariables() {
+	if (_vm->_inter && _vm->_inter->_variables)
+		return true;
+	debugPrintf("This command requires a standard Gob interpreter.\n");
+	return false;
 }
 
 bool GobConsole::cmd_Help(int, const char **) {
@@ -86,16 +98,20 @@ bool GobConsole::cmd_Help(int, const char **) {
 	debugPrintf("------\n");
 	debugPrintf(" gobStack - prints the TOT scripts call stack (requires Gameflow debug flag)\n");
 	debugPrintf("\n");
+	if (_emmanuelleDebugger)
+		printEmmanuelleHelp();
 	return true;
 }
 
 bool GobConsole::cmd_varSize(int argc, const char **argv) {
+	if (!requireInterVariables())
+		return true;
 	debugPrintf("Size of the variable space: %d bytes\n", _vm->_inter->_variables->getSize());
 	return true;
 }
 
 bool GobConsole::cmd_dumpVars(int argc, const char **argv) {
-	if (!_vm->_inter->_variables)
+	if (!requireInterVariables())
 		return true;
 
 	Common::DumpFile file;
@@ -114,6 +130,8 @@ bool GobConsole::cmd_dumpVars(int argc, const char **argv) {
 }
 
 bool GobConsole::cmd_var8(int argc, const char **argv) {
+	if (!requireInterVariables())
+		return true;
 	if (argc == 1) {
 		debugPrintf("Usage: var8 <var offset> (<value>)\n");
 		return true;
@@ -137,6 +155,8 @@ bool GobConsole::cmd_var8(int argc, const char **argv) {
 }
 
 bool GobConsole::cmd_var16(int argc, const char **argv) {
+	if (!requireInterVariables())
+		return true;
 	if (argc == 1) {
 		debugPrintf("Usage: var16 <var offset> (<value>)\n");
 		return true;
@@ -160,6 +180,8 @@ bool GobConsole::cmd_var16(int argc, const char **argv) {
 }
 
 bool GobConsole::cmd_var32(int argc, const char **argv) {
+	if (!requireInterVariables())
+		return true;
 	if (argc == 1) {
 		debugPrintf("Usage: var32 <var offset> (<value>)\n");
 		return true;
@@ -183,6 +205,8 @@ bool GobConsole::cmd_var32(int argc, const char **argv) {
 }
 
 bool GobConsole::cmd_varString(int argc, const char **argv) {
+	if (!requireInterVariables())
+		return true;
 	if (argc == 1) {
 		debugPrintf("Usage: varString <var offset> (<value>)\n");
 		return true;
@@ -228,6 +252,10 @@ bool GobConsole::cmd_listArchives(int argc, const char **argv) {
 }
 
 bool GobConsole::cmd_gobStack(int argc, const char **argv) {
+	if (!_vm->_inter) {
+		debugPrintf("This command requires a standard Gob interpreter.\n");
+		return true;
+	}
 	debugPrintf("%s", _vm->_game->getGobStack().c_str());
 	return true;
 }
