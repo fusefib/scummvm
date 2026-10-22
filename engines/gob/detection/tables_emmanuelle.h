@@ -46,7 +46,7 @@
 	"INIT.TOT",
 	0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY3s(
 		  "LOADER.PRG", "b642dcefc3544287508caa41350d6463", 69800,
@@ -61,7 +61,7 @@
 	 "INIT.TOT",
 	 0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY3s(
 		  "LOADER.PRG", "b642dcefc3544287508caa41350d6463", 69800,
@@ -76,7 +76,7 @@
 	 "INIT.TOT",
 	 0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY3s(
 		  "LOADER.PRG", "a0945e99fce671fb36298d1de01a432a", 69540,
@@ -93,7 +93,9 @@
 	 "INIT.TOT",
 	 0},
 
-{{"emmanuelle",
+	// DOS and ST share these resources. Without a loader, offer both platforms.
+	// Spanish and French DOS profiles use ST data; no DOS releases are known.
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY2s(
 		  "INIT.TOT", "ad6cc0d8ba2964848250d56ca2e5a6ab", 26368,
@@ -109,7 +111,7 @@
 	 "INIT.TOT",
 	 0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY2s(
 		  "INIT.TOT", "ad6cc0d8ba2964848250d56ca2e5a6ab", 26368,
@@ -124,7 +126,7 @@
 	 "INIT.TOT",
 	 0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY2s(
 		  "INIT.TOT", "0d97ae4b640bd112d28c3303feb8a90e", 25856,
@@ -140,7 +142,7 @@
 	 "INIT.TOT",
 	 0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY2s(
 		  "INIT.TOT", "0d97ae4b640bd112d28c3303feb8a90e", 25856,
@@ -155,7 +157,25 @@
 	 "INIT.TOT",
 	 0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
+	  nullptr,
+	  AD_ENTRY2s(
+		  "INIT.TOT", "3c69239cbebe55c168cb73d10f8db855", 26752,
+		  "INIT.I01", "b8fac1a5213832a0d3420b9ad42e7253", 36736),
+	  FR_FRA,
+	  kPlatformDOS,
+	  ADGF_UNSTABLE,
+	  GUIO5(GUIO_NOSUBTITLES, GUIO_NOSPEECH,
+			GAMEOPTION_EMMANUELLE_ENHANCED_FIGHTS,
+			GUIO_RENDERCGA, GUIO_RENDEREGA)},
+	 kFeaturesEGA | kFeatures16Colors |
+		 kFeaturesEmmanuelleInlineLocalGraphics |
+		 kFeaturesEmmanuelleAlternateInputGeometry,
+	 nullptr,
+	 "INIT.TOT",
+	 0},
+
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY2s(
 		  "INIT.TOT", "3c69239cbebe55c168cb73d10f8db855", 26752,
@@ -172,7 +192,7 @@
 	 "INIT.TOT",
 	 0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY2s(
 		  "INIT.TOA", "c831705becf32463b26e8999e944b210", 27520,
@@ -186,7 +206,7 @@
 	 "INIT.TOA",
 	 0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY2s(
 		  "INIT.TOA", "5c791052fb8423c6db05f0276c392b2b", 27648,
@@ -200,7 +220,7 @@
 	 "INIT.TOA",
 	 0},
 
-{{"emmanuelle",
+	{{"emmanuelle",
 	  nullptr,
 	  AD_ENTRY2s(
 		  "INIT.TOA", "24fb364f8b55a20dada2d88ec54d0e99", 27904,

@@ -30,6 +30,7 @@
 
 #include "gob/pregob/emmanuelle/saveload.h"
 
+
 namespace Gob {
 namespace Emmanuelle {
 
@@ -501,6 +502,8 @@ EmmanuelleRuntimeProfile emmanuelleRuntimeProfile(
 	if (platform == kOldTotPlatformDOS) {
 		if (language == Common::ES_ESP)
 			return kEmmanuelleProfileDosSpanish;
+		if (language == Common::FR_FRA)
+			return kEmmanuelleProfileDosFrench;
 		return kEmmanuelleProfileDosEnglish;
 	}
 	if (platform == kOldTotPlatformAtariST) {
@@ -547,6 +550,7 @@ bool emmanuelleProfileMatchesPlatform(EmmanuelleRuntimeProfile profile,
 	switch (profile) {
 	case kEmmanuelleProfileDosEnglish:
 	case kEmmanuelleProfileDosSpanish:
+	case kEmmanuelleProfileDosFrench:
 		return platform == kOldTotPlatformDOS;
 	case kEmmanuelleProfileAtariEnglish:
 	case kEmmanuelleProfileAtariSpanish:
