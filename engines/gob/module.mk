@@ -89,6 +89,7 @@ MODULE_OBJS := \
 	pregob/seqfile.o \
 	pregob/emmanuelle/animation.o \
 	pregob/emmanuelle/executor.o \
+	pregob/emmanuelle/fight.o \
 	pregob/emmanuelle/gameflow.o \
 	pregob/emmanuelle/interpreter.o \
 	pregob/emmanuelle/oldixx.o \
