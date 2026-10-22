@@ -26,6 +26,7 @@
  */
 
 #include "gob/pregob/emmanuelle/active.h"
+#include "gob/pregob/emmanuelle/saveload.h"
 #include "gob/draw.h"
 #include "gob/gob.h"
 namespace Gob {
@@ -33,6 +34,61 @@ namespace Emmanuelle {
 ActiveSpriteLayer::ActiveSpriteLayer(GobEngine *vm, uint slotCount)
 	: _vm(vm) {
 	_slots.resize(slotCount);
+}
+
+bool ActiveSpriteLayer::exportState(
+		EmmanuelleRendererState &out) const {
+	out.activeObjects.clear();
+	for (uint i = 0; i < _slots.size(); ++i) {
+		const Slot &slot = _slots[i];
+		EmmanuelleActiveObjectState state;
+		state.active = slot.active;
+		state.x = slot.x;
+		state.y = slot.y;
+		state.width = slot.width;
+		state.height = slot.height;
+		if (slot.active) {
+			if (!slot.background)
+				return false;
+			exportOldTotSurface(*slot.background, state.background);
+		}
+		out.activeObjects.push_back(state);
+	}
+	return true;
+}
+
+bool ActiveSpriteLayer::importState(
+		const EmmanuelleRendererState &in) {
+	if (in.activeObjects.size() != _slots.size() || !_vm || !_vm->_draw ||
+		!_vm->_draw->_backSurface)
+		return false;
+	const int16 screenWidth = _vm->_draw->_backSurface->getWidth();
+	const int16 screenHeight = _vm->_draw->_backSurface->getHeight();
+	Common::Array<Slot> slots;
+	slots.resize(_slots.size());
+	for (uint i = 0; i < slots.size(); ++i) {
+		const EmmanuelleActiveObjectState &state = in.activeObjects[i];
+		Slot &slot = slots[i];
+		slot.active = state.active;
+		slot.x = state.x;
+		slot.y = state.y;
+		slot.width = state.width;
+		slot.height = state.height;
+		if (state.active && (state.x < 0 || state.y < 0 ||
+			state.width <= 0 || state.height <= 0 ||
+			state.x + state.width > screenWidth ||
+			state.y + state.height > screenHeight ||
+			!importOldTotSurface(state.background, slot.background) ||
+			state.width != state.background.width ||
+			state.height != state.background.height))
+			return false;
+	}
+	_slots = slots;
+	return true;
+}
+
+void ActiveSpriteLayer::swapState(ActiveSpriteLayer &other) {
+	_slots.swap(other._slots);
 }
 
 void ActiveSpriteLayer::restoreAll() {
