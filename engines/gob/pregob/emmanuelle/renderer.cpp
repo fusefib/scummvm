@@ -45,6 +45,17 @@
 namespace Gob {
 namespace Emmanuelle {
 
+OldTotRendererPreparedState::OldTotRendererPreparedState() {
+	atariPaletteValid = false;
+	atariBlack = false;
+
+
+	atariPresentationMode = 0;
+
+	for (uint i = 0; i < ARRAYSIZE(atariPalette); ++i)
+		atariPalette[i] = 0;
+}
+
 OldTotRenderer::OldTotRenderer(GobEngine *vm) :
 	_vm(vm), _presentation(kOldTotPlatformDOS),
 	_atariPresentedSurface(), _atariTransitionTarget() {
@@ -84,23 +95,30 @@ bool OldTotRenderer::exportState(EmmanuelleRendererState &out) const {
 		exportOldTotSurface(*saved.surface, state.surface);
 		out.savedRegions.push_back(state);
 	}
+	for (uint i = 0; i < ARRAYSIZE(out.atariPalette); ++i)
+		out.atariPalette[i] = _atariLogicalPalette[i];
+	out.atariPaletteValid = _atariPaletteValid;
+	out.atariBlack = _atariBlack;
 
 	return true;
 }
 
 bool OldTotRenderer::prepareState(const EmmanuelleRendererState &in,
+		byte atariPresentationMode,
 		OldTotRendererPreparedState &out) const {
 	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface)
 		return false;
 	return prepareOldTotRendererState(in,
 		_vm->_draw->_backSurface->getWidth(),
 		_vm->_draw->_backSurface->getHeight(),
-		_vm->_draw->_backSurface->getBPP(), out);
+		_vm->_draw->_backSurface->getBPP(), atariPresentationMode, out);
 }
 
 bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
-		uint16 width, uint16 height, byte bytesPerPixel, OldTotRendererPreparedState &out) {
-	if (!validateEmmanuelleRendererState(in, width, height, bytesPerPixel))
+		uint16 width, uint16 height, byte bytesPerPixel,
+		byte atariPresentationMode, OldTotRendererPreparedState &out) {
+	if (!validateEmmanuelleRendererState(in, width, height, bytesPerPixel,
+			atariPresentationMode))
 		return false;
 
 	OldTotRendererPreparedState prepared;
@@ -117,16 +135,33 @@ bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
 		prepared.savedRegions.push_back(OldTotPreparedSavedRegion(
 			surface, state.x, state.y));
 	}
+	for (uint i = 0; i < ARRAYSIZE(prepared.atariPalette); ++i)
+		prepared.atariPalette[i] = in.atariPalette[i];
+	prepared.atariPaletteValid = in.atariPaletteValid;
+	prepared.atariBlack = in.atariBlack;
+	prepared.atariPresentationMode = atariPresentationMode;
 
 	out.framebuffer = prepared.framebuffer;
 	out.savedRegions.swap(prepared.savedRegions);
+	for (uint i = 0; i < ARRAYSIZE(out.atariPalette); ++i)
+		out.atariPalette[i] = prepared.atariPalette[i];
+	out.atariPaletteValid = prepared.atariPaletteValid;
+	out.atariBlack = prepared.atariBlack;
+	out.atariPresentationMode = prepared.atariPresentationMode;
 	return true;
 }
 
 void OldTotRenderer::commitState(OldTotRendererPreparedState &in) {
 	_vm->_draw->_backSurface->blit(*in.framebuffer);
 	_savedRegions.swap(in.savedRegions);
+	for (uint i = 0; i < ARRAYSIZE(_atariLogicalPalette); ++i)
+		_atariLogicalPalette[i] = in.atariPalette[i];
+	_atariPaletteValid = in.atariPaletteValid;
+	_atariBlack = in.atariBlack;
 	_presentation = PresentationState(_platform);
+	if (_platform == kOldTotPlatformAtariST &&
+		in.atariPresentationMode == 43)
+		_presentation.arm(43);
 	_atariPresentedSurface = _platform == kOldTotPlatformAtariST
 		? in.framebuffer : SurfacePtr();
 	_atariTransitionTarget.reset();

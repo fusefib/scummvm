@@ -46,7 +46,8 @@ namespace Emmanuelle {
 enum EmmanuelleRuntimeProfile : byte {
 	kEmmanuelleProfileInvalid = 0,
 	kEmmanuelleProfileDosEnglish = 1,
-	kEmmanuelleProfileDosSpanish = 2
+	kEmmanuelleProfileDosSpanish = 2,
+	kEmmanuelleProfileAtariEnglish = 4
 };
 
 EmmanuelleRuntimeProfile emmanuelleRuntimeProfile(
@@ -168,10 +169,26 @@ struct EmmanuelleActiveObjectState {
 };
 
 struct EmmanuelleRendererState {
+	EmmanuelleRendererState();
 
 	EmmanuelleSurfaceState framebuffer;
 	Common::Array<EmmanuelleSavedRegionState> savedRegions;
 	Common::Array<EmmanuelleActiveObjectState> activeObjects;
+	uint16 atariPalette[16];
+	bool atariPaletteValid;
+	bool atariBlack;
+};
+
+struct EmmanuelleNativeState {
+	EmmanuelleNativeState();
+
+	byte sampleBank;
+	byte sampleCount;
+	bool initialInitComplete;
+	bool skipIntermediateSequenceNodes;
+	byte effectCommand;
+	bool colorCycleEnabled;
+	byte colorCycleCounter;
 };
 
 struct EmmanuelleSaveState {
@@ -196,6 +213,7 @@ struct EmmanuelleSaveState {
 	bool cursorDefined;
 	bool cursorVisible;
 	EmmanuelleRendererState renderer;
+	EmmanuelleNativeState nativeState;
 };
 
 bool encodeEmmanuelleSave(const EmmanuelleSaveState &state,
@@ -203,7 +221,8 @@ bool encodeEmmanuelleSave(const EmmanuelleSaveState &state,
 bool decodeEmmanuelleSave(Common::SeekableReadStream &stream,
 	EmmanuelleSaveState &state, Common::String &reason);
 bool validateEmmanuelleRendererState(const EmmanuelleRendererState &state,
-	uint16 width, uint16 height, byte bytesPerPixel);
+	uint16 width, uint16 height, byte bytesPerPixel,
+	byte atariPresentationMode);
 
 } // End of namespace Emmanuelle
 } // End of namespace Gob

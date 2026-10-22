@@ -61,13 +61,19 @@ struct OldTotPreparedSavedRegion {
 };
 
 struct OldTotRendererPreparedState {
+	OldTotRendererPreparedState();
 
 	SurfacePtr framebuffer;
 	Common::Array<OldTotPreparedSavedRegion> savedRegions;
+	uint16 atariPalette[16];
+	bool atariPaletteValid;
+	bool atariBlack;
+	byte atariPresentationMode;
 };
 
 bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
-	uint16 width, uint16 height, byte bytesPerPixel, OldTotRendererPreparedState &out);
+	uint16 width, uint16 height, byte bytesPerPixel,
+	byte atariPresentationMode, OldTotRendererPreparedState &out);
 
 /** Adapter from old-TOT drawing operations to Gob surfaces and fonts. */
 class OldTotRenderer {
@@ -147,6 +153,7 @@ public:
 
 	bool exportState(EmmanuelleRendererState &out) const;
 	bool prepareState(const EmmanuelleRendererState &in,
+		byte atariPresentationMode,
 		OldTotRendererPreparedState &out) const;
 	void commitState(OldTotRendererPreparedState &in);
 

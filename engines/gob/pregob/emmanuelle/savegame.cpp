@@ -172,7 +172,16 @@ bool PreGob_Emmanuelle::exportSaveState(
 	if (!_renderer.exportState(state.renderer) ||
 		!_active.exportState(state.renderer))
 		return false;
+	state.nativeState.sampleBank = _sampleBank;
+	state.nativeState.sampleCount = _sampleCount;
+	state.nativeState.initialInitComplete =
+		_platformTag == kOldTotPlatformDOS || _initialInitComplete;
+	state.nativeState.skipIntermediateSequenceNodes = _skipIntermediateSequenceNodes;
+	state.nativeState.colorCycleEnabled = _colorCycleEnabled;
+	state.nativeState.colorCycleCounter = _colorCycleCounter;
 	if (_platformTag == kOldTotPlatformAtariST) {
+		state.nativeState.effectCommand =
+			_renderer.presentationMode();
 	}
 	return true;
 }
@@ -269,7 +278,7 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 	candidateRenderer.setPlatform(_platformTag);
 	candidateRenderer.setResourceBanks(prepared.localI00, _sharedI01);
 	if (!candidateRenderer.prepareState(state.renderer,
-			prepared.renderer)) {
+			state.nativeState.effectCommand, prepared.renderer)) {
 		reason = "invalid renderer state";
 		return false;
 	}
@@ -278,7 +287,18 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		reason = "invalid active-object state";
 		return false;
 	}
+	if (_platformTag == kOldTotPlatformAtariST &&
+		(!state.renderer.atariPaletteValid || state.renderer.atariBlack ||
+		 (state.nativeState.effectCommand != 0 &&
+		  state.nativeState.effectCommand != 43))) {
+		reason = "invalid Atari presentation state";
+		return false;
+	}
 
+	if (!state.nativeState.initialInitComplete) {
+		reason = "startup is not complete";
+		return false;
+	}
 	if (_platformTag == kOldTotPlatformDOS) {
 		byte table[16];
 		byte alternateTable[16];
@@ -350,8 +370,13 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 	resetInitialStateAfterLoad();
 	_cursorDefined = false;
 	_cursorDescriptor = 0;
+	_initialInitComplete = state.nativeState.initialInitComplete;
+	_skipIntermediateSequenceNodes = state.nativeState.skipIntermediateSequenceNodes;
+	_colorCycleEnabled = state.nativeState.colorCycleEnabled;
+	_colorCycleCounter = state.nativeState.colorCycleCounter;
 	for (uint i = 0; i < ARRAYSIZE(_samples); ++i)
 		_samples[i].swap(prepared.samples[i]);
+	_sampleBank = state.nativeState.sampleBank;
 	_sampleCount = prepared.sampleCount;
 	_atariIntroPosition = -1;
 	if (prepared.cursorDefined) {

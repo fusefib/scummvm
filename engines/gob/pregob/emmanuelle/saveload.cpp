@@ -170,6 +170,18 @@ void writePayload(const EmmanuelleSaveState &state,
 		stream.writeSint16LE(object.height);
 		writeSurface(stream, object.background);
 	}
+	for (uint i = 0; i < ARRAYSIZE(state.renderer.atariPalette); ++i)
+		stream.writeUint16LE(state.renderer.atariPalette[i]);
+	writeBool(stream, state.renderer.atariPaletteValid);
+	writeBool(stream, state.renderer.atariBlack);
+
+	stream.writeByte(state.nativeState.sampleBank);
+	stream.writeByte(state.nativeState.sampleCount);
+	writeBool(stream, state.nativeState.initialInitComplete);
+	writeBool(stream, state.nativeState.skipIntermediateSequenceNodes);
+	stream.writeByte(state.nativeState.effectCommand);
+	writeBool(stream, state.nativeState.colorCycleEnabled);
+	stream.writeByte(state.nativeState.colorCycleCounter);
 }
 
 bool readPayload(Common::SeekableReadStream &stream,
@@ -280,6 +292,32 @@ bool readPayload(Common::SeekableReadStream &stream,
 			  object.height != object.background.height)))
 			return false;
 	}
+	for (uint i = 0; i < ARRAYSIZE(state.renderer.atariPalette); ++i)
+		state.renderer.atariPalette[i] = stream.readUint16LE();
+	if (!readBool(stream, state.renderer.atariPaletteValid) ||
+		!readBool(stream, state.renderer.atariBlack))
+		return false;
+	state.nativeState.sampleBank = stream.readByte();
+	state.nativeState.sampleCount = stream.readByte();
+	if ((state.platform == kOldTotPlatformDOS &&
+		 (state.nativeState.sampleBank != 0 || state.nativeState.sampleCount != 0)) ||
+		(state.platform == kOldTotPlatformAtariST &&
+		 (state.nativeState.sampleBank != 2 || state.nativeState.sampleCount != 19)))
+		return false;
+
+	if (!readBool(stream, state.nativeState.initialInitComplete) ||
+		!readBool(stream, state.nativeState.skipIntermediateSequenceNodes))
+		return false;
+	state.nativeState.effectCommand = stream.readByte();
+	if ((state.platform == kOldTotPlatformAtariST &&
+		 state.nativeState.effectCommand != 0 &&
+		 state.nativeState.effectCommand != 43) ||
+		(state.platform != kOldTotPlatformAtariST &&
+		 state.nativeState.effectCommand != 0))
+		return false;
+	if (!readBool(stream, state.nativeState.colorCycleEnabled))
+		return false;
+	state.nativeState.colorCycleCounter = stream.readByte();
 	return !stream.err() && stream.pos() == stream.size();
 }
 
@@ -311,6 +349,29 @@ bool importOldTotSurface(const EmmanuelleSurfaceState &in,
 	}
 	out = surface;
 	return true;
+}
+
+EmmanuelleRendererState::EmmanuelleRendererState() {
+	atariPaletteValid = false;
+	atariBlack = false;
+
+
+
+
+	for (uint i = 0; i < ARRAYSIZE(atariPalette); ++i)
+		atariPalette[i] = 0;
+}
+
+EmmanuelleNativeState::EmmanuelleNativeState() {
+	sampleBank = 0;
+	sampleCount = 0;
+
+	initialInitComplete = false;
+	skipIntermediateSequenceNodes = false;
+
+	effectCommand = 0;
+	colorCycleEnabled = false;
+	colorCycleCounter = 0;
 }
 
 EmmanuelleSaveState::EmmanuelleSaveState() {
@@ -350,14 +411,15 @@ static bool validRendererSurface(const EmmanuelleSurfaceState &surface,
 }
 
 bool validateEmmanuelleRendererState(const EmmanuelleRendererState &state,
-		uint16 width, uint16 height, byte bytesPerPixel) {
+		uint16 width, uint16 height, byte bytesPerPixel,
+		byte atariPresentationMode) {
 	if (!validRendererSurface(state.framebuffer, false) ||
 		state.framebuffer.width != width ||
 		state.framebuffer.height != height ||
 		state.framebuffer.bytesPerPixel != bytesPerPixel ||
-		state.savedRegions.size() > 10)
+		state.savedRegions.size() > 10 ||
+		(atariPresentationMode != 0 && atariPresentationMode != 43))
 		return false;
-
 	for (uint i = 0; i < state.savedRegions.size(); ++i) {
 		const EmmanuelleSavedRegionState &region = state.savedRegions[i];
 		if (!validRendererSurface(region.surface, false) || region.x < 0 ||
@@ -374,6 +436,9 @@ EmmanuelleRuntimeProfile emmanuelleRuntimeProfile(
 		if (language == Common::ES_ESP)
 			return kEmmanuelleProfileDosSpanish;
 		return kEmmanuelleProfileDosEnglish;
+	}
+	if (platform == kOldTotPlatformAtariST) {
+		return kEmmanuelleProfileAtariEnglish;
 	}
 	return kEmmanuelleProfileInvalid;
 }
@@ -406,6 +471,8 @@ bool emmanuelleProfileMatchesPlatform(EmmanuelleRuntimeProfile profile,
 	case kEmmanuelleProfileDosEnglish:
 	case kEmmanuelleProfileDosSpanish:
 		return platform == kOldTotPlatformDOS;
+	case kEmmanuelleProfileAtariEnglish:
+		return platform == kOldTotPlatformAtariST;
 	default:
 		return false;
 	}
