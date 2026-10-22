@@ -106,6 +106,13 @@ Common::KeymapArray createEmmanuelleKeymaps(Common::Platform platform) {
 	addKeyAction(common, "EMMA_ESCAPE", _("Cancel"), KEYCODE_ESCAPE,
 		ASCII_ESCAPE, "ESCAPE", emmanuelleEscapeControllerMapping());
 
+	action = new Action(kStandardActionSkip, _("Skip intro"));
+	action->setCustomEngineActionEvent(
+		(Common::CustomEventType)kEmmanuelleActionSkipIntro);
+	action->addDefaultInputMapping(emmanuelleSkipIntroKeyboardMapping());
+	action->addDefaultInputMapping(emmanuelleSkipIntroControllerMapping());
+	intro->addAction(action);
+
 	action = new Action("EMMA_SELECT", _("Select choice"));
 	action->setEvent(emmanuelleChoiceEventType());
 	action->addDefaultInputMapping(emmanuelleChoiceControllerMapping());
