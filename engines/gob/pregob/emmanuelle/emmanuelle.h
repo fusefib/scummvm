@@ -108,11 +108,12 @@ public:
 	void animationNode(uint16 nodeOffset) override;
 	void rememberNode24(uint16 nodeOffset) override { _node24Offset = nodeOffset; }
 	bool shouldAbortExecution() const override;
+	bool executionFailed() const override { return _hostFailed; }
 	bool skipIntermediateSequenceNodes() const override;
 
-	void saveScreenRect(uint16 x, uint16 y, uint16 width,
+	bool saveScreenRect(uint16 x, uint16 y, uint16 width,
 						uint16 height) override;
-	void restoreScreenRect() override;
+	bool restoreScreenRect() override;
 	void waitReturn() override;
 	void waitInputRelease() override;
 	void waitOpcode03(byte arg, uint16 offset) override;
@@ -133,6 +134,7 @@ public:
 	bool diagnosticTraceEnabled() const override { return _diagnosticTraceEnabled; }
 
 private:
+	void failHostOperation(const char *operation, uint16 site = 0);
 	Common::SeekableReadStream *openLoose(const Common::String &name) const;
 	OldTotData *loadScriptResource(const Common::String &name,
 		Common::String &reason) const;
@@ -230,6 +232,7 @@ private:
 	ModuleId _currentModule;
 	bool _currentUsesLocalGraphics;
 	uint16 _node24Offset;
+	bool _hostFailed;
 	uint32 _randomState;
 	OldTotPlatformTag _platformTag;
 	bool _inlineLocalGraphics;

@@ -115,11 +115,15 @@ int16 PreGob_Emmanuelle::takePendingInput(
 
 int16 PreGob_Emmanuelle::pollGameInput(int16 &mouseX, int16 &mouseY,
 										 MouseButtons &mouseButtons) {
+	if (shouldAbortExecution())
+		return kKeyNone;
 	serviceAtariAudio();
 	const bool paced = _platformTag == kOldTotPlatformAtariST &&
 		servicePresentation();
 	if (!paced)
 		presentFrame(true);
+	if (_hostFailed)
+		return kKeyNone;
 	processGameEvents();
 	return takePendingInput(mouseX, mouseY, mouseButtons);
 }
@@ -127,8 +131,10 @@ int16 PreGob_Emmanuelle::pollGameInput(int16 &mouseX, int16 &mouseY,
 int16 PreGob_Emmanuelle::pollInterpreterInput(
 	int16 &mouseX, int16 &mouseY, MouseButtons &mouseButtons, bool inFight) {
 	const bool atari = _platformTag == kOldTotPlatformAtariST;
+	if (shouldAbortExecution())
+		return kKeyNone;
 	processGameEvents();
-	if (_vm->shouldQuit()) {
+	if (shouldAbortExecution()) {
 		_schedulerDebt = 0;
 		return kKeyNone;
 	}
@@ -136,19 +142,15 @@ int16 PreGob_Emmanuelle::pollInterpreterInput(
 	serviceAtariAudio();
 	serviceColorCycle();
 	serviceInterpreterTimer();
-	if (_vm->shouldQuit()) {
-		_schedulerDebt = 0;
-		return kKeyNone;
-	}
 
 	const bool paced = servicePresentation();
 	// Amiga fights perform their own frame pacing.
 	if ((_platformTag != kOldTotPlatformAmiga || !inFight) &&
-		!paced && !_vm->shouldQuit() && !_introSkip.fastForwarding())
+		!paced && !shouldAbortExecution() && !_introSkip.fastForwarding())
 		presentFrame(true);
-	if (atari && !_vm->shouldQuit())
+	if (atari && !shouldAbortExecution())
 		fadeAtariFromBlack();
-	if (_vm->shouldQuit()) {
+	if (shouldAbortExecution()) {
 		_schedulerDebt = 0;
 		return kKeyNone;
 	}
@@ -157,7 +159,7 @@ int16 PreGob_Emmanuelle::pollInterpreterInput(
 }
 
 void PreGob_Emmanuelle::serviceInterpreterTimer() {
-	if (!_scriptVM || _vm->shouldQuit()) {
+	if (!_scriptVM || shouldAbortExecution()) {
 		_schedulerDebt = 0;
 		return;
 	}
@@ -165,8 +167,6 @@ void PreGob_Emmanuelle::serviceInterpreterTimer() {
 	_schedulerDebt += accumulateTimerQuanta(
 		_platformTag, _schedulerAccumulator);
 	_schedulerDebt = _scriptVM->advanceTimer(_schedulerDebt, 8);
-	if (_vm->shouldQuit())
-		_schedulerDebt = 0;
 }
 
 bool PreGob_Emmanuelle::inputIdle(int16 key,
@@ -206,8 +206,10 @@ void PreGob_Emmanuelle::applyInputBoundary(
 int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 											bool initialEntry, bool reentering) {
 	if (!_tot || uint32(nodeOffset) + 6U + 4U * uint32(count) >
-							 _tot->size())
+							 _tot->size()) {
+		failHostOperation("input regions", nodeOffset);
 		return -1;
+	}
 	// INIT's first choice is copy protection. End intro skipping before
 	// accepting input so the skip action cannot select an answer.
 	if (_introSkip.available())
@@ -227,7 +229,7 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 	const int16 key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
 	const bool menuAction = _mainMenuActionThisPoll;
 	_mainMenuActionThisPoll = false;
-	if (_vm->shouldQuit()) {
+	if (shouldAbortExecution()) {
 		if (menuAction && _diagnosticTraceEnabled)
 			debugC(2, kDebugSaveLoad,
 				   "EMMA_TRACE event=menu_request result=ignored reason=quit "
@@ -329,15 +331,15 @@ void PreGob_Emmanuelle::waitReturn() {
 	int16 key = kKeyNone;
 	do {
 		key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
-	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
 			 !inputIdle(key, mouseButtons));
 	do {
 		key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
-	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
 			 key != kKeyReturn);
 	do {
 		key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
-	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
 			 !inputIdle(key, mouseButtons));
 	setInputContext(kEmmanuelleInputNone);
 }
@@ -352,11 +354,13 @@ void PreGob_Emmanuelle::waitInputRelease() {
 		key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
 		if (!inputIdle(key, mouseButtons))
 			delay(40);
-	} while (!_vm->shouldQuit() && !_introSkip.fastForwarding() &&
+	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
 			 !inputIdle(key, mouseButtons));
 }
 
 void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
+	if (_hostFailed)
+		return;
 	if (_introSkip.fastForwarding()) {
 		servicePresentation();
 		processGameEvents();
@@ -381,6 +385,8 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
 	}
 	if (!servicePresentation())
 		presentFrame(true);
+	if (shouldAbortExecution())
+		return;
 	if (_platformTag == kOldTotPlatformAtariST)
 		fadeAtariFromBlack();
 	noteInitialTomahawkVisible();
@@ -394,7 +400,7 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
 }
 
 void PreGob_Emmanuelle::delay(uint16 milliseconds) {
-	while (milliseconds && !_vm->shouldQuit()) {
+	while (milliseconds && !shouldAbortExecution()) {
 		if (_introSkip.fastForwarding()) {
 			processGameEvents();
 			return;
@@ -408,7 +414,7 @@ void PreGob_Emmanuelle::delay(uint16 milliseconds) {
 }
 
 void PreGob_Emmanuelle::waitPresentationFrames(byte count) {
-	for (byte i = 0; i < count && !_vm->shouldQuit(); ++i) {
+	for (byte i = 0; i < count && !shouldAbortExecution(); ++i) {
 		if (!_introSkip.fastForwarding())
 			_vm->_util->waitEndFrame(false);
 		processGameEvents();

@@ -58,8 +58,8 @@ class OldTotHost {
 public:
 	virtual ~OldTotHost() {}
 
-	virtual void saveScreenRect(uint16 x, uint16 y, uint16 width, uint16 height) = 0;
-	virtual void restoreScreenRect() = 0;
+	virtual bool saveScreenRect(uint16 x, uint16 y, uint16 width, uint16 height) = 0;
+	virtual bool restoreScreenRect() = 0;
 	virtual void waitReturn() = 0;
 	virtual void waitInputRelease() = 0;
 	virtual void delay(uint16 milliseconds) = 0;
@@ -114,6 +114,7 @@ public:
 	/** Runtime routine 0x4293 rebuilds the selected DOS video backend. */
 	virtual void reinitializeVideoBackend(byte videoMode) = 0;
 	virtual bool shouldQuit() const { return false; }
+	virtual bool executionFailed() const { return false; }
 
 };
 

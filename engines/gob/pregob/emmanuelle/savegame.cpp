@@ -78,7 +78,7 @@ bool PreGob_Emmanuelle::moduleUsesLocalGraphics(
 
 EmmanuelleSaveBoundaryState PreGob_Emmanuelle::saveBoundaryState() const {
 	EmmanuelleSaveBoundaryState state;
-	state.runtimeReady = _tot && _scriptVM && _executor;
+	state.runtimeReady = _tot && _scriptVM && _executor && !_hostFailed;
 	if (state.runtimeReady) {
 		uint16 node = 0;
 		state.activeInput = _executor->activeInputNode(node) && node != 0 &&
@@ -394,6 +394,7 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 }
 
 void PreGob_Emmanuelle::resetInitialStateAfterLoad() {
+	_hostFailed = false;
 	_introSkip.finish();
 	_initialInitPresentation = false;
 	_initialTitleState = kInitialTitleNone;
@@ -413,7 +414,7 @@ void PreGob_Emmanuelle::resetInitialStateAfterLoad() {
 
 Common::Error PreGob_Emmanuelle::loadGameStream(
 		Common::SeekableReadStream &stream) {
-	if (_executor && !_executor->suspended())
+	if (_hostFailed || (_executor && !_executor->suspended()))
 		return Common::kReadingFailed;
 	EmmanuelleSaveState state;
 	EmmanuellePreparedRestore prepared;
