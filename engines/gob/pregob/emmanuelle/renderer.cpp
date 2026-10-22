@@ -576,6 +576,22 @@ void PreGob_Emmanuelle::presentFrame(bool waitForFrame, bool force) {
 		_vm->_video->retrace();
 }
 
+void PreGob_Emmanuelle::waitForMinimumDuration(
+	uint32 startTime, uint32 minimumMilliseconds) {
+	while (!_vm->shouldQuit()) {
+		const uint32 elapsed = g_system->getMillis() - startTime;
+		const uint32 remaining = minimumDurationRemaining(
+			elapsed, minimumMilliseconds);
+		if (remaining == 0)
+			break;
+
+		const uint16 slice = remaining < 20 ? (uint16)remaining : 20;
+		_vm->_util->delay(slice);
+		processGameEvents();
+
+	}
+}
+
 void PreGob_Emmanuelle::defineCursor(uint16 descriptorOffset) {
 	if (!_tot)
 		return;
@@ -801,6 +817,72 @@ void PreGob_Emmanuelle::restoreScreenRect() {
 
 void PreGob_Emmanuelle::fillScreen(byte color) {
 	_renderer.fillScreen(color);
+}
+
+bool PreGob_Emmanuelle::buildFightActor(
+	bool rightActor, const FightActor &actor, SurfacePtr &cell,
+	FightActorPlacement &placement) {
+	if (!_recupTot || _recupRoots.size() != 40)
+		return false;
+	const byte actionIndex = fightRecupIndex(
+		rightActor, actor.action, actor.frame);
+	if (actionIndex == 0xFF || actionIndex >= _recupRoots.size())
+		return false;
+
+	OldTotDrawDescriptor descriptor;
+	if (!_recupTot->decodeDrawDescriptor(_recupRoots[actionIndex], descriptor))
+		return false;
+	SurfacePtr sprite = _renderer.decodeSpriteSurface(
+		*_recupTot, descriptor);
+	if (!sprite)
+		return false;
+
+	if (!fightPlacement(rightActor, actor.action, actor.frame,
+							  actor.anchorX, sprite->getWidth(), sprite->getHeight(), placement))
+		return false;
+	cell = _renderer.buildFightCell(
+		*sprite, placement.cellWidth, placement.cellHeight,
+		placement.x - placement.cellX, placement.y - placement.cellY);
+	return cell;
+}
+
+bool PreGob_Emmanuelle::renderFightActors(const FightState &state) {
+	SurfacePtr leftCell;
+	SurfacePtr rightCell;
+	FightActorPlacement leftPlacement;
+	FightActorPlacement rightPlacement;
+	if (!buildFightActor(false, state.left, leftCell, leftPlacement) ||
+		!buildFightActor(true, state.right, rightCell, rightPlacement))
+		return false;
+	SpriteBounds previousLeft;
+	SpriteBounds previousRight;
+	const bool hadPreviousLeft = _active.bounds(0, previousLeft);
+	const bool hadPreviousRight = _active.bounds(1, previousRight);
+
+	const bool composited = _active.compositePair(
+		0, *leftCell, leftPlacement.cellX, leftPlacement.cellY, 0xFF,
+		1, *rightCell, rightPlacement.cellX, rightPlacement.cellY, 0xFF);
+	if (composited) {
+		if (hadPreviousLeft)
+			_renderer.notePresentationDirtyRect(
+				previousLeft.x, previousLeft.y,
+				previousLeft.x + previousLeft.w - 1,
+				previousLeft.y + previousLeft.h - 1);
+		if (hadPreviousRight)
+			_renderer.notePresentationDirtyRect(
+				previousRight.x, previousRight.y,
+				previousRight.x + previousRight.w - 1,
+				previousRight.y + previousRight.h - 1);
+		_renderer.notePresentationDirtyRect(leftPlacement.cellX,
+			leftPlacement.cellY,
+			leftPlacement.cellX + leftPlacement.cellWidth - 1,
+			leftPlacement.cellY + leftPlacement.cellHeight - 1);
+		_renderer.notePresentationDirtyRect(rightPlacement.cellX,
+			rightPlacement.cellY,
+			rightPlacement.cellX + rightPlacement.cellWidth - 1,
+			rightPlacement.cellY + rightPlacement.cellHeight - 1);
+	}
+	return composited;
 }
 
 void PreGob_Emmanuelle::reinitializeVideoBackend(byte videoMode) {

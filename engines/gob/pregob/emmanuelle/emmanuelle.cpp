@@ -446,6 +446,121 @@ void PreGob_Emmanuelle::dispatchScheduled(uint16 target) {
 		_executor->dispatchScheduled(target);
 }
 
+void PreGob_Emmanuelle::runFight(
+	uint16 leftMeterBonus, uint16 rightMeterBonus, uint16 leftDamageOption,
+	uint16 rightDamageOption, uint16 leftBaseMeter, uint16 rightBaseMeter) {
+
+	if (!_recupTot || _recupRoots.size() != 40 || !_scriptVM)
+		return;
+
+	_fightActive = true;
+	setInputContext(kEmmanuelleInputFight);
+	FightState state;
+	initFightState(state, leftMeterBonus, rightMeterBonus, leftDamageOption, rightDamageOption,
+						 leftBaseMeter, rightBaseMeter);
+	const uint32 fightStart = g_system->getMillis();
+	if (_diagnosticTraceEnabled)
+		debugC(2, kDebugGameFlow,
+			   "EMMA_TRACE event=fight_start platform=%u module=%s "
+			   "meter_a=%d meter_b=%d option_a=%u option_b=%u",
+			   (uint)_platformTag, _moduleFileStem.c_str(), (int)state.leftMeter,
+			   (int)state.rightMeter, (uint)leftDamageOption, (uint)rightDamageOption);
+	renderFightActors(state);
+	presentFrame(_platformTag != kOldTotPlatformAmiga);
+
+	if (_platformTag == kOldTotPlatformDOS && !_vm->shouldQuit()) {
+		const uint16 initialHold = kDosFightInitialHoldMilliseconds;
+		delay(initialHold);
+	}
+	processGameEvents();
+	FightInputState fightInput(_platformTag == kOldTotPlatformDOS);
+	byte result = 0;
+	while (!state.ended && !_vm->shouldQuit()) {
+		const uint32 tickStart = g_system->getMillis();
+		fightInput.beginTick();
+		int16 mouseX = 0;
+		int16 mouseY = 0;
+		MouseButtons mouseButtons = kMouseButtonsNone;
+		int16 key = takePendingInput(mouseX, mouseY, mouseButtons);
+		if (key >= 'a' && key <= 'z')
+			key = (int16)(key - 'a' + 'A');
+		fightInput.noteKey(key);
+		if (state.left.frame >=
+			fightFrameMax(false, state.left.action)) {
+			if (fightInput.automatic()) {
+				chooseFightLeftAI(
+					state, *this,
+					(uint16)(6 + 3 * _scriptVM->readVariable(50)),
+					_platformTag == kOldTotPlatformDOS);
+			} else
+				setFightLeftInput(state, fightInput.takeActionKey());
+		}
+		if (state.right.frame >=
+			fightFrameMax(true, state.right.action))
+			chooseFightRightAI(state, *this, 4);
+
+		advanceFightFrame(state);
+		renderFightActors(state);
+
+		if (state.pendingLeftDamage != 0)
+			playDosFightTone(440);
+		if (state.pendingRightDamage != 0 && !_vm->shouldQuit())
+			playDosFightTone(1000);
+
+		if (_vm->shouldQuit())
+			break;
+		result = applyFightDamage(state);
+		presentFrame(true);
+		processGameEvents();
+		if (_platformTag == kOldTotPlatformDOS && !_vm->shouldQuit())
+			waitForMinimumDuration(
+				tickStart, kDosFightTickMinimumMilliseconds);
+		if (result)
+			break;
+	}
+	if (result && !_vm->shouldQuit()) {
+
+		for (byte frame = 1; frame <= 9 && !_vm->shouldQuit(); ++frame) {
+			setFightConclusionFrame(
+				state, result, frame, (byte)(fightRandom(8) + 1));
+			renderFightActors(state);
+
+			delay(100);
+			if (_vm->shouldQuit())
+				break;
+			presentFrame(true);
+			processGameEvents();
+		}
+
+		if (!_vm->shouldQuit()) {
+			const uint16 terminalDelay =
+				2000;
+			delay(terminalDelay);
+		}
+		if (!_vm->shouldQuit())
+			_scriptVM->writeVariable(39, result);
+	}
+	_active.restore(0);
+	_active.restore(1);
+	if (_platformTag == kOldTotPlatformDOS && !_vm->shouldQuit()) {
+		OldTotRuntimeState &runtimeState = _scriptVM->runtimeState();
+		runtimeState.videoMode = runtimeState.savedVideoMode;
+		runtimeState.videoInitMarker = 0;
+		reinitializeVideoBackend(runtimeState.videoMode);
+		runtimeState.videoInitMarker = 0x28;
+		presentFrame(false);
+	}
+	setInputContext(kEmmanuelleInputNone);
+	_fightActive = false;
+	if (_diagnosticTraceEnabled)
+		debugC(2, kDebugGameFlow,
+			   "EMMA_TRACE event=fight_end platform=%u "
+			   "elapsed_ms=%u result=%u quit=%u",
+			   (uint)_platformTag,
+			   (uint)(g_system->getMillis() - fightStart), (uint)result,
+			   _vm->shouldQuit() ? 1U : 0U);
+}
+
 bool PreGob_Emmanuelle::handleNativeFF0B(
 	byte command, OldTotRuntimeState &runtimeState) {
 
@@ -458,6 +573,20 @@ bool PreGob_Emmanuelle::handleNativeFF0B(
 		runtimeState.videoInitMarker = 0x28;
 	}
 	return true;
+}
+
+void PreGob_Emmanuelle::playDosFightTone(uint16 frequency) {
+	if (_platformTag != kOldTotPlatformDOS || !_vm || !_vm->_sound)
+		return;
+
+	setAudioState(kOldTotAudioDosSpeaker, -1, frequency, 0,
+						 true, true);
+	_vm->_sound->speakerOn((int16)frequency, -1);
+	// Pump events without advancing script timers while the tone plays.
+	delay(10);
+	_vm->_sound->speakerOff();
+	setAudioState(kOldTotAudioDosSpeaker, -1, frequency, 0,
+						 true, false);
 }
 
 } // End of namespace Emmanuelle
