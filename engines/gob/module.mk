@@ -88,6 +88,7 @@ MODULE_OBJS := \
 	pregob/gctfile.o \
 	pregob/seqfile.o \
 	pregob/emmanuelle/active.o \
+	pregob/emmanuelle/amiga.o \
 	pregob/emmanuelle/animation.o \
 	pregob/emmanuelle/atari.o \
 	pregob/emmanuelle/dos.o \

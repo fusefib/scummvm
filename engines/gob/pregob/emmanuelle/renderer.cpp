@@ -34,6 +34,7 @@
 #include "gob/gob.h"
 #include "gob/util.h"
 #include "gob/video.h"
+#include "gob/pregob/emmanuelle/amiga.h"
 #include "gob/pregob/emmanuelle/animation.h"
 #include "gob/pregob/emmanuelle/atari.h"
 #include "gob/pregob/emmanuelle/dos.h"
@@ -877,33 +878,62 @@ bool PreGob_Emmanuelle::handleProtectionTextNode(uint16 nodeOffset) {
 }
 
 void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
-	if (!_tot || !_scriptVM)
-		return;
-
 	OldTotTextPlan plan;
-	if (!planOldTotText(*_tot, *_scriptVM, nodeOffset, plan))
+	if (!_tot || !_scriptVM ||
+		!planOldTotText(*_tot, *_scriptVM, nodeOffset, plan)) {
 		return;
-	if (plan.background != 0x10) {
-		_vm->_draw->_backSurface->fillRect(
-			plan.x, plan.y, plan.x + plan.width - 1,
-			plan.y + plan.height - 1, plan.background);
 	}
-
 	Font *font = _fonts[plan.fontIndex & 1];
-	if (!font)
+	if (!font) {
 		return;
+	}
+	if (_platformTag == kOldTotPlatformAmiga) {
+		byte colors[16];
+		if (!getAmigaTextColorTable(_moduleFileStem, colors) || plan.background > 16) {
+			return;
+		}
+		// Script color 15 is pale yellow (23) in LOADCAS, not green (15).
+		if (plan.background != 0x10)
+			plan.background = colors[plan.background];
+		for (uint i = 0; i < plan.glyphs.size(); ++i) {
+			if (plan.glyphs[i].color >= 16) {
+				return;
+			}
+			plan.glyphs[i].color = colors[plan.glyphs[i].color];
+		}
+	}
+	const bool amiga = _platformTag == kOldTotPlatformAmiga;
+	Common::Rect dirty(plan.x, plan.y, plan.x + plan.width, plan.y + plan.height);
+	Common::Rect background = dirty;
+	if (amiga) {
+		// Amiga fills whole eight-pixel units, then paints only glyph strokes.
+		// In LOADCAS this keeps the x=83 text fill inside its x=80 bubble.
+		background.left = plan.x & ~7;
+		background.right = background.left + (plan.width & ~7);
+	}
+	const Common::Rect bounds(0, 0, _vm->_draw->_backSurface->getWidth(),
+		_vm->_draw->_backSurface->getHeight());
+	background.clip(bounds);
+	if (plan.background != 0x10 && !background.isEmpty()) {
+		_vm->_draw->_backSurface->fillRect(background.left, background.top,
+			background.right - 1, background.bottom - 1, plan.background);
+		dirty.extend(background);
+	}
 	for (uint i = 0; i < plan.glyphs.size(); ++i) {
 		const OldTotTextGlyph &glyph = plan.glyphs[i];
-		font->drawLetter(*_vm->_draw->_backSurface, glyph.character,
-						 glyph.x, glyph.y, glyph.color, plan.background,
-						 plan.background == 0x10);
+		font->drawLetter(*_vm->_draw->_backSurface, glyph.character, glyph.x, glyph.y,
+			glyph.color, plan.background, amiga || plan.background == 0x10);
+		if (amiga)
+			dirty.extend(Common::Rect(glyph.x, glyph.y,
+				glyph.x + font->getCharWidth(glyph.character), glyph.y + font->getCharHeight()));
 	}
-	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, plan.x, plan.y,
-							plan.x + plan.width - 1,
-							plan.y + plan.height - 1);
-	_renderer.notePresentationDirtyRect(plan.x, plan.y,
-								  plan.x + plan.width - 1,
-								  plan.y + plan.height - 1);
+	dirty.clip(bounds);
+	if (!dirty.isEmpty()) {
+		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface,
+			dirty.left, dirty.top, dirty.right - 1, dirty.bottom - 1);
+		_renderer.notePresentationDirtyRect(
+			dirty.left, dirty.top, dirty.right - 1, dirty.bottom - 1);
+	}
 }
 
 void PreGob_Emmanuelle::textNode(uint16 nodeOffset) {
