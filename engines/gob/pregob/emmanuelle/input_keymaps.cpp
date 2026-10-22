@@ -105,6 +105,13 @@ Common::KeymapArray createEmmanuelleKeymaps(Common::Platform platform) {
 	action->addDefaultInputMapping("MOUSE_MIDDLE");
 	addKeyAction(common, "EMMA_ESCAPE", _("Cancel"), KEYCODE_ESCAPE,
 		ASCII_ESCAPE, "ESCAPE", emmanuelleEscapeControllerMapping());
+	action = new Action(kStandardActionOpenMainMenu, _("Game menu"));
+	action->setCustomEngineActionEvent(
+		(Common::CustomEventType)kEmmanuelleActionOpenMainMenu);
+	action->addDefaultInputMapping("F5");
+	action->addDefaultInputMapping("C+F5");
+	action->addDefaultInputMapping("JOY_START");
+	common->addAction(action);
 
 	action = new Action(kStandardActionSkip, _("Skip intro"));
 	action->setCustomEngineActionEvent(
