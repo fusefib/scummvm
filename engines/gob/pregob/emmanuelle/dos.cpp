@@ -30,6 +30,106 @@
 namespace Gob {
 namespace Emmanuelle {
 
+namespace {
+
+const byte kPaletteGroup1[16] = {
+	0x00, 0x17, 0x01, 0x11, 0x13, 0x02, 0x12, 0x10,
+	0x07, 0x14, 0x00, 0x15, 0x04, 0x06, 0x16, 0x17};
+
+const byte kPaletteGroup2[16] = {
+	0x00, 0x05, 0x01, 0x11, 0x07, 0x02, 0x12, 0x10,
+	0x17, 0x14, 0x00, 0x15, 0x04, 0x06, 0x16, 0x17};
+
+const byte kPaletteChut[16] = {
+	0x00, 0x10, 0x01, 0x11, 0x13, 0x02, 0x12, 0x07,
+	0x17, 0x14, 0x00, 0x03, 0x04, 0x06, 0x16, 0x17};
+
+const byte kPaletteInit[16] = {
+	0x00, 0x00, 0x01, 0x11, 0x10, 0x00, 0x12, 0x02,
+	0x16, 0x04, 0x00, 0x14, 0x11, 0x17, 0x06, 0x16};
+
+const byte kCgaGroup1Even[16] = {
+	0, 3, 0, 0, 3, 1, 3, 0, 3, 2, 0, 2, 1, 2, 2, 3};
+
+const byte kCgaGroup1Odd[16] = {
+	0, 3, 0, 1, 0, 1, 1, 1, 0, 2, 0, 0, 2, 3, 3, 3};
+
+const byte kCgaGroup2Even[16] = {
+	0, 1, 0, 0, 3, 1, 3, 0, 3, 2, 0, 0, 1, 2, 2, 3};
+
+const byte kCgaGroup2Odd[16] = {
+	0, 2, 0, 1, 0, 1, 1, 1, 0, 2, 0, 2, 2, 3, 3, 3};
+
+const byte kCgaChutEven[16] = {
+	0, 0, 0, 0, 3, 1, 0, 0, 3, 2, 0, 0, 1, 2, 2, 3};
+
+const byte kCgaChutOdd[16] = {
+	0, 0, 0, 1, 0, 1, 1, 1, 0, 2, 0, 3, 2, 3, 3, 3};
+
+const byte kCgaInitEven[16] = {
+	0, 0, 0, 1, 3, 3, 3, 3, 2, 2, 3, 3, 1, 1, 1, 2};
+
+const byte kCgaInitOdd[16] = {
+	0, 3, 0, 0, 3, 0, 1, 0, 2, 2, 0, 3, 1, 1, 1, 2};
+
+const byte *findDosPaletteRegisters(const Common::String &moduleName) {
+	if (moduleName.equalsIgnoreCase("INIT") ||
+		moduleName.equalsIgnoreCase("INIT.TOT"))
+		return kPaletteInit;
+	if (moduleName.equalsIgnoreCase("LOADCHUT") ||
+		moduleName.equalsIgnoreCase("LOADCHUT.TOT"))
+		return kPaletteChut;
+	if (moduleName.equalsIgnoreCase("LOADAERO") ||
+		moduleName.equalsIgnoreCase("LOADAERO.TOT") ||
+		moduleName.equalsIgnoreCase("LOADGAR") ||
+		moduleName.equalsIgnoreCase("LOADGAR.TOT"))
+		return kPaletteGroup2;
+	if (moduleName.equalsIgnoreCase("LOADHOT") ||
+		moduleName.equalsIgnoreCase("LOADHOT.TOT") ||
+		moduleName.equalsIgnoreCase("LOADPLA") ||
+		moduleName.equalsIgnoreCase("LOADPLA.TOT") ||
+		moduleName.equalsIgnoreCase("LOADCAS") ||
+		moduleName.equalsIgnoreCase("LOADCAS.TOT") ||
+		moduleName.equalsIgnoreCase("LOADFAV") ||
+		moduleName.equalsIgnoreCase("LOADFAV.TOT"))
+		return kPaletteGroup1;
+	return nullptr;
+}
+
+bool findDosCgaColorTables(const Common::String &moduleName,
+						   const byte *&evenTable, const byte *&oddTable) {
+	evenTable = nullptr;
+	oddTable = nullptr;
+	if (moduleName.equalsIgnoreCase("INIT") ||
+		moduleName.equalsIgnoreCase("INIT.TOT")) {
+		evenTable = kCgaInitEven;
+		oddTable = kCgaInitOdd;
+	} else if (moduleName.equalsIgnoreCase("LOADCHUT") ||
+			   moduleName.equalsIgnoreCase("LOADCHUT.TOT")) {
+		evenTable = kCgaChutEven;
+		oddTable = kCgaChutOdd;
+	} else if (moduleName.equalsIgnoreCase("LOADAERO") ||
+			   moduleName.equalsIgnoreCase("LOADAERO.TOT") ||
+			   moduleName.equalsIgnoreCase("LOADGAR") ||
+			   moduleName.equalsIgnoreCase("LOADGAR.TOT")) {
+		evenTable = kCgaGroup2Even;
+		oddTable = kCgaGroup2Odd;
+	} else if (moduleName.equalsIgnoreCase("LOADHOT") ||
+			   moduleName.equalsIgnoreCase("LOADHOT.TOT") ||
+			   moduleName.equalsIgnoreCase("LOADPLA") ||
+			   moduleName.equalsIgnoreCase("LOADPLA.TOT") ||
+			   moduleName.equalsIgnoreCase("LOADCAS") ||
+			   moduleName.equalsIgnoreCase("LOADCAS.TOT") ||
+			   moduleName.equalsIgnoreCase("LOADFAV") ||
+			   moduleName.equalsIgnoreCase("LOADFAV.TOT")) {
+		evenTable = kCgaGroup1Even;
+		oddTable = kCgaGroup1Odd;
+	}
+	return evenTable && oddTable;
+}
+
+} // End of anonymous namespace
+
 uint16 dosRandomBounded(uint32 &state, uint16 upperExclusive) {
 	if (upperExclusive == 0)
 		return 0;
@@ -42,6 +142,64 @@ void getDosSchedulerTiming(byte period, bool alternateTiming,
 						   uint16 &reload, uint16 &initialCountdown) {
 	reload = (uint16)period * (alternateTiming ? 70 : 100);
 	initialCountdown = 1;
+}
+
+byte dosEgaPaletteIndex(byte registerValue) {
+	return (registerValue & 0x07) |
+		   ((registerValue & 0x10) ? 0x08 : 0x00);
+}
+
+byte dosVideoModeForRenderMode(Common::RenderMode renderMode) {
+	return renderMode == Common::kRenderCGA ? 1 : 2;
+}
+
+bool getDosPaletteRegisters(const Common::String &moduleName,
+							byte registers[16]) {
+	const byte *source = findDosPaletteRegisters(moduleName);
+	if (!source || !registers)
+		return false;
+
+	for (uint i = 0; i < 16; ++i)
+		registers[i] = source[i];
+	return true;
+}
+
+bool getDosCgaColorTables(const Common::String &moduleName,
+						  byte evenTable[16], byte oddTable[16]) {
+	const byte *evenSource = nullptr;
+	const byte *oddSource = nullptr;
+	if (!evenTable || !oddTable ||
+		!findDosCgaColorTables(moduleName, evenSource, oddSource))
+		return false;
+	for (uint i = 0; i < 16; ++i) {
+		evenTable[i] = evenSource[i];
+		oddTable[i] = oddSource[i];
+	}
+	return true;
+}
+
+byte dosCgaDitheredColor(byte logicalColor, uint16 x, uint16 y,
+						 const byte evenTable[16],
+						 const byte oddTable[16]) {
+	if (!evenTable || !oddTable)
+		return 0;
+	const byte *table = ((x + y) & 1) ? oddTable : evenTable;
+	return table[logicalColor & 0x0F];
+}
+
+bool applyDosNativeCommand(byte command, OldTotRuntimeState &runtime,
+						   bool &reinitializeVideo, bool forceFourColor) {
+	reinitializeVideo = false;
+	if (command != 201)
+		return false;
+
+	runtime.savedVideoMode = runtime.videoMode;
+	if (forceFourColor && runtime.videoMode > 1) {
+		runtime.videoMode = 1;
+		runtime.videoInitMarker = 0;
+		reinitializeVideo = true;
+	}
+	return true;
 }
 
 } // End of namespace Emmanuelle
