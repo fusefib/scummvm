@@ -57,6 +57,7 @@
 #include "gob/save/saveload.h"
 
 #include "gob/pregob/pregob.h"
+#include "gob/pregob/emmanuelle/emmanuelle.h"
 #include "gob/pregob/onceupon/abracadabra.h"
 #include "gob/pregob/onceupon/babayaga.h"
 
@@ -77,7 +78,6 @@ const Common::Language GobEngine::_gobToScummVMLang[] = {
 	Common::PT_BRA,
 	Common::JA_JPN
 };
-
 
 class PauseDialog : public GUI::Dialog {
 public:
@@ -119,7 +119,6 @@ void PauseDialog::handleKeyDown(Common::KeyState state) {
 	if ((state.hasFlags(Common::KBD_CTRL)) && (state.keycode == Common::KEYCODE_p))
 		close();
 }
-
 
 GobEngine::GobEngine(OSystem *syst) : Engine(syst), _rnd("gob") {
 	_sound     = nullptr; _mult     = nullptr; _game    = nullptr;
@@ -728,6 +727,18 @@ Common::Error GobEngine::initGameParts() {
 		_goblin   = new Goblin_v2(this);
 		_scenery  = new Scenery_v2(this);
 		_preGob   = new OnceUpon::BabaYaga(this);
+		break;
+
+	case kGameTypeEmmanuelle:
+		_init     = new Init_v2(this);
+		_video    = new Video_v2(this);
+		_mult     = new Mult_v2(this);
+		_draw     = new Draw_v2(this);
+		_map      = new Map_v2(this);
+		_goblin   = new Goblin_v2(this);
+		_scenery  = new Scenery_v2(this);
+		_preGob   = new Emmanuelle::PreGob_Emmanuelle(
+			this, false);
 		break;
 
 	default:

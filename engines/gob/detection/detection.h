@@ -61,7 +61,8 @@ enum GameType {
 	//kGameTypeAJWorld -> Deprecated, duplicated with kGameTypeAdibou1
 	kGameTypeCrousti = 24, // Explicit value needed to not invalidate save games after removing kGameTypeAJWorld
 	kGameTypeDynastyWood,
-	kGameTypeAdi1
+	kGameTypeAdi1,
+	kGameTypeEmmanuelle
 };
 
 enum Features {
