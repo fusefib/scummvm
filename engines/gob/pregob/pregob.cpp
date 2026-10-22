@@ -55,6 +55,25 @@ PreGob::PreGob(GobEngine *vm) : _vm(vm), _fadedOut(false) {
 PreGob::~PreGob() {
 }
 
+bool PreGob::canSaveGameState(Common::U32String *) const {
+	return false;
+}
+
+bool PreGob::canLoadGameState(Common::U32String *) const {
+	return false;
+}
+
+Common::Error PreGob::saveGameStream(Common::WriteStream &, bool) const {
+	return Common::kWritingFailed;
+}
+
+Common::Error PreGob::loadGameStream(Common::SeekableReadStream &) {
+	return Common::kReadingFailed;
+}
+
+void PreGob::handleCustomAction(Common::CustomEventType) {
+}
+
 void PreGob::fadeOut() {
 	if (_fadedOut || _vm->shouldQuit())
 		return;
