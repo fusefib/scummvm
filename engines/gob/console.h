@@ -28,12 +28,17 @@
 #ifndef GOB_CONSOLE_H
 #define GOB_CONSOLE_H
 
+#include "common/array.h"
 #include "gui/debugger.h"
 
 namespace Gob {
 
 class GobEngine;
 class Cheater;
+
+namespace Emmanuelle {
+class OldTotDebugProvider;
+}
 
 class GobConsole : public GUI::Debugger {
 public:
@@ -42,11 +47,19 @@ public:
 
 	void registerCheater(Cheater *cheater);
 	void unregisterCheater();
+	void registerEmmanuelleDebugger(Emmanuelle::OldTotDebugProvider *provider);
+	void unregisterEmmanuelleDebugger();
 
 private:
 	GobEngine *_vm;
 
 	Cheater *_cheater;
+	Emmanuelle::OldTotDebugProvider *_emmanuelleDebugger;
+	Common::Array<uint16> _emmanuellePreviousVariables;
+	bool _emmanuelleHasPreviousVariables;
+
+	bool hasInterVariables() const;
+	bool requireInterVariables();
 
 	bool cmd_Help(int argc, const char **argv);
 
@@ -62,6 +75,11 @@ private:
 	bool cmd_listArchives(int argc, const char **argv);
 
 	bool cmd_gobStack(int argc, const char **argv);
+	bool cmd_emmaState(int argc, const char **argv);
+	bool cmd_emmaVars(int argc, const char **argv);
+	bool cmd_emmaStack(int argc, const char **argv);
+	bool cmd_emmaTrace(int argc, const char **argv);
+
 };
 
 } // End of namespace Gob
