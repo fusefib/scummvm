@@ -51,6 +51,68 @@ OldTotRenderer::OldTotRenderer(GobEngine *vm) :
 	_sharedBank = nullptr;
 }
 
+bool OldTotRenderer::exportState(EmmanuelleRendererState &out) const {
+	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface)
+		return false;
+	exportOldTotSurface(*_vm->_draw->_backSurface, out.framebuffer);
+	out.savedRegions.clear();
+	for (uint i = 0; i < _savedRegions.size(); ++i) {
+		const OldTotPreparedSavedRegion &saved = _savedRegions[i];
+		if (!saved.surface)
+			return false;
+		EmmanuelleSavedRegionState state;
+		state.x = saved.x;
+		state.y = saved.y;
+		exportOldTotSurface(*saved.surface, state.surface);
+		out.savedRegions.push_back(state);
+	}
+
+	return true;
+}
+
+bool OldTotRenderer::prepareState(const EmmanuelleRendererState &in,
+		OldTotRendererPreparedState &out) const {
+	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface)
+		return false;
+	return prepareOldTotRendererState(in,
+		_vm->_draw->_backSurface->getWidth(),
+		_vm->_draw->_backSurface->getHeight(),
+		_vm->_draw->_backSurface->getBPP(), out);
+}
+
+bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
+		uint16 width, uint16 height, byte bytesPerPixel, OldTotRendererPreparedState &out) {
+	if (!validateEmmanuelleRendererState(in, width, height, bytesPerPixel))
+		return false;
+
+	OldTotRendererPreparedState prepared;
+	if (!importOldTotSurface(in.framebuffer, prepared.framebuffer))
+		return false;
+	for (uint i = 0; i < in.savedRegions.size(); ++i) {
+		const EmmanuelleSavedRegionState &state = in.savedRegions[i];
+		SurfacePtr surface;
+		if (!importOldTotSurface(state.surface, surface) ||
+			state.x < 0 || state.y < 0 ||
+			state.x + state.surface.width > in.framebuffer.width ||
+			state.y + state.surface.height > in.framebuffer.height)
+			return false;
+		prepared.savedRegions.push_back(OldTotPreparedSavedRegion(
+			surface, state.x, state.y));
+	}
+
+	out.framebuffer = prepared.framebuffer;
+	out.savedRegions.swap(prepared.savedRegions);
+	return true;
+}
+
+void OldTotRenderer::commitState(OldTotRendererPreparedState &in) {
+	_vm->_draw->_backSurface->blit(*in.framebuffer);
+	_savedRegions.swap(in.savedRegions);
+
+	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0,
+		in.framebuffer->getWidth() - 1, in.framebuffer->getHeight() - 1);
+}
+
 void OldTotRenderer::setResourceBanks(const OldIxxBank *localBank,
 									  const OldIxxBank *sharedBank) {
 	_localBank = localBank;
