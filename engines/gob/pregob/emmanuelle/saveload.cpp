@@ -499,6 +499,8 @@ bool validateEmmanuelleRendererState(const EmmanuelleRendererState &state,
 EmmanuelleRuntimeProfile emmanuelleRuntimeProfile(
 		OldTotPlatformTag platform, Common::Language language) {
 	if (platform == kOldTotPlatformDOS) {
+		if (language == Common::ES_ESP)
+			return kEmmanuelleProfileDosSpanish;
 		return kEmmanuelleProfileDosEnglish;
 	}
 	if (platform == kOldTotPlatformAtariST) {
@@ -544,6 +546,7 @@ bool emmanuelleProfileMatchesPlatform(EmmanuelleRuntimeProfile profile,
 									 OldTotPlatformTag platform) {
 	switch (profile) {
 	case kEmmanuelleProfileDosEnglish:
+	case kEmmanuelleProfileDosSpanish:
 		return platform == kOldTotPlatformDOS;
 	case kEmmanuelleProfileAtariEnglish:
 	case kEmmanuelleProfileAtariSpanish:
