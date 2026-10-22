@@ -30,6 +30,86 @@
 namespace Gob {
 namespace Emmanuelle {
 
+PresentationState::PresentationState(OldTotPlatformTag platform) :
+	_platform(platform) {
+	_mode = 0;
+	_variant = 0;
+	_phase = 0;
+
+	_pending = false;
+	_active = false;
+	_paletteTransitionPending = false;
+}
+
+void PresentationState::resetModule() {
+	if (_platform != kOldTotPlatformAmiga)
+		_mode = 0;
+	_variant = 0;
+	_phase = 0;
+	_pending = false;
+	_active = false;
+	_paletteTransitionPending = false;
+}
+
+void PresentationState::arm(byte mode) {
+	_mode = mode == 43 || mode == 44 ? mode : 0;
+	_variant = 0;
+	_phase = 0;
+	_active = false;
+}
+
+void PresentationState::commitDirectFrame() {
+	_pending = false;
+	_active = false;
+	_phase = 0;
+}
+
+bool PresentationState::nextStep(bool black, byte randomVariant,
+		PresentationStep &step) {
+	step = PresentationStep();
+	if (!_pending && !_active)
+		return false;
+	if (!_active) {
+		_active = true;
+		_phase = 0;
+		_variant = _mode == 44 ? randomVariant : 0;
+	}
+
+	const bool atari = _platform == kOldTotPlatformAtariST;
+	step.variant = _variant;
+	step.phase = _phase;
+	// ST restores black before any transition; Amiga mode 43 takes priority.
+	if (black && (atari ||
+		(_mode != 43 && (_paletteTransitionPending || _mode == 44)))) {
+		step.operation = kPresentationFadeFromBlack;
+		step.complete = true;
+	} else if (_mode == 43) {
+		step.operation = kPresentationMode43;
+		step.complete = _phase == 15;
+	} else if (_mode == 44) {
+		step.operation = kPresentationMode44;
+		const byte count = _variant == 0 ? 9 : (_variant < 5 ? 18 : 0);
+		// Amiga presents stage zero before its counted waits.
+		step.complete = _phase + (atari ? 1 : 0) == count;
+	} else {
+		step.operation = kPresentationFrame;
+		step.complete = true;
+	}
+
+	if (step.complete) {
+		_pending = false;
+		_active = false;
+		_phase = 0;
+		_variant = 0;
+		_paletteTransitionPending = false;
+		if (_mode == 44)
+			_mode = 0;
+	} else {
+		++_phase;
+	}
+	return true;
+}
+
 InputLatch::InputLatch() {
 	_key = 0;
 	_mouseX = 0;
@@ -94,6 +174,20 @@ uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
 uint32 minimumDurationRemaining(uint32 elapsed,
 									  uint32 minimumDuration) {
 	return elapsed < minimumDuration ? minimumDuration - elapsed : 0;
+}
+
+bool isTitlePresentationVisible(OldTotPlatformTag platform,
+									   bool black, bool framePending,
+									   bool presentationActive,
+									   bool paletteTransitionPending) {
+	if (platform == kOldTotPlatformDOS)
+		return true;
+	if (platform == kOldTotPlatformAtariST)
+		return !black && !framePending && !presentationActive;
+	if (platform == kOldTotPlatformAmiga)
+		return !black && !framePending && !presentationActive &&
+			!paletteTransitionPending;
+	return false;
 }
 
 ColorCycleResult advanceColorCycle(byte counter, bool enabled,
