@@ -88,6 +88,7 @@ MODULE_OBJS := \
 	pregob/gctfile.o \
 	pregob/seqfile.o \
 	pregob/emmanuelle/executor.o \
+	pregob/emmanuelle/gameflow.o \
 	pregob/emmanuelle/interpreter.o \
 	pregob/emmanuelle/oldixx.o \
 	pregob/emmanuelle/oldtot.o \
