@@ -292,6 +292,7 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg) {
 	}
 
 	presentFrame(true);
+	noteInitialTomahawkVisible();
 	processGameEvents();
 	if (!_vm->shouldQuit())
 		delay(dosOpcode03DelayMilliseconds(arg));
