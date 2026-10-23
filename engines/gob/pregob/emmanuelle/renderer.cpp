@@ -1084,6 +1084,12 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 		}
 	}
 
+	// LOADCAS's result ball takes five diagonal steps from v[129]/v[130].
+	const bool casinoBall = _currentModule == kModuleLoadCas && setup.slot == 1 &&
+		setup.flags == (kAnimRegister | kAnimInitialDraw | kAnimClear | kAnimUnregister | kAnimStepped) &&
+		setup.frameDelay == 0 && setup.stepCount == 5 && setup.frameMax == 1 &&
+		setup.deltaX == 3 && setup.deltaY == 3 && setup.originX == 129 && setup.originY == 130 &&
+		setup.widthUnits == 3 && setup.height == 24;
 	if (setup.flags & kAnimStepped) {
 		for (uint16 step = 0; step < setup.stepCount && !shouldAbortExecution();
 			 ++step) {
@@ -1091,6 +1097,7 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 			// handles the inclusive byte limit without wrapping.
 			for (uint16 frame = 1;
 				 frame <= setup.frameMax && !shouldAbortExecution(); ++frame) {
+				const uint32 frameStart = casinoBall ? g_system->getMillis() : 0;
 				const bool rendered = renderAnimationFrame(
 					setup, step, (byte)frame, baseX, baseY);
 				if (!rendered && setup.hasDescriptor && setup.slot < 20) {
@@ -1123,6 +1130,9 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 				}
 				if (_introSkip.fastForwarding())
 					processGameEvents();
+				// Count drawing and native waits toward the ball's step budget.
+				if (casinoBall && rendered)
+					waitForMinimumDuration(frameStart, 160);
 			}
 		}
 	}

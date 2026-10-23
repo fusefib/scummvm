@@ -384,7 +384,7 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16 offset) {
 		return;
 	}
 	// The twelve LOADCAS wheel draws have tiny native pauses. Keep each image
-	// readable on fast hosts without changing other script waits. This 80 ms
+	// readable on fast hosts without changing other script waits. This 100 ms
 	// minimum is a presentation policy, not a measured native drawing cost.
 	const bool wheel = arg == 1 && _currentModule == kModuleLoadCas && _tot &&
 		_tot->isCasinoWheelWait(_platformTag, _vm->_language, offset);
@@ -404,7 +404,7 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16 offset) {
 		milliseconds = amigaNativeDelayMilliseconds(milliseconds);
 	delay(milliseconds);
 	if (wheel)
-		waitForMinimumDuration(presentationStart, 80);
+		waitForMinimumDuration(presentationStart, 100);
 }
 
 void PreGob_Emmanuelle::delay(uint16 milliseconds) {
