@@ -33,6 +33,21 @@
 namespace Gob {
 namespace Emmanuelle {
 
+bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
+		Common::Language language, const Common::String &resourceName) {
+	if (platform != kOldTotPlatformDOS && platform != kOldTotPlatformAtariST &&
+		platform != kOldTotPlatformAmiga)
+		return false;
+	const bool amiga = platform == kOldTotPlatformAmiga;
+	if (language == Common::EN_ANY &&
+		resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT"))
+		return patchCasinoPrediction();
+	if (!resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT") ||
+		(language == Common::ES_ESP && amiga) || (language == Common::DE_DEU && !amiga))
+		return false;
+	return patchIguacuAirport(language);
+}
+
 // A failed approach at Iguacu airport branches to Salvador's failure handler.
 // It sets v[65] to 1, possibly replacing Salvador's successful state, while
 // leaving Iguacu's v[67] unchanged. Use the existing Iguacu failure handler.
@@ -42,19 +57,7 @@ namespace Emmanuelle {
 //
 // Applies to: All versions
 // Script: LOADAERO.TOT (DOS/ST), LOADAERO.TOA (Amiga)
-bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
-		Common::Language language, const Common::String &resourceName) {
-	if (platform != kOldTotPlatformDOS && platform != kOldTotPlatformAtariST &&
-		platform != kOldTotPlatformAmiga)
-		return false;
-	if (!resourceName.equalsIgnoreCase(platform == kOldTotPlatformAmiga
-			? "LOADAERO.TOA" : "LOADAERO.TOT"))
-		return false;
-
-	if ((language == Common::ES_ESP && platform == kOldTotPlatformAmiga) ||
-		(language == Common::DE_DEU && platform != kOldTotPlatformAmiga))
-		return false;
-
+bool OldTotData::patchIguacuAirport(Common::Language language) {
 	struct IguacuAirportLayout {
 		Common::Language language;
 		uint16 condition;
@@ -104,6 +107,51 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 
 	// Replace only the true branch's destination in the owned script buffer.
 	WRITE_BE_UINT16(&_data[layout->condition + 10], layout->iguacuFailure);
+	return true;
+}
+
+// The English casino prediction draws its number over "the" at the end of
+// this sentence. Its 24-pixel rectangle leaves the final 'e' visible ("28.e");
+// the narrower "9." also leaves 'h'. Blank the word, use a colon and leave
+// one character cell before the number. Record lengths stay unchanged.
+//
+// Applies to: English DOS, Atari ST and Amiga
+// Script: LOADCAS.TOT / LOADCAS.TOA, text record 0x1CDF
+bool OldTotData::patchCasinoPrediction() {
+	const uint16 sentence = 0x1CDF;
+	const uint16 strayWord = 0x1D26;
+	const byte sentenceHeader[] = {0x1D, 0, 40, 0, 5, 1, 0, 0, 32, 8, 15, 0, 0, 0, 0};
+	const char text[] = "@  Hey, before you go, put some@  money on this number; the    ";
+	if (!has(sentence, sizeof(sentenceHeader) + sizeof(text)) ||
+		memcmp(&_data[sentence], sentenceHeader, sizeof(sentenceHeader)) != 0 ||
+		memcmp(&_data[sentence + sizeof(sentenceHeader)], text, sizeof(text)) != 0)
+		return false;
+	static const struct {
+		uint16 offset;
+		byte width;
+		const char *text;
+	} numbers[] = {
+		{0x1B90, 16, "9."}, {0x1BA2, 24, "15."}, {0x1BB5, 24, "24."},
+		{0x1BC8, 24, "7."}, {0x1BDA, 24, "11."}, {0x1BED, 24, "1."},
+		{0x1BFF, 24, "33."}, {0x1C12, 24, "28."}, {0x1C25, 24, "12."},
+		{0x1C38, 24, "26."}
+	};
+	for (uint i = 0; i < ARRAYSIZE(numbers); ++i) {
+		const uint16 offset = numbers[i].offset;
+		byte header[] = {0x1D, 0, 224, 0, 21, 0, 24, 0, 8, 8, 15, 0, 0, 0, 0};
+		header[6] = numbers[i].width;
+		const uint length = strlen(numbers[i].text) + 1;
+		if (!has(offset, sizeof(header) + length) ||
+			memcmp(&_data[offset], header, sizeof(header)) != 0 ||
+			memcmp(&_data[offset + sizeof(header)], numbers[i].text, length) != 0)
+			return false;
+	}
+	_data[strayWord] = ' ';
+	_data[strayWord + 1] = ' ';
+	_data[strayWord + 2] = ' ';
+	_data[0x1D24] = ':';
+	for (uint i = 0; i < ARRAYSIZE(numbers); ++i)
+		WRITE_BE_UINT16(&_data[numbers[i].offset + 1], 232);
 	return true;
 }
 
