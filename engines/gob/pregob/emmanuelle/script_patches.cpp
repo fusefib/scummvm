@@ -39,11 +39,15 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 		platform != kOldTotPlatformAmiga)
 		return false;
 	const bool amiga = platform == kOldTotPlatformAmiga;
-	if (language == Common::EN_ANY &&
-		resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT"))
-		return patchCasinoPrediction();
-	if (!resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT") ||
-		(language == Common::ES_ESP && amiga) || (language == Common::DE_DEU && !amiga))
+	if ((language == Common::ES_ESP && amiga) || (language == Common::DE_DEU && !amiga))
+		return false;
+	if (resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT")) {
+		bool patched = patchCasinoEntryPause(platform, language);
+		if (language == Common::EN_ANY)
+			patched = patchCasinoPrediction() || patched;
+		return patched;
+	}
+	if (!resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT"))
 		return false;
 	return patchIguacuAirport(language);
 }
@@ -153,6 +157,62 @@ bool OldTotData::patchCasinoPrediction() {
 	for (uint i = 0; i < ARRAYSIZE(numbers); ++i)
 		WRITE_BE_UINT16(&_data[numbers[i].offset + 1], 232);
 	return true;
+}
+
+// The opening casino caption uses FF03 1 and is covered almost immediately
+// by the betting table. Use the other casino messages' FF03 250 pause here.
+// This is a reading-time adjustment; the native scripts really request 1.
+//
+// Applies to: All versions, including the synthetic DOS Spanish/French profiles
+// Script: LOADCAS.TOT / LOADCAS.TOA
+bool OldTotData::patchCasinoEntryPause(OldTotPlatformTag platform,
+		Common::Language language) {
+	static const struct {
+		Common::Language language;
+		uint16 entry, message, text, table;
+		const char *caption;
+	} layouts[] = {
+		{Common::EN_ANY, 0x4E36, 0x47DC, 0x1B25, 0x47F7, " PLACE YOUR BETS."},
+		{Common::ES_ESP, 0x4CB1, 0x4657, 0x1AE1, 0x4672, "  HAGAN JUEGO!"},
+		{Common::FR_FRA, 0x4E0A, 0x47B0, 0x1B5A, 0x47CB, " FAITES VOS JEUX"},
+		{Common::DE_DEU, 0x4E79, 0x481F, 0x1B54, 0x483A, " FAITES VOS JEUX"}
+	};
+	for (uint i = 0; i < ARRAYSIZE(layouts); ++i) {
+		if (layouts[i].language != language)
+			continue;
+		byte entry[] = {
+			0x1C, 7, 0xFF, 2, 0xFF, 2, // Restore the previous two screen regions.
+			0xFF, 1, 0, 0, 0, 0, 1, 64, 0, 200, // Capture the full screen.
+			0, 0,                     // Draw the opening caption.
+			0xFF, 3, 1,               // The pause being replaced.
+			0xFF, 11, 44, 0, 0        // Arm the transition and draw the table.
+		};
+		WRITE_BE_UINT16(entry + 16, layouts[i].message);
+		WRITE_BE_UINT16(entry + 24, layouts[i].table);
+		const byte caption[] = {0x1D, 0, 83, 0, 102, 0, 136, 0, 8, 8, 15, 0, 0, 0, 1};
+		const uint length = strlen(layouts[i].caption) + 1;
+		if (!has(layouts[i].entry, sizeof(entry)) || !has(layouts[i].message, 6) ||
+			!has(layouts[i].table, 4) || !has(layouts[i].text, sizeof(caption) + length) ||
+			memcmp(&_data[layouts[i].entry], entry, sizeof(entry)) != 0 ||
+			_data[layouts[i].message] != 0x1C || _data[layouts[i].message + 1] != 2 ||
+			uint16BEAt(layouts[i].message + 4) != layouts[i].text ||
+			memcmp(&_data[layouts[i].text], caption, sizeof(caption)) != 0 ||
+			memcmp(&_data[layouts[i].text + sizeof(caption)], layouts[i].caption, length) != 0 ||
+			_data[layouts[i].table] != 0x1C || _data[layouts[i].table + 1] != 15)
+			return false;
+		const uint16 bubble = uint16BEAt(layouts[i].message + 2);
+		const uint16 table = uint16BEAt(layouts[i].table + 2);
+		byte bubbleDraw[] = {0x43, 0, 0, 0, 80, 0, 93, 0, 136, 0, 24, 0};
+		bubbleDraw[11] = platform == kOldTotPlatformAmiga ? 0 : 13;
+		const byte tableDraw[] = {0x60, 0, 0, 0, 0, 0, 0, 1, 64, 0, 200, 1};
+		if (!has(bubble, sizeof(bubbleDraw)) || !has(table, sizeof(tableDraw)) ||
+			memcmp(&_data[bubble], bubbleDraw, sizeof(bubbleDraw)) != 0 ||
+			memcmp(&_data[table], tableDraw, sizeof(tableDraw)) != 0)
+			return false;
+		_data[layouts[i].entry + 20] = 250;
+		return true;
+	}
+	return false;
 }
 
 } // End of namespace Emmanuelle
