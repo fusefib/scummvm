@@ -84,13 +84,13 @@ struct EmmanuelleSaveBoundaryState {
 
 		inInit = false;
 		paletteReady = false;
-		audioIdle = false;
+		audioReady = false;
 		regionsCoherent = false;
 		fightIdle = false;
 	}
 
 	bool stableChoice() const {
-		return runtimeReady && activeInput && paletteReady && audioIdle &&
+		return runtimeReady && activeInput && paletteReady && audioReady &&
 			regionsCoherent && fightIdle;
 	}
 
@@ -117,7 +117,7 @@ struct EmmanuelleSaveBoundaryState {
 			return kEmmanuelleSaveBoundaryNoInput;
 		if (!paletteReady)
 			return kEmmanuelleSaveBoundaryPresentation;
-		if (!audioIdle)
+		if (!audioReady)
 			return kEmmanuelleSaveBoundaryAudio;
 		if (!fightIdle)
 			return kEmmanuelleSaveBoundaryFight;
@@ -132,7 +132,7 @@ struct EmmanuelleSaveBoundaryState {
 	bool suspendedWait;
 	bool inInit;
 	bool paletteReady;
-	bool audioIdle;
+	bool audioReady;
 	bool regionsCoherent;
 	bool fightIdle;
 };
@@ -204,6 +204,9 @@ struct EmmanuelleNativeState {
 
 	byte sampleBank;
 	byte sampleCount;
+	// Restart the active Amiga sample on load; no mixer position is stored.
+	int16 amigaSampleSlot;
+	int16 amigaSampleRepeatCount;
 	bool initialInitComplete;
 	bool skipIntermediateSequenceNodes;
 	byte effectCommand;

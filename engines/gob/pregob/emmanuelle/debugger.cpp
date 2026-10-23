@@ -103,7 +103,7 @@ bool GobConsole::cmd_emmaState(int argc, const char **argv) {
 				 state.saveBoundary.stableChoice() ? 1U : 0U,
 				 state.saveBoundary.inInit ? 1U : 0U,
 				 state.saveBoundary.paletteReady ? 1U : 0U,
-				 state.saveBoundary.audioIdle ? 1U : 0U,
+				 state.saveBoundary.audioReady ? 1U : 0U,
 				 state.saveBoundary.regionsCoherent ? 1U : 0U,
 				 state.saveBoundary.fightIdle ? 1U : 0U,
 				 state.saveBoundary.canLoad() ? 1U : 0U,
