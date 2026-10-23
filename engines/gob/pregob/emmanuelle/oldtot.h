@@ -158,6 +158,7 @@ private:
 	bool has(uint32 offset, uint32 length) const;
 	bool patchIguacuAirport(Common::Language language);
 	bool patchCasinoPrediction();
+	bool patchCasinoEntryPause(OldTotPlatformTag platform, Common::Language language);
 	static uint16 inlineSize(byte subOpcode);
 
 	Common::Array<byte> _data;
