@@ -157,6 +157,8 @@ private:
 
 bool isAudioPlaying(OldTotPlatformTag platform, bool speakerActive,
 	bool samplePlaying);
+bool isAudioReadyForSave(OldTotPlatformTag platform, bool speakerActive,
+	bool samplePlaying, bool blocking);
 /** Native timer quanta per 50 Hz input pass; Amiga retains a remainder. */
 uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
 									 uint32 &accumulator);

@@ -100,8 +100,8 @@ EmmanuelleSaveBoundaryState PreGob_Emmanuelle::saveBoundaryState() const {
 			_renderer.presentationQuiescent() &&
 			!_renderer.amigaPaletteTransitionPending();
 	state.inInit = _currentModule == kModuleInit;
-	state.audioIdle = !isAudioPlaying(_platformTag, _audioActive,
-		_vm && _vm->_sound && _vm->_sound->blasterPlayingSound());
+	state.audioReady = isAudioReadyForSave(_platformTag, _audioActive,
+		_vm && _vm->_sound && _vm->_sound->blasterPlayingSound(), _audioBlocking);
 	state.regionsCoherent = _scriptVM &&
 		_renderer.savedRegionDepth() == _scriptVM->savedRegionDepth();
 	state.fightIdle = !_fightActive;
@@ -161,6 +161,12 @@ bool PreGob_Emmanuelle::exportSaveState(
 		return false;
 	state.nativeState.sampleBank = _sampleBank;
 	state.nativeState.sampleCount = _sampleCount;
+	state.nativeState.amigaSampleSlot = -1;
+	state.nativeState.amigaSampleRepeatCount = 0;
+	if (_platformTag == kOldTotPlatformAmiga && _vm->_sound->blasterPlayingSound()) {
+		state.nativeState.amigaSampleSlot = _audioSlot;
+		state.nativeState.amigaSampleRepeatCount = _audioRepeatCount;
+	}
 	state.nativeState.initialInitComplete =
 		_platformTag == kOldTotPlatformDOS || _initialInitComplete;
 	state.nativeState.skipIntermediateSequenceNodes = _skipIntermediateSequenceNodes;
@@ -390,6 +396,14 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 	} else {
 		_vm->_draw->blitInvalidated();
 		_vm->_video->retrace(false);
+	}
+	if (_platformTag == kOldTotPlatformAmiga && state.nativeState.amigaSampleSlot >= 0) {
+		// Restart only after validation and ownership transfer. Replaying the
+		// native command would also repeat its script delays and side effects.
+		const int16 slot = state.nativeState.amigaSampleSlot;
+		const int16 repeats = state.nativeState.amigaSampleRepeatCount;
+		_vm->_sound->blasterPlay(&_samples[slot], repeats, 0);
+		setAudioState(kOldTotAudioAmigaSample, slot, 0, repeats, false, true);
 	}
 }
 

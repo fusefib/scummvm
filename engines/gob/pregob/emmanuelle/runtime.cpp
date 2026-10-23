@@ -190,6 +190,15 @@ bool isAudioPlaying(OldTotPlatformTag platform, bool speakerActive,
 	return samplePlaying || (platform == kOldTotPlatformDOS && speakerActive);
 }
 
+bool isAudioReadyForSave(OldTotPlatformTag platform, bool speakerActive,
+		bool samplePlaying, bool blocking) {
+	// Amiga samples can continue through ordinary choices, unlike DOS tones
+	// and ST input-time playback. Save their restart state instead of waiting
+	// for a finite effect to finish or blocking forever on a looping sample.
+	return !isAudioPlaying(platform, speakerActive, samplePlaying) ||
+		(platform == kOldTotPlatformAmiga && !blocking);
+}
+
 uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
 									 uint32 &accumulator) {
 	// DOS services 5000 calibrated units/s, ST one tick per VBL, and Amiga

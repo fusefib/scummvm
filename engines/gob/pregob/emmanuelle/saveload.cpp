@@ -117,6 +117,16 @@ bool validateSaveState(const EmmanuelleSaveState &state) {
 		(state.platform == kOldTotPlatformAmiga &&
 		 (state.nativeState.sampleBank != 2 || state.nativeState.sampleCount != 19)))
 		return false;
+	const EmmanuelleNativeState &native = state.nativeState;
+	if (native.amigaSampleSlot == -1) {
+		if (native.amigaSampleRepeatCount != 0)
+			return false;
+	} else if (state.platform != kOldTotPlatformAmiga || native.amigaSampleSlot < 0 ||
+			native.amigaSampleSlot >= native.sampleCount ||
+			(native.amigaSampleRepeatCount != 1 && native.amigaSampleRepeatCount != 2 &&
+			 native.amigaSampleRepeatCount != -1)) {
+		return false;
+	}
 	return state.platform == kOldTotPlatformAtariST
 		? state.nativeState.effectCommand == 0 ||
 		  state.nativeState.effectCommand == 43 || state.nativeState.effectCommand == 44
@@ -224,7 +234,17 @@ void writePayload(const EmmanuelleSaveState &state,
 	stream.writeUint32LE(state.schedulerAccumulator);
 	stream.writeUint32LE(state.schedulerDebt);
 	stream.writeUint16LE(state.rememberedNode24Offset);
-	stream.writeByte(0); // Reserved in version 1.
+	// Use the formerly zero byte for slot+1 (bits 0..4) and once/twice/loop
+	// (bits 5..6). Silent saves keep their version-1 layout and bytes.
+	byte playback = 0;
+	if (state.nativeState.amigaSampleSlot >= 0) {
+		playback = state.nativeState.amigaSampleSlot + 1;
+		if (state.nativeState.amigaSampleRepeatCount == 2)
+			playback |= 0x20;
+		else if (state.nativeState.amigaSampleRepeatCount == -1)
+			playback |= 0x40;
+	}
+	stream.writeByte(playback);
 	stream.writeUint16LE(state.cursorDescriptor);
 	writeBool(stream, state.cursorDefined);
 	writeBool(stream, state.cursorVisible);
@@ -332,12 +352,17 @@ bool readPayload(Common::SeekableReadStream &stream,
 	state.schedulerAccumulator = stream.readUint32LE();
 	state.schedulerDebt = stream.readUint32LE();
 	state.rememberedNode24Offset = stream.readUint16LE();
-	const byte reservedStartup = stream.readByte();
+	const byte playback = stream.readByte();
 	state.cursorDescriptor = stream.readUint16LE();
 	if (!readBool(stream, state.cursorDefined) ||
 		!readBool(stream, state.cursorVisible) ||
-		reservedStartup != 0)
+		(playback & 0x80) != 0 || (playback & 0x60) == 0x60)
 		return false;
+	if (playback != 0) {
+		static const int16 repeats[] = {1, 2, -1};
+		state.nativeState.amigaSampleSlot = (playback & 0x1F) - 1;
+		state.nativeState.amigaSampleRepeatCount = repeats[(playback >> 5) & 3];
+	}
 
 	if (!readSurface(stream, state.renderer.framebuffer, false))
 		return false;
@@ -460,6 +485,8 @@ EmmanuelleRendererState::EmmanuelleRendererState() {
 EmmanuelleNativeState::EmmanuelleNativeState() {
 	sampleBank = 0;
 	sampleCount = 0;
+	amigaSampleSlot = -1;
+	amigaSampleRepeatCount = 0;
 
 	initialInitComplete = false;
 	skipIntermediateSequenceNodes = false;
