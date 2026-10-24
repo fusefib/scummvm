@@ -33,6 +33,20 @@
 namespace Gob {
 namespace Emmanuelle {
 
+namespace {
+struct HotelArrivalLayout {
+	Common::Language language;
+	uint16 arrival, roomSelection, helicopter;
+};
+
+static const HotelArrivalLayout kHotelArrivals[] = {
+	{Common::EN_ANY, 0x69B3, 0x77AB, 0x6C02},
+	{Common::ES_ESP, 0x667D, 0x7475, 0x68CC},
+	{Common::FR_FRA, 0x695B, 0x7753, 0x6BAA},
+	{Common::DE_DEU, 0x6A31, 0x7829, 0x6C80}
+};
+} // End of anonymous namespace
+
 bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 		Common::Language language, const Common::String &resourceName) {
 	if (platform != kOldTotPlatformDOS && platform != kOldTotPlatformAtariST &&
@@ -62,8 +76,10 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 	}
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADGAR.TOA" : "LOADGAR.TOT"))
 		return patchPartyHotspots(language) || patched;
-	if (resourceName.equalsIgnoreCase(amiga ? "LOADHOT.TOA" : "LOADHOT.TOT"))
-		return patchHotelRoomState(language) || patched;
+	if (resourceName.equalsIgnoreCase(amiga ? "LOADHOT.TOA" : "LOADHOT.TOT")) {
+		patched = patchHotelRoomState(language) || patched;
+		return patchHotelHelicopter(language) || patched;
+	}
 	if (!resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT"))
 		return patched;
 	return patchIguacuAirport(language) || patched;
@@ -379,15 +395,6 @@ bool OldTotData::patchPartyHotspots(Common::Language language) {
 // Applies to: All versions
 // Script: LOADHOT.TOT / LOADHOT.TOA
 bool OldTotData::patchHotelRoomState(Common::Language language) {
-	static const struct {
-		Common::Language language;
-		uint16 arrival, roomSelection;
-	} layouts[] = {
-		{Common::EN_ANY, 0x69B3, 0x77AB},
-		{Common::ES_ESP, 0x667D, 0x7475},
-		{Common::FR_FRA, 0x695B, 0x7753},
-		{Common::DE_DEU, 0x6A31, 0x7829}
-	};
 	if (!has(0x0044, 122) || uint16BEAt(0x0044) != 0x1C14)
 		return false;
 	for (uint i = 0; i < 20; ++i) {
@@ -396,24 +403,60 @@ bool OldTotData::patchHotelRoomState(Common::Language language) {
 		if (memcmp(&_data[0x0046 + 6 * i], clear, sizeof(clear)) != 0)
 			return false;
 	}
-	for (uint layout = 0; layout < ARRAYSIZE(layouts); ++layout) {
-		if (layouts[layout].language != language)
+	for (uint layout = 0; layout < ARRAYSIZE(kHotelArrivals); ++layout) {
+		if (kHotelArrivals[layout].language != language)
 			continue;
-		const uint16 arrival = layouts[layout].arrival;
+		const uint16 arrival = kHotelArrivals[layout].arrival;
 		if (!has(arrival, 76))
 			return false;
 		for (uint city = 0; city < 2; ++city) {
 			byte entry[] = {0x1C, 13, 0xFF, 5, 0, 44, 0, 0,
 				0x09, 0x45, 0, 0, 0, 0x44}; // Time, room selection, reset.
 			entry[7] = city == 0 ? 2 : 32;
-			WRITE_BE_UINT16(entry + 10, layouts[layout].roomSelection);
+			WRITE_BE_UINT16(entry + 10, kHotelArrivals[layout].roomSelection);
 			if (memcmp(&_data[arrival + 38 * city], entry, sizeof(entry)) != 0)
 				return false;
 		}
 		for (uint city = 0; city < 2; ++city) {
 			WRITE_BE_UINT16(&_data[arrival + 38 * city + 10], 0x0044);
-			WRITE_BE_UINT16(&_data[arrival + 38 * city + 12], layouts[layout].roomSelection);
+			WRITE_BE_UINT16(&_data[arrival + 38 * city + 12], kHotelArrivals[layout].roomSelection);
 		}
+		return true;
+	}
+	return false;
+}
+
+// Rio/Iguacu arrivals draw the helicopter without setting v[11], so it
+// cannot be boarded. Reuse the existing draw-and-enable helpers, after
+// patchHotelRoomState has put the temporary reset before room selection.
+//
+// Applies to: All versions
+// Script: LOADHOT.TOT / LOADHOT.TOA
+bool OldTotData::patchHotelHelicopter(Common::Language language) {
+	for (uint layout = 0; layout < ARRAYSIZE(kHotelArrivals); ++layout) {
+		const HotelArrivalLayout &site = kHotelArrivals[layout];
+		if (site.language != language)
+			continue;
+		if (!has(site.arrival, 76) || !has(site.helicopter, 26) ||
+			uint16BEAt(site.helicopter) != 0x1C02)
+			return false;
+		for (uint city = 0; city < 2; ++city) {
+			byte entry[] = {0x1C, 13, 0xFF, 5, 0, 44, 0, 0,
+				0x09, 0x45, 0, 0x44, 0, 0}; // Time, reset, room selection.
+			entry[7] = city == 0 ? 2 : 32;
+			WRITE_BE_UINT16(entry + 12, site.roomSelection);
+			const uint16 arrival = site.arrival + 38 * city;
+			const uint16 helper = site.helicopter + (city == 0 ? 16 : 6);
+			byte enabled[] = {0x1C, 2, 0, 0, 0xFF, 5, 0, 11, 0, 0};
+			WRITE_BE_UINT16(enabled + 2, site.helicopter);
+			enabled[9] = city == 0 ? 1 : 2;
+			if (memcmp(&_data[arrival], entry, sizeof(entry)) != 0 ||
+				uint16BEAt(arrival + 31) != site.helicopter ||
+				memcmp(&_data[helper], enabled, sizeof(enabled)) != 0)
+				return false;
+		}
+		WRITE_BE_UINT16(&_data[site.arrival + 31], site.helicopter + 16);
+		WRITE_BE_UINT16(&_data[site.arrival + 38 + 31], site.helicopter + 6);
 		return true;
 	}
 	return false;

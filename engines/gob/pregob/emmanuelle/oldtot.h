@@ -164,6 +164,7 @@ private:
 	bool patchCasinoReturn(Common::Language language);
 	bool patchPartyHotspots(Common::Language language);
 	bool patchHotelRoomState(Common::Language language);
+	bool patchHotelHelicopter(Common::Language language);
 	static uint16 inlineSize(byte subOpcode);
 
 	Common::Array<byte> _data;
