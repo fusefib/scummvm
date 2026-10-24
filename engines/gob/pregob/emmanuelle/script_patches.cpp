@@ -60,6 +60,8 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 			patched = patchCasinoPrediction() || patched;
 		return patched;
 	}
+	if (resourceName.equalsIgnoreCase(amiga ? "LOADGAR.TOA" : "LOADGAR.TOT"))
+		return patchPartyHotspots(language) || patched;
 	if (!resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT"))
 		return patched;
 	return patchIguacuAirport(language) || patched;
@@ -315,6 +317,58 @@ bool OldTotData::patchCasinoReturn(Common::Language language) {
 		return false;
 	WRITE_BE_UINT16(&_data[entry + 8], 2);
 	return true;
+}
+
+// At the Manaus garden party, the two guest hotspots test each other's
+// availability flags. A hidden guest can therefore remain clickable. Make
+// each hotspot use the same condition as its guest's existing draw branch.
+//
+// Applies to: All versions
+// Script: LOADGAR.TOT / LOADGAR.TOA
+bool OldTotData::patchPartyHotspots(Common::Language language) {
+	static const struct {
+		Common::Language language;
+		uint16 clickCondition, drawCondition, choice;
+		uint16 firstGuest, secondGuest, firstDraw, secondDraw;
+	} layouts[] = {
+		{Common::EN_ANY, 0x38B2, 0x3928, 0x38D6, 0x386D, 0x3884, 0x3910, 0x3914},
+		{Common::ES_ESP, 0x37B4, 0x382A, 0x37D8, 0x376F, 0x3786, 0x3812, 0x3816},
+		{Common::FR_FRA, 0x38EE, 0x3964, 0x3912, 0x38A9, 0x38C0, 0x394C, 0x3950},
+		{Common::DE_DEU, 0x3969, 0x39DF, 0x398D, 0x3924, 0x393B, 0x39C7, 0x39CB}
+	};
+	for (uint layout = 0; layout < ARRAYSIZE(layouts); ++layout) {
+		if (layouts[layout].language != language)
+			continue;
+		const uint16 click = layouts[layout].clickCondition;
+		const uint16 draw = layouts[layout].drawCondition;
+		if (!has(click, 24) || !has(draw, 24))
+			return false;
+		const uint16 offsets[] = {click, uint16(click + 12), draw, uint16(draw + 12)};
+		const uint16 no[] = {layouts[layout].firstGuest, layouts[layout].choice, 0, layouts[layout].secondDraw};
+		const uint16 yes[] = {layouts[layout].choice, layouts[layout].secondGuest, layouts[layout].firstDraw, 0};
+		byte tests[][12] = {
+			{0x21, 1, 0, 70, 0, 2, 1, 0, 0, 1, 0, 0}, // First hotspot: v[70] == 2.
+			{0x21, 1, 0, 68, 0, 0, 1, 0, 0, 1, 0, 0}, // Second hotspot: v[68] == 0.
+			{0x21, 1, 0, 68, 0, 0, 1, 0, 0, 1, 0, 0}, // First guest is drawn if v[68] == 0.
+			{0x21, 1, 0, 70, 0, 2, 1, 0, 0, 1, 0, 0}  // Second guest is drawn if v[70] != 2.
+		};
+		for (uint i = 0; i < ARRAYSIZE(offsets); ++i) {
+			WRITE_BE_UINT16(tests[i] + 7, no[i]);
+			WRITE_BE_UINT16(tests[i] + 10, yes[i]);
+			if (memcmp(&_data[offsets[i]], tests[i], sizeof(tests[i])) != 0)
+				return false;
+		}
+		WRITE_BE_UINT16(&_data[click + 2], 68);
+		WRITE_BE_UINT16(&_data[click + 4], 0);
+		WRITE_BE_UINT16(&_data[click + 7], layouts[layout].choice);
+		WRITE_BE_UINT16(&_data[click + 10], layouts[layout].firstGuest);
+		WRITE_BE_UINT16(&_data[click + 14], 70);
+		WRITE_BE_UINT16(&_data[click + 16], 2);
+		WRITE_BE_UINT16(&_data[click + 19], layouts[layout].secondGuest);
+		WRITE_BE_UINT16(&_data[click + 22], layouts[layout].choice);
+		return true;
+	}
+	return false;
 }
 
 } // End of namespace Emmanuelle
