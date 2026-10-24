@@ -43,6 +43,7 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 		return false;
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT")) {
 		bool patched = patchCasinoEntryPause(platform, language);
+		patched = patchRouletteTwenty(language) || patched;
 		if (language == Common::EN_ANY)
 			patched = patchCasinoPrediction() || patched;
 		return patched;
@@ -209,6 +210,45 @@ bool OldTotData::patchCasinoEntryPause(OldTotPlatformTag platform,
 			memcmp(&_data[table], tableDraw, sizeof(tableDraw)) != 0)
 			return false;
 		_data[layouts[i].entry + 20] = 250;
+		return true;
+	}
+	return false;
+}
+
+// Roulette's random-result table assigns 21 to both slots 20 and 21, so a
+// normal spin cannot select 20. Correct the existing assignment; selection,
+// the lucky-number path and settlement retain their original behavior.
+//
+// Applies to: All versions
+// Script: LOADCAS.TOT / LOADCAS.TOA
+bool OldTotData::patchRouletteTwenty(Common::Language language) {
+	static const struct {
+		Common::Language language;
+		uint16 table, firstResult;
+	} layouts[] = {
+		{Common::EN_ANY, 0x4CC5, 0x4B9D},
+		{Common::ES_ESP, 0x4B40, 0x4A18},
+		{Common::FR_FRA, 0x4C99, 0x4B71},
+		{Common::DE_DEU, 0x4D08, 0x4BE0}
+	};
+	for (uint layout = 0; layout < ARRAYSIZE(layouts); ++layout) {
+		if (layouts[layout].language != language)
+			continue;
+		const uint16 table = layouts[layout].table;
+		const uint16 firstResult = layouts[layout].firstResult;
+		const byte random[] = {0x20, 1, 37}; // Select one of 37 result handlers.
+		if (!has(table, 77) || !has(firstResult, 37 * 8) ||
+			memcmp(&_data[table], random, sizeof(random)) != 0)
+			return false;
+		for (uint result = 0; result < 37; ++result) {
+			byte assignment[] = {0x1C, 1, 0xFF, 5, 0, 127, 0, 0};
+			assignment[7] = result == 20 ? 21 : result; // Set v[127].
+			const uint16 handler = firstResult + 8 * result;
+			if (uint16BEAt(table + 3 + 2 * result) != handler ||
+				memcmp(&_data[handler], assignment, sizeof(assignment)) != 0)
+				return false;
+		}
+		WRITE_BE_UINT16(&_data[firstResult + 20 * 8 + 6], 20);
 		return true;
 	}
 	return false;
