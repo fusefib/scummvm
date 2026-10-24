@@ -163,6 +163,7 @@ private:
 	bool patchMeterBand();
 	bool patchCasinoReturn(Common::Language language);
 	bool patchPartyHotspots(Common::Language language);
+	bool patchHotelRoomState(Common::Language language);
 	static uint16 inlineSize(byte subOpcode);
 
 	Common::Array<byte> _data;

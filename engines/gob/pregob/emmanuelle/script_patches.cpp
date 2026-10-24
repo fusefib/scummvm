@@ -62,6 +62,8 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 	}
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADGAR.TOA" : "LOADGAR.TOT"))
 		return patchPartyHotspots(language) || patched;
+	if (resourceName.equalsIgnoreCase(amiga ? "LOADHOT.TOA" : "LOADHOT.TOT"))
+		return patchHotelRoomState(language) || patched;
 	if (!resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT"))
 		return patched;
 	return patchIguacuAirport(language) || patched;
@@ -365,6 +367,53 @@ bool OldTotData::patchPartyHotspots(Common::Language language) {
 		WRITE_BE_UINT16(&_data[click + 16], 2);
 		WRITE_BE_UINT16(&_data[click + 19], layouts[layout].secondGuest);
 		WRITE_BE_UINT16(&_data[click + 22], layouts[layout].choice);
+		return true;
+	}
+	return false;
+}
+
+// Rio/Iguacu hotel arrivals select the room state, then erase it with the
+// temporary-variable reset. Reset first and select afterwards, retaining
+// the preceding time advance and the rest of the arrival sequence.
+//
+// Applies to: All versions
+// Script: LOADHOT.TOT / LOADHOT.TOA
+bool OldTotData::patchHotelRoomState(Common::Language language) {
+	static const struct {
+		Common::Language language;
+		uint16 arrival, roomSelection;
+	} layouts[] = {
+		{Common::EN_ANY, 0x69B3, 0x77AB},
+		{Common::ES_ESP, 0x667D, 0x7475},
+		{Common::FR_FRA, 0x695B, 0x7753},
+		{Common::DE_DEU, 0x6A31, 0x7829}
+	};
+	if (!has(0x0044, 122) || uint16BEAt(0x0044) != 0x1C14)
+		return false;
+	for (uint i = 0; i < 20; ++i) {
+		byte clear[] = {0xFF, 5, 0, 0, 0, 0};
+		clear[3] = i < 10 ? 10 + i : 90 + i - 10;
+		if (memcmp(&_data[0x0046 + 6 * i], clear, sizeof(clear)) != 0)
+			return false;
+	}
+	for (uint layout = 0; layout < ARRAYSIZE(layouts); ++layout) {
+		if (layouts[layout].language != language)
+			continue;
+		const uint16 arrival = layouts[layout].arrival;
+		if (!has(arrival, 76))
+			return false;
+		for (uint city = 0; city < 2; ++city) {
+			byte entry[] = {0x1C, 13, 0xFF, 5, 0, 44, 0, 0,
+				0x09, 0x45, 0, 0, 0, 0x44}; // Time, room selection, reset.
+			entry[7] = city == 0 ? 2 : 32;
+			WRITE_BE_UINT16(entry + 10, layouts[layout].roomSelection);
+			if (memcmp(&_data[arrival + 38 * city], entry, sizeof(entry)) != 0)
+				return false;
+		}
+		for (uint city = 0; city < 2; ++city) {
+			WRITE_BE_UINT16(&_data[arrival + 38 * city + 10], 0x0044);
+			WRITE_BE_UINT16(&_data[arrival + 38 * city + 12], layouts[layout].roomSelection);
+		}
 		return true;
 	}
 	return false;
