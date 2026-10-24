@@ -160,6 +160,7 @@ private:
 	bool patchCasinoPrediction();
 	bool patchCasinoEntryPause(OldTotPlatformTag platform, Common::Language language);
 	bool patchRouletteTwenty(Common::Language language);
+	bool patchMeterBand();
 	static uint16 inlineSize(byte subOpcode);
 
 	Common::Array<byte> _data;
