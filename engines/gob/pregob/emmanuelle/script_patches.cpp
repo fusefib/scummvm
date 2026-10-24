@@ -55,6 +55,7 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT")) {
 		patched = patchCasinoEntryPause(platform, language) || patched;
 		patched = patchRouletteTwenty(language) || patched;
+		patched = patchCasinoReturn(language) || patched;
 		if (language == Common::EN_ANY)
 			patched = patchCasinoPrediction() || patched;
 		return patched;
@@ -293,6 +294,26 @@ bool OldTotData::patchMeterBand() {
 		memcmp(&_data[draw], descriptor, sizeof(descriptor)) != 0)
 		return false;
 	WRITE_BE_UINT16(&_data[0x08BB], 0x08AD);
+	return true;
+}
+
+// The French/German Rio casino-bar encounter returns to hotel location 22
+// (Manaus). Use location 2 (Rio), as in the English and Spanish scripts.
+//
+// Applies to: French DOS/ST/Amiga and German Amiga
+// Script: LOADCAS.TOT / LOADCAS.TOA
+bool OldTotData::patchCasinoReturn(Common::Language language) {
+	const uint16 entry = language == Common::FR_FRA ? 0x4EB6 :
+		(language == Common::DE_DEU ? 0x4F25 : 0);
+	const byte sequence[] = {
+		0x1C, 3, 0x09, 0x45, // Advance time.
+		0xFF, 5, 0, 44, 0, 22, // Set hotel location v[44] = 22.
+		0xFF, 5, 0, 0, 0, 2   // Return through the hotel module selector.
+	};
+	if (!entry || !has(entry, sizeof(sequence)) ||
+		memcmp(&_data[entry], sequence, sizeof(sequence)) != 0)
+		return false;
+	WRITE_BE_UINT16(&_data[entry + 8], 2);
 	return true;
 }
 
