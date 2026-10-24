@@ -39,18 +39,29 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 		platform != kOldTotPlatformAmiga)
 		return false;
 	const bool amiga = platform == kOldTotPlatformAmiga;
+	if (language != Common::EN_ANY && language != Common::ES_ESP &&
+		language != Common::FR_FRA && language != Common::DE_DEU)
+		return false;
 	if ((language == Common::ES_ESP && amiga) || (language == Common::DE_DEU && !amiga))
 		return false;
+	bool patched = false;
+	if (resourceName.equalsIgnoreCase(amiga ? "LOADHOT.TOA" : "LOADHOT.TOT") ||
+		resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT") ||
+		resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT") ||
+		resourceName.equalsIgnoreCase(amiga ? "LOADFAV.TOA" : "LOADFAV.TOT") ||
+		resourceName.equalsIgnoreCase(amiga ? "LOADGAR.TOA" : "LOADGAR.TOT") ||
+		resourceName.equalsIgnoreCase(amiga ? "LOADPLA.TOA" : "LOADPLA.TOT"))
+		patched = patchMeterBand();
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT")) {
-		bool patched = patchCasinoEntryPause(platform, language);
+		patched = patchCasinoEntryPause(platform, language) || patched;
 		patched = patchRouletteTwenty(language) || patched;
 		if (language == Common::EN_ANY)
 			patched = patchCasinoPrediction() || patched;
 		return patched;
 	}
 	if (!resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT"))
-		return false;
-	return patchIguacuAirport(language);
+		return patched;
+	return patchIguacuAirport(language) || patched;
 }
 
 // A failed approach at Iguacu airport branches to Salvador's failure handler.
@@ -253,6 +264,36 @@ bool OldTotData::patchRouletteTwenty(Common::Language language) {
 		return true;
 	}
 	return false;
+}
+
+// The lipstick meter's 25..49 branch repeats the low band. Its intermediate
+// graphic already exists in helper 0x08AD; redirect that branch to it.
+//
+// Applies to: All versions, shared meter in LOADHOT, LOADAERO, LOADCAS,
+// LOADFAV, LOADGAR and LOADPLA (.TOT / .TOA)
+bool OldTotData::patchMeterBand() {
+	const uint16 conditions[] = {0x08A1, 0x08B1, 0x08C1, 0x08D1};
+	const byte comparisons[][12] = {
+		{0x21, 0, 0, 30, 0, 75, 1, 0x08, 0x99, 1, 0x08, 0x9D}, // v[30] < 75
+		{0x21, 0, 0, 30, 0, 50, 1, 0x08, 0xA1, 1, 0x08, 0xBD}, // v[30] < 50
+		{0x21, 0, 0, 30, 0, 25, 1, 0x08, 0xB1, 1, 0x08, 0xBD}, // v[30] < 25
+		{0x21, 1, 0, 30, 0, 0, 1, 0x08, 0xC1, 1, 0x08, 0xCD}  // v[30] == 0
+	};
+	if (!has(0x08A1, 60))
+		return false;
+	for (uint i = 0; i < ARRAYSIZE(conditions); ++i) {
+		if (memcmp(&_data[conditions[i]], comparisons[i], sizeof(comparisons[i])) != 0)
+			return false;
+	}
+	if (uint16BEAt(0x08AD) != 0x1C01) // Sequence containing one draw.
+		return false;
+	const uint16 draw = uint16BEAt(0x08AF);
+	const byte descriptor[] = {0x65, 0, 0, 0, 0, 0, 162, 0, 32, 0, 22, 53};
+	if (!has(draw, sizeof(descriptor)) ||
+		memcmp(&_data[draw], descriptor, sizeof(descriptor)) != 0)
+		return false;
+	WRITE_BE_UINT16(&_data[0x08BB], 0x08AD);
+	return true;
 }
 
 } // End of namespace Emmanuelle
