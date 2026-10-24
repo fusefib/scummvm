@@ -76,6 +76,8 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 	}
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADGAR.TOA" : "LOADGAR.TOT"))
 		return patchPartyHotspots(language) || patched;
+	if (resourceName.equalsIgnoreCase(amiga ? "LOADFAV.TOA" : "LOADFAV.TOT"))
+		return patchVendorAffordability(language) || patched;
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADHOT.TOA" : "LOADHOT.TOT")) {
 		patched = patchHotelRoomState(language) || patched;
 		return patchHotelHelicopter(language) || patched;
@@ -458,6 +460,72 @@ bool OldTotData::patchHotelHelicopter(Common::Language language) {
 		}
 		WRITE_BE_UINT16(&_data[site.arrival + 31], site.helicopter + 16);
 		WRITE_BE_UINT16(&_data[site.arrival + 38 + 31], site.helicopter + 6);
+		return true;
+	}
+	return false;
+}
+
+// The favela vendor debits the price before testing for negative cash.
+// Subtraction saturates at zero, so an unaffordable offer is accepted.
+// Compare first and debit only affordable offers. Each shortened offer leaves
+// six bytes for cleanup before the existing rejection scene; the old refund
+// records hold the paid path. Record sizes and following offsets stay unchanged.
+//
+// Applies to: All versions
+// Script: LOADFAV.TOT / LOADFAV.TOA
+bool OldTotData::patchVendorAffordability(Common::Language language) {
+	static const struct {
+		Common::Language language;
+		uint16 firstOffer, rejected, paidOutcome;
+	} layouts[] = {
+		{Common::EN_ANY, 0x1505, 0x15F9, 0x149E},
+		{Common::ES_ESP, 0x150D, 0x1601, 0x14A6},
+		{Common::FR_FRA, 0x14F9, 0x15ED, 0x1492},
+		{Common::DE_DEU, 0x152B, 0x161F, 0x14C4}
+	};
+	const uint16 prices[] = {50, 10, 1};
+	for (uint layout = 0; layout < ARRAYSIZE(layouts); ++layout) {
+		if (layouts[layout].language != language)
+			continue;
+		const uint16 first = layouts[layout].firstOffer;
+		if (!has(first - 72, 114))
+			return false;
+		for (uint i = 0; i < ARRAYSIZE(prices); ++i) {
+			const uint16 offer = first + 14 * i;
+			const uint16 condition = first - 12 * (i + 1);
+			const uint16 refund = first - 48 - 12 * i;
+			byte debitFirst[] = {0x1C, 4, 0xFF, 2, 0xFF, 2, 0xFF, 9, 0, 21, 0, 0, 0, 0};
+			byte negative[] = {0x21, 0, 0, 21, 0, 0, 1, 0, 0, 1, 0, 0};
+			byte refundThenReject[] = {0x1C, 3, 0xFF, 7, 0, 21, 0, 0, 0xFF, 2, 0, 0};
+			WRITE_BE_UINT16(debitFirst + 10, prices[i]);
+			WRITE_BE_UINT16(debitFirst + 12, condition);
+			WRITE_BE_UINT16(negative + 7, layouts[layout].paidOutcome);
+			WRITE_BE_UINT16(negative + 10, refund);
+			// The original refund records list the prices in reverse order.
+			WRITE_BE_UINT16(refundThenReject + 6, prices[2 - i]);
+			WRITE_BE_UINT16(refundThenReject + 10, layouts[layout].rejected);
+			if (memcmp(&_data[offer], debitFirst, sizeof(debitFirst)) != 0 ||
+				memcmp(&_data[condition], negative, sizeof(negative)) != 0 ||
+				memcmp(&_data[refund], refundThenReject, sizeof(refundThenReject)) != 0)
+				return false;
+		}
+		for (uint i = 0; i < ARRAYSIZE(prices); ++i) {
+			const uint16 offer = first + 14 * i;
+			const uint16 condition = first - 12 * (i + 1);
+			const uint16 debit = first - 48 - 12 * i;
+			byte restoreThenCheck[] = {0x1C, 3, 0xFF, 2, 0xFF, 2, 0, 0,
+				0x1C, 2, 0xFF, 2, 0, 0}; // Rejection cleanup follows the offer.
+			byte debitThenContinue[] = {0x1C, 2, 0xFF, 9, 0, 21, 0, 0, 0, 0, 0, 0};
+			WRITE_BE_UINT16(restoreThenCheck + 6, condition);
+			WRITE_BE_UINT16(restoreThenCheck + 12, layouts[layout].rejected);
+			WRITE_BE_UINT16(debitThenContinue + 6, prices[i]);
+			WRITE_BE_UINT16(debitThenContinue + 8, layouts[layout].paidOutcome);
+			memcpy(&_data[offer], restoreThenCheck, sizeof(restoreThenCheck));
+			memcpy(&_data[debit], debitThenContinue, sizeof(debitThenContinue));
+			WRITE_BE_UINT16(&_data[condition + 4], prices[i]);
+			WRITE_BE_UINT16(&_data[condition + 7], debit);
+			WRITE_BE_UINT16(&_data[condition + 10], offer + 8);
+		}
 		return true;
 	}
 	return false;
