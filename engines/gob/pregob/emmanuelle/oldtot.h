@@ -162,6 +162,7 @@ private:
 	bool patchRouletteTwenty(Common::Language language);
 	bool patchMeterBand();
 	bool patchCasinoReturn(Common::Language language);
+	bool patchPartyHotspots(Common::Language language);
 	static uint16 inlineSize(byte subOpcode);
 
 	Common::Array<byte> _data;
