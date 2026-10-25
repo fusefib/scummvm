@@ -166,6 +166,7 @@ private:
 	bool patchHotelRoomState(Common::Language language);
 	bool patchHotelHelicopter(Common::Language language);
 	bool patchVendorAffordability(Common::Language language);
+	bool patchLobbyGuestReset(OldTotPlatformTag platform, Common::Language language);
 	static uint16 inlineSize(byte subOpcode);
 
 	Common::Array<byte> _data;

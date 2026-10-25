@@ -80,7 +80,8 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 		return patchVendorAffordability(language) || patched;
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADHOT.TOA" : "LOADHOT.TOT")) {
 		patched = patchHotelRoomState(language) || patched;
-		return patchHotelHelicopter(language) || patched;
+		patched = patchHotelHelicopter(language) || patched;
+		return patchLobbyGuestReset(platform, language) || patched;
 	}
 	if (!resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT"))
 		return patched;
@@ -528,6 +529,50 @@ bool OldTotData::patchVendorAffordability(Common::Language language) {
 		return true;
 	}
 	return false;
+}
+
+// The French/German lobby omits the guest reset used in English/Spanish.
+// After a completed encounter, selection can leave the old guest clickable
+// even though that guest is no longer drawn. Clear v[13] before selecting.
+//
+// Applies to: French DOS/ST/Amiga and German Amiga
+// Script: LOADHOT.TOT / LOADHOT.TOA
+bool OldTotData::patchLobbyGuestReset(OldTotPlatformTag platform,
+		Common::Language language) {
+	if (language != Common::FR_FRA && language != Common::DE_DEU)
+		return false;
+	const uint16 lobby = language == Common::DE_DEU ? 0x7840 : 0x776A;
+	const byte frenchST[] = {0x1E, 13, 0xFF, 11, 44, 0xD1, 0xF7, 0xAA, 0x61,
+		0xAA, 0x79, 0xAA, 0x6D, 1, 0xCA, 9, 0x59, 0x5C, 0x5D, 0x68, 0xDB,
+		0x77, 0x3C, 0x72, 0xAA, 0x76, 0xE5, 0x76, 0xC0};
+	const byte frenchAmiga[] = {0x1E, 13, 0xFF, 11, 44, 0xE1, 0x56, 0xB1, 0x86,
+		0xB1, 0x9E, 0xB1, 0x92, 1, 0xCA, 9, 0x59, 0x5C, 0x5D, 0x68, 0xDB,
+		0x77, 0x3C, 0x72, 0xAA, 0x76, 0xE5, 0x76, 0xC0};
+	const byte germanAmiga[] = {0x1E, 13, 0xFF, 11, 44, 0xE2, 0x2C, 0xB2, 0x5C,
+		0xB2, 0x74, 0xB2, 0x68, 1, 0xCA, 9, 0x59, 0x5D, 0x33, 0x69, 0xB1,
+		0x78, 0x12, 0x73, 0x80, 0x77, 0xBB, 0x77, 0x96};
+	const byte *original = language == Common::DE_DEU ? germanAmiga :
+		platform == kOldTotPlatformAmiga ? frenchAmiga : frenchST;
+	if (_data.size() >= 0xFF00 || !has(lobby, 29) ||
+		memcmp(&_data[lobby], original, 29) != 0)
+		return false;
+	const uint16 guest = uint16BEAt(lobby + 27);
+	byte selector[] = {8, 0, 20, 3, 6, 8, 12, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0};
+	WRITE_BE_UINT16(selector + 8, guest - 7);
+	for (uint i = 0; i < 3; ++i)
+		WRITE_BE_UINT16(selector + 11 + 3 * i, guest - 36);
+	if (!has(guest, sizeof(selector)) ||
+		memcmp(&_data[guest], selector, sizeof(selector)) != 0)
+		return false;
+
+	// Keep every original call in place; replace only the final selection call.
+	const uint16 helper = _data.size();
+	const byte reset[] = {0x1C, 2, 0xFF, 5, 0, 13, 0, 0};
+	_data.resize(helper + 10);
+	memcpy(&_data[helper], reset, sizeof(reset));
+	WRITE_BE_UINT16(&_data[helper + 8], guest);
+	WRITE_BE_UINT16(&_data[lobby + 27], helper);
+	return true;
 }
 
 } // End of namespace Emmanuelle
