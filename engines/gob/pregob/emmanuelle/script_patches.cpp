@@ -85,7 +85,8 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 	}
 	if (!resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT"))
 		return patched;
-	return patchIguacuAirport(language) || patched;
+	patched = patchIguacuAirport(language) || patched;
+	return patchAirportFallback(platform, language) || patched;
 }
 
 // A failed approach at Iguacu airport branches to Salvador's failure handler.
@@ -573,6 +574,53 @@ bool OldTotData::patchLobbyGuestReset(OldTotPlatformTag platform,
 	WRITE_BE_UINT16(&_data[helper + 8], guest);
 	WRITE_BE_UINT16(&_data[lobby + 27], helper);
 	return true;
+}
+
+// At Iguacu/Manaus's special hours, these Amiga scripts use Rio's score
+// test. Below 75 this selects Rio's character/visit flag in the wrong city.
+// Use the existing local tests; their successful ending is already the same.
+//
+// Applies to: French and German Amiga
+// Script: LOADAERO.TOA
+bool OldTotData::patchAirportFallback(OldTotPlatformTag platform,
+		Common::Language language) {
+	if (platform != kOldTotPlatformAmiga)
+		return false;
+	static const struct {
+		Common::Language language;
+		uint16 first, rio, rioOrdinary, ending, ordinary[2];
+	} layouts[] = {
+		{Common::FR_FRA, 0x4706, 0x46DF, 0x46D9, 0x3B2A, {0x4693, 0x46AD}},
+		{Common::DE_DEU, 0x4856, 0x482F, 0x4829, 0x3C7A, {0x47E3, 0x47FD}}
+	};
+	for (uint layout = 0; layout < ARRAYSIZE(layouts); ++layout) {
+		if (layouts[layout].language != language)
+			continue;
+		byte rio[] = {0x21, 0, 0, 30, 0, 75, 1, 0, 0, 1, 0, 0};
+		WRITE_BE_UINT16(rio + 7, layouts[layout].ending);
+		WRITE_BE_UINT16(rio + 10, layouts[layout].rioOrdinary);
+		if (!has(layouts[layout].rio, sizeof(rio)) ||
+			memcmp(&_data[layouts[layout].rio], rio, sizeof(rio)) != 0)
+			return false;
+		for (uint city = 0; city < 2; ++city) {
+			const uint16 local = layouts[layout].first - 12 + 23 * city;
+			byte condition[] = {0x21, 0, 0, 30, 0, 75, 1, 0, 0, 1, 0, 0,
+				8, 0, 20, 1, 0, 1, 0, 0, 1, 0, 0};
+			condition[16] = city == 0 ? 11 : 20;
+			WRITE_BE_UINT16(condition + 7, layouts[layout].ending);
+			WRITE_BE_UINT16(condition + 10, layouts[layout].ordinary[city]);
+			WRITE_BE_UINT16(condition + 18, layouts[layout].ordinary[city]);
+			WRITE_BE_UINT16(condition + 21, layouts[layout].rio);
+			if (!has(local, sizeof(condition)) ||
+				memcmp(&_data[local], condition, sizeof(condition)) != 0)
+				return false;
+		}
+		for (uint city = 0; city < 2; ++city)
+			WRITE_BE_UINT16(&_data[layouts[layout].first + 9 + 23 * city],
+				layouts[layout].first - 12 + 23 * city);
+		return true;
+	}
+	return false;
 }
 
 } // End of namespace Emmanuelle
