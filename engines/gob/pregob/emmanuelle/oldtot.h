@@ -172,6 +172,7 @@ private:
 	bool patchVendorAffordability(Common::Language language);
 	bool patchLobbyGuestReset(OldTotPlatformTag platform, Common::Language language);
 	bool patchAirportFallback(OldTotPlatformTag platform, Common::Language language);
+	bool patchRouletteConfirmation(OldTotPlatformTag platform, Common::Language language);
 	static uint16 inlineSize(byte subOpcode);
 
 	Common::Array<byte> _data;
