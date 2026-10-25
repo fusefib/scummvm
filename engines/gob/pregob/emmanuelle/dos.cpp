@@ -141,6 +141,10 @@ uint16 dosRandomBounded(uint32 &state, uint16 upperExclusive) {
 void getDosSchedulerTiming(byte period, bool alternateTiming,
 						   uint16 &reload, uint16 &initialCountdown) {
 	reload = (uint16)period * (alternateTiming ? 70 : 100);
+	// Use common choice holds in the ordinary script path; keep the alternate
+	// DOS conversion for callers that explicitly request it.
+	if (!alternateTiming && (period == 50 || period == 100 || period == 200))
+		reload = (period == 50 ? 1500 : 2000) * 5;
 	initialCountdown = 1;
 }
 
