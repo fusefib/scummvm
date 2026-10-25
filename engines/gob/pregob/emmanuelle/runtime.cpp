@@ -510,6 +510,9 @@ uint16 atariStRandomBounded(uint32 nativeRandomValue,
 void getAtariStSchedulerTiming(byte period, uint16 &reload,
 							   uint16 &initialCountdown) {
 	reload = period == 200 ? 170 : period;
+	// One host pass supplies one ST tick; zero is tested before decrementing.
+	if (period == 50 || period == 100 || period == 200)
+		reload = (period == 50 ? 1500 : 2000) / 20 - 1;
 	initialCountdown = 0;
 }
 
@@ -764,6 +767,9 @@ uint16 amigaNativeDelayMilliseconds(uint16 units) {
 void getAmigaSchedulerTiming(byte period, uint16 &reload,
 							 uint16 &initialCountdown) {
 	reload = period == 200 ? 60 : 25;
+	// Amiga timer quanta represent 50 ms; include the zero-test quantum.
+	if (period == 50 || period == 100 || period == 200)
+		reload = (period == 50 ? 1500 : 2000) / 50 - 1;
 	initialCountdown = 0;
 }
 
