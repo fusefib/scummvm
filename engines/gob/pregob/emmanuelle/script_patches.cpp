@@ -69,6 +69,7 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT")) {
 		patched = patchCasinoEntryPause(platform, language) || patched;
 		patched = patchRouletteTwenty(language) || patched;
+		patched = patchRouletteConfirmation(platform, language) || patched;
 		patched = patchCasinoReturn(language) || patched;
 		if (language == Common::EN_ANY)
 			patched = patchCasinoPrediction() || patched;
@@ -618,6 +619,53 @@ bool OldTotData::patchAirportFallback(OldTotPlatformTag platform,
 		for (uint city = 0; city < 2; ++city)
 			WRITE_BE_UINT16(&_data[layouts[layout].first + 9 + 23 * city],
 				layouts[layout].first - 12 + 23 * city);
+		return true;
+	}
+	return false;
+}
+
+// Roulette result 18 settles and immediately clears its display, unlike the
+// other 36 results. Keep its six drawing calls and settlement, then wait for input.
+// Append the replacement so that all existing record addresses stay valid.
+//
+// Applies to: All versions
+// Script: LOADCAS.TOT / LOADCAS.TOA
+bool OldTotData::patchRouletteConfirmation(OldTotPlatformTag platform,
+		Common::Language language) {
+	static const struct {
+		Common::Language language;
+		bool amiga;
+		uint16 result, draws[6];
+	} layouts[] = {
+		{Common::EN_ANY, false, 0x499B, {0x6460, 0x66FE, 0x6AAF, 0x6B6D, 0x4847, 0x66B6}},
+		{Common::ES_ESP, false, 0x4816, {0x62DB, 0x6579, 0x692A, 0x69E8, 0x46C2, 0x6531}},
+		{Common::FR_FRA, false, 0x496F, {0x6434, 0x66D2, 0x6A83, 0x6B41, 0x481B, 0x668A}},
+		{Common::EN_ANY, true, 0x499B, {0x6536, 0x6845, 0x6CAF, 0x6D6E, 0x4847, 0x67F8}},
+		{Common::ES_ESP, true, 0x4816, {0x63B1, 0x66C0, 0x6B2A, 0x6BE9, 0x46C2, 0x6673}},
+		{Common::FR_FRA, true, 0x496F, {0x650A, 0x6819, 0x6C83, 0x6D42, 0x481B, 0x67CC}},
+		{Common::DE_DEU, true, 0x49DE, {0x6579, 0x6888, 0x6CF2, 0x6DB1, 0x488A, 0x683B}}
+	};
+	for (uint i = 0; i < ARRAYSIZE(layouts); ++i) {
+		if (layouts[i].language != language ||
+				layouts[i].amiga != (platform == kOldTotPlatformAmiga))
+			continue;
+		byte original[] = {0x1C, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 11, 101};
+		for (uint draw = 0; draw < 6; ++draw)
+			WRITE_BE_UINT16(original + 2 + 2 * draw, layouts[i].draws[draw]);
+		if (_data.size() >= 0xFF00 || !has(layouts[i].result, sizeof(original)) ||
+				memcmp(&_data[layouts[i].result], original, sizeof(original)) != 0)
+			return false;
+
+		// Addresses starting with FF are reserved for inline instructions.
+		const uint16 replacement = _data.size();
+		_data.resize(replacement + 20);
+		memcpy(&_data[replacement], original, sizeof(original));
+		_data[replacement + 1] = 8;
+		_data[replacement + 17] = 0xFF;
+		_data[replacement + 18] = 3;
+		_data[replacement + 19] = 0;
+		_data[layouts[i].result + 1] = 1;
+		WRITE_BE_UINT16(&_data[layouts[i].result + 2], replacement);
 		return true;
 	}
 	return false;
