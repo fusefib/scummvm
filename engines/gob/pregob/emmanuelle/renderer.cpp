@@ -1082,7 +1082,7 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 				// Gameplay frames sleep after presentation; INIT keeps its native holds.
 				if (_currentModule != kModuleInit) {
 					if (rendered) {
-						const uint16 milliseconds = 100 + (uint16)setup.frameDelay * 20;
+						const uint16 milliseconds = 100 + (uint16)setup.frameDelay * _animationSpeedFactor * 10;
 						if (_platformTag == kOldTotPlatformAtariST)
 							delayAtariAnimation(milliseconds);
 						else

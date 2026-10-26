@@ -26,6 +26,7 @@
  */
 
 #include "engines/advancedDetector.h"
+#include "engines/dialogs.h"
 
 #include "backends/keymapper/keymap.h"
 #include "common/config-manager.h"
@@ -34,9 +35,13 @@
 
 #include "common/translation.h"
 
+#include "gui/ThemeEval.h"
+#include "gui/widget.h"
+
 #include "gob/gameidtotype.h"
 #include "gob/gob.h"
 #include "gob/pregob/emmanuelle/input_keymaps.h"
+#include "gob/pregob/emmanuelle/runtime.h"
 
 // For struct GOBGameDescription.
 #include "gob/detection/detection.h"
@@ -82,6 +87,82 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 
+class EmmanuelleOptionsWidget : public GUI::ExtraGuiOptionsWidget {
+	enum {
+		kSpeedChangedCmd = 'ESCH'
+	};
+
+public:
+	EmmanuelleOptionsWidget(GUI::GuiObject *boss, const Common::String &name,
+			const Common::String &domain, const ExtraGuiOptions &options) :
+		GUI::ExtraGuiOptionsWidget(boss, name, domain, options),
+		_optionCount(options.size()) {
+		// The options container owns its child widgets.
+		_speedLabel = nullptr;
+		_speedSlider = nullptr;
+
+		_speedLabel = new GUI::StaticTextWidget(widgetsBoss(),
+			_dialogLayout + ".AnimationSpeedLabel", _("Animation speed: Default"));
+		_speedSlider = new GUI::SliderWidget(widgetsBoss(),
+			_dialogLayout + ".AnimationSpeed",
+			_("Adjusts gameplay steps and timed pauses. The intro and conversation choices keep their timing."),
+			kSpeedChangedCmd);
+		// Larger factors add longer waits; the slider runs from slow to fast.
+		_speedSlider->setMinValue(0);
+		_speedSlider->setMaxValue(5);
+		_speedSlider->setValue(3);
+	}
+
+	void load() override {
+		GUI::ExtraGuiOptionsWidget::load();
+		_speedSlider->setValue(5 - Gob::Emmanuelle::normalizeAnimationSpeed(
+			ConfMan.getInt("emmanuelle_animation_speed", _domain)));
+		updateSpeedLabel();
+	}
+
+	bool save() override {
+		GUI::ExtraGuiOptionsWidget::save();
+		ConfMan.setInt("emmanuelle_animation_speed", 5 - _speedSlider->getValue(), _domain);
+		return true;
+	}
+
+	void handleCommand(GUI::CommandSender *sender, uint32 cmd, uint32 data) override {
+		if (cmd == kSpeedChangedCmd)
+			updateSpeedLabel();
+		else
+			GUI::ExtraGuiOptionsWidget::handleCommand(sender, cmd, data);
+	}
+
+protected:
+	void defineLayout(GUI::ThemeEval &layouts, const Common::String &layoutName,
+			const Common::String &overlayedLayout) const override {
+		layouts.addDialog(layoutName, overlayedLayout)
+			.addLayout(GUI::ThemeLayout::kLayoutVertical)
+				.addPadding(0, 0, 0, 0);
+		for (uint i = 0; i < _optionCount; ++i)
+			layouts.addWidget(Common::String::format("customOption%uCheckbox", i + 1), "Checkbox");
+		layouts.addSpace(layouts.getVar("Globals.Layout.Spacing"))
+				.addWidget("AnimationSpeedLabel", "", -1, layouts.getVar("Globals.Line.Height"))
+				.addWidget("AnimationSpeed", "Slider")
+			.closeLayout()
+		.closeDialog();
+	}
+
+private:
+	void updateSpeedLabel() {
+		static const char *const names[] = {
+			_s("Fastest"), _s("Fast"), _s("Default"),
+			_s("Relaxed"), _s("Slow"), _s("Slowest")
+		};
+		_speedLabel->setLabel(Common::U32String::format(_("Animation speed: %S"),
+			_(names[5 - _speedSlider->getValue()]).c_str()));
+	}
+
+	const uint _optionCount;
+	GUI::StaticTextWidget *_speedLabel;
+	GUI::SliderWidget *_speedSlider;
+};
+
 class GobMetaEngine : public AdvancedMetaEngine<Gob::GOBGameDescription> {
 public:
 	const char *getName() const override {
@@ -89,6 +170,9 @@ public:
 	}
 
 	bool hasFeature(MetaEngineFeature f) const override;
+	void registerDefaultSettings(const Common::String &target) const override;
+	GUI::OptionsContainerWidget *buildEngineOptionsWidget(GUI::GuiObject *boss,
+		const Common::String &name, const Common::String &target) const override;
 	Common::KeymapArray initKeymaps(const char *target) const override;
 	SaveStateList listSaves(const char *target) const override;
 	bool removeSaveState(const char *target, int slot) const override;
@@ -104,6 +188,18 @@ public:
 		return optionsList;
 	}
 };
+
+void GobMetaEngine::registerDefaultSettings(const Common::String &target) const {
+	MetaEngine::registerDefaultSettings(target);
+	ConfMan.registerDefault("emmanuelle_animation_speed", 2);
+}
+
+GUI::OptionsContainerWidget *GobMetaEngine::buildEngineOptionsWidget(
+		GUI::GuiObject *boss, const Common::String &name, const Common::String &target) const {
+	if (!target.empty() && getGameId(target.c_str()) == "emmanuelle")
+		return new EmmanuelleOptionsWidget(boss, name, target, getExtraGuiOptions(target));
+	return MetaEngine::buildEngineOptionsWidget(boss, name, target);
+}
 
 bool GobMetaEngine::hasFeature(MetaEngineFeature f) const {
 	return f == kSupportsListSaves ||

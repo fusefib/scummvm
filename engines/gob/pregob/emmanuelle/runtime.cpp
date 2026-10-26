@@ -215,6 +215,14 @@ uint32 minimumDurationRemaining(uint32 elapsed,
 	return elapsed < minimumDuration ? minimumDuration - elapsed : 0;
 }
 
+byte normalizeAnimationSpeed(int factor) {
+	if (factor < 0)
+		return 0;
+	if (factor > 5)
+		return 5;
+	return (byte)factor;
+}
+
 bool isTitlePresentationVisible(OldTotPlatformTag platform,
 									   bool black, bool framePending,
 									   bool presentationActive,

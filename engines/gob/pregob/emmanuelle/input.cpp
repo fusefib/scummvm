@@ -395,7 +395,7 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
 	noteInitialTomahawkVisible();
 	serviceWaitColorCycle();
 	if (_currentModule != kModuleInit) {
-		waitForMinimumDuration(presentationStart, 100 + (arg / 5) * 20);
+		waitForMinimumDuration(presentationStart, 100 + (arg / 5) * _animationSpeedFactor * 10);
 		return;
 	}
 	uint16 milliseconds = opcode03DelayUnits(arg);

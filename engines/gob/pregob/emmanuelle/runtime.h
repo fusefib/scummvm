@@ -165,6 +165,8 @@ uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
 /** Return only the time still needed to satisfy a minimum duration. */
 uint32 minimumDurationRemaining(uint32 elapsed,
 									  uint32 minimumDuration);
+/** Clamp and round a gameplay minimum to 25 ms steps between 50 and 250 ms. */
+byte normalizeAnimationSpeed(int factor);
 /** Whether the first complete title frame has reached a visible state. */
 bool isTitlePresentationVisible(OldTotPlatformTag platform,
 									   bool black, bool framePending,

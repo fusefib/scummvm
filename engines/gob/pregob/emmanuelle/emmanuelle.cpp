@@ -106,6 +106,7 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
 	_dosInitialFramePresented = false;
 
 	_enhancedDosFights = false;
+	_animationSpeedFactor = 2;
 
 	// Cursor ownership is separate from its script-defined appearance.
 	_cursorOwned = false;
@@ -142,6 +143,7 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
 	_colorCycleCounter = 0;
 
 	_renderer.setPlatform(_platformTag);
+	_animationSpeedFactor = normalizeAnimationSpeed(ConfMan.getInt("emmanuelle_animation_speed"));
 	if (_platformTag == kOldTotPlatformDOS) {
 		_runtimeState.videoMode = dosVideoModeForRenderMode(
 			Common::parseRenderMode(ConfMan.get("render_mode")));

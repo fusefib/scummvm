@@ -240,6 +240,8 @@ private:
 	bool _optionalAtariAudio;
 	bool _silentAtariAudio;
 	bool _enhancedDosFights;
+	// Zero disables the optional hold; this policy is not saved.
+	byte _animationSpeedFactor;
 	uint32 _schedulerAccumulator;
 	uint32 _schedulerDebt;
 	InputLatch _pendingInput;
