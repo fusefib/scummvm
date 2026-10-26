@@ -118,7 +118,8 @@ public:
 	void noteChange() { _pending = true; }
 	void notePaletteTransition() { _paletteTransitionPending = true; }
 	void commitDirectFrame();
-	bool nextStep(bool black, byte randomVariant, PresentationStep &step);
+	bool nextStep(bool black, byte randomVariant, PresentationStep &step,
+		bool sharedCadence = false);
 
 	byte mode() const { return _mode; }
 	byte variant() const { return _variant; }

@@ -114,7 +114,8 @@ public:
 		int16 bottom);
 	void captureAtariPresentedFrame();
 	bool nextPresentationStep(bool black, byte randomVariant,
-		PresentationStep &step);
+		PresentationStep &step, bool sharedCadence = false);
+	void commitDirectFrame() { _presentation.commitDirectFrame(); }
 	bool beginAtariTransitionFrame();
 	bool presentAtariMode43Step(byte phase);
 	bool presentAtariMode44Step(byte variant, byte phase);

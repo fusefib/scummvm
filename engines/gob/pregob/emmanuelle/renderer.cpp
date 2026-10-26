@@ -254,9 +254,8 @@ void OldTotRenderer::setResourceBanks(const OldIxxBank *localBank,
 }
 
 bool OldTotRenderer::nextPresentationStep(bool black, byte randomVariant,
-		PresentationStep &step) {
-	return _platform != kOldTotPlatformDOS &&
-		_presentation.nextStep(black, randomVariant, step);
+		PresentationStep &step, bool sharedCadence) {
+	return _presentation.nextStep(black, randomVariant, step, sharedCadence);
 }
 
 SurfacePtr OldTotRenderer::clonePresentationFrame(
@@ -277,8 +276,7 @@ void OldTotRenderer::clearDirtyRect() {
 
 void OldTotRenderer::notePresentationDirtyRect(int16 left, int16 top,
 	int16 right, int16 bottom) {
-	if ((_platform != kOldTotPlatformAtariST &&
-		 _platform != kOldTotPlatformAmiga) || !_vm || !_vm->_draw ||
+	if (!_vm || !_vm->_draw ||
 		!_vm->_draw->_backSurface)
 		return;
 	const int16 width = (int16)_vm->_draw->_backSurface->getWidth();
@@ -643,11 +641,15 @@ void PreGob_Emmanuelle::presentFrame(bool waitForFrame, bool force) {
 		_vm->_util->waitEndFrame(false);
 	else
 		_vm->_video->retrace();
+	if (_platformTag == kOldTotPlatformDOS && !shouldAbortExecution())
+		_renderer.commitDirectFrame();
 }
 
 bool PreGob_Emmanuelle::servicePresentation() {
 	const bool amiga = _platformTag == kOldTotPlatformAmiga;
-	if (_platformTag != kOldTotPlatformAtariST && !amiga)
+	const bool sharedCadence = _currentModule != kModuleInit &&
+		!_fightActive && !_audioBlocking;
+	if (_platformTag == kOldTotPlatformDOS && !sharedCadence)
 		return false;
 
 	bool paced = false;
@@ -659,7 +661,7 @@ bool PreGob_Emmanuelle::servicePresentation() {
 			_renderer.presentationMode() == 44)
 			randomVariant = (byte)randomBounded(5);
 		if (!_renderer.nextPresentationStep(amiga ? _renderer.amigaBlack() :
-				_renderer.atariBlack(), randomVariant, step))
+				_renderer.atariBlack(), randomVariant, step, sharedCadence))
 			break;
 
 		bool rendered = true;
@@ -680,11 +682,18 @@ bool PreGob_Emmanuelle::servicePresentation() {
 			failHostOperation("presentation step");
 			break;
 		}
-		// Ordinary Amiga phase zero waits before buffer publication (native
-		// 0x1136A); phase one publishes, waits again (0x113CE), then captures.
+		// Ordinary gameplay follows Amiga's native publication order:
+		// wait, publish, wait, capture. Idle input service still waits once.
 		if (!_introSkip.fastForwarding() &&
-			(!amiga || step.operation != kPresentationFrame || step.phase != 0))
+			(!(amiga || sharedCadence) || step.operation != kPresentationFrame || step.phase != 0)) {
 			_vm->_draw->blitInvalidated();
+			if (_platformTag == kOldTotPlatformDOS &&
+				!_renderer.presentDosFrame(_moduleFileStem,
+					_scriptVM ? _scriptVM->runtimeState().videoMode : _runtimeState.videoMode)) {
+				failHostOperation("DOS presentation");
+				break;
+			}
+		}
 		waitPresentationFrames();
 		paced = true;
 		if (step.operation == kPresentationFadeFromBlack && !shouldAbortExecution()) {
@@ -696,7 +705,7 @@ bool PreGob_Emmanuelle::servicePresentation() {
 		if (step.complete && !shouldAbortExecution()) {
 			if (amiga)
 				_renderer.captureAmigaPresentedFrame();
-			else
+			else if (_platformTag == kOldTotPlatformAtariST)
 				_renderer.captureAtariPresentedFrame();
 		}
 		if (_diagnosticTraceEnabled && step.operation != kPresentationFrame &&
@@ -1062,20 +1071,18 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 					failHostOperation("animation frame", nodeOffset);
 					return;
 				}
-				if (_platformTag == kOldTotPlatformDOS && rendered &&
+				if (_currentModule != kModuleInit && rendered) {
+					servicePresentation();
+				} else if (_platformTag == kOldTotPlatformDOS && rendered &&
 					!_introSkip.fastForwarding()) {
 					presentFrame(true);
 					processGameEvents();
-				}
-				if (_platformTag == kOldTotPlatformAmiga && rendered) {
+				} else if (_platformTag == kOldTotPlatformAmiga && rendered) {
 					servicePresentation();
-					if (_currentModule == kModuleInit)
-						delay(amigaNativeDelayMilliseconds(150));
-				}
-				if (_platformTag == kOldTotPlatformAtariST && rendered) {
+					delay(amigaNativeDelayMilliseconds(150));
+				} else if (_platformTag == kOldTotPlatformAtariST && rendered) {
 					servicePresentation();
-					if (_currentModule == kModuleInit)
-						waitPresentationFrames(atariStAnimationVblCount());
+					waitPresentationFrames(atariStAnimationVblCount());
 				}
 				if (shouldAbortExecution())
 					break;

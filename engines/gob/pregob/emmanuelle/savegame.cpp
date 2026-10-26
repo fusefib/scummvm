@@ -89,15 +89,13 @@ EmmanuelleSaveBoundaryState PreGob_Emmanuelle::saveBoundaryState() const {
 			_executor->suspendedNode() == node;
 	}
 
-	state.paletteReady = true;
+	state.paletteReady = _renderer.presentationQuiescent();
 	if (state.paletteReady && _platformTag == kOldTotPlatformAtariST)
 		state.paletteReady = _renderer.atariPaletteValid() &&
-			!_renderer.atariBlack() &&
-			_renderer.presentationQuiescent();
+			!_renderer.atariBlack();
 	if (state.paletteReady && _platformTag == kOldTotPlatformAmiga)
 		state.paletteReady = _renderer.amigaPaletteValid() &&
 			!_renderer.amigaBlack() &&
-			_renderer.presentationQuiescent() &&
 			!_renderer.amigaPaletteTransitionPending();
 	state.inInit = _currentModule == kModuleInit;
 	state.audioReady = isAudioReadyForSave(_platformTag, _audioActive,

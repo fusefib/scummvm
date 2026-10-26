@@ -68,7 +68,7 @@ void PresentationState::commitDirectFrame() {
 }
 
 bool PresentationState::nextStep(bool black, byte randomVariant,
-		PresentationStep &step) {
+		PresentationStep &step, bool sharedCadence) {
 	step = PresentationStep();
 	if (!_pending && !_active)
 		return false;
@@ -96,8 +96,8 @@ bool PresentationState::nextStep(bool black, byte randomVariant,
 		step.complete = _phase + (atari ? 1 : 0) == count;
 	} else {
 		step.operation = kPresentationFrame;
-		// Amiga waits before publishing its buffers, then after copying them.
-		step.complete = _platform != kOldTotPlatformAmiga || _phase == 1;
+		// Gameplay shares Amiga's pre-publication and post-publication waits.
+		step.complete = (!sharedCadence && _platform != kOldTotPlatformAmiga) || _phase == 1;
 	}
 
 	if (step.complete) {
