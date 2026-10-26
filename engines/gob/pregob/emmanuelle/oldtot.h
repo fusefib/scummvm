@@ -159,6 +159,7 @@ private:
 	bool patchIguacuAirport(Common::Language language);
 	bool patchCasinoPrediction();
 	bool patchCasinoEntryPause(OldTotPlatformTag platform, Common::Language language);
+	bool patchCasinoCaptions(OldTotPlatformTag platform, Common::Language language);
 	bool patchRouletteTwenty(Common::Language language);
 	bool patchMeterBand();
 	bool patchCasinoReturn(Common::Language language);

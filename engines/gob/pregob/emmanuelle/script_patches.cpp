@@ -73,6 +73,7 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 		patched = patchCasinoReturn(language) || patched;
 		if (language == Common::EN_ANY)
 			patched = patchCasinoPrediction() || patched;
+		patched = patchCasinoCaptions(platform, language) || patched;
 		return patched;
 	}
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADGAR.TOA" : "LOADGAR.TOT"))
@@ -247,6 +248,77 @@ bool OldTotData::patchCasinoEntryPause(OldTotPlatformTag platform,
 			memcmp(&_data[table], tableDraw, sizeof(tableDraw)) != 0)
 			return false;
 		_data[layouts[i].entry + 20] = 250;
+		return true;
+	}
+	return false;
+}
+
+// LOADCAS's opening and closed-bets announcements repaint the bubble's bevel,
+// and the English full stops reach its right edge. Keep the existing bubble
+// background and give the text blocks margins and the stakes lines a gap.
+//
+// Applies to: All supported versions
+// Script: LOADCAS.TOT / LOADCAS.TOA
+bool OldTotData::patchCasinoCaptions(OldTotPlatformTag platform,
+		Common::Language language) {
+	static const struct {
+		Common::Language language;
+		uint16 text[3]; // Opening, stakes placed, bets closed.
+		uint16 bubbles[2], amigaBubbles[2]; // Lower and upper bubble.
+		byte x[3]; // Includes the original strings' leading spaces.
+		const char *captions[3];
+	} layouts[] = {
+		{Common::EN_ANY, {0x1B25, 0x1B46, 0x1B6F},
+			{0x6352, 0x6FB9}, {0x63E0, 0x7318}, {78, 92, 78},
+			{" PLACE YOUR BETS.", "  THE STAKES@   ARE LAID.", " BETS ARE CLOSED."}},
+		{Common::ES_ESP, {0x1AE1, 0x1AFF, 0x1B2A},
+			{0x61CD, 0x6E34}, {0x625B, 0x7193}, {86, 92, 80},
+			{"  HAGAN JUEGO!", " LAS APUESTAS@ ESTAN HECHAS", "    NO VA MAS"}},
+		{Common::FR_FRA, {0x1B5A, 0x1B7A, 0x1BA4},
+			{0x6326, 0x6F8D}, {0x63B4, 0x72EC}, {80, 84, 80},
+			{" FAITES VOS JEUX", "    LES JEUX@   SONT FAITS", " RIEN NE VA PLUS"}},
+		{Common::DE_DEU, {0x1B54, 0x1B74, 0x1B9E},
+			{0, 0}, {0x6423, 0x735B}, {80, 84, 80},
+			{" FAITES VOS JEUX", "    LES JEUX@   SONT FAITS", " RIEN NE VA PLUS"}}
+	};
+	for (uint i = 0; i < ARRAYSIZE(layouts); ++i) {
+		if (layouts[i].language != language)
+			continue;
+		const byte headers[][15] = {
+			{0x1D, 0, 83, 0, 102, 0, 136, 0, 8, 8, 15, 0, 0, 0, 1},
+			{0x1D, 0, 91, 0, 28, 0, 112, 0, 16, 8, 15, 0, 0, 0, 1},
+			{0x1D, 0, 83, 0, 32, 0, 136, 0, 8, 8, 15, 0, 0, 0, 1}
+		};
+		// Check every caption and both bubble descriptors before changing any text.
+		for (uint caption = 0; caption < ARRAYSIZE(headers); ++caption) {
+			const uint16 offset = layouts[i].text[caption];
+			const uint length = strlen(layouts[i].captions[caption]) + 1;
+			if (!has(offset, sizeof(headers[caption]) + length) ||
+				memcmp(&_data[offset], headers[caption], sizeof(headers[caption])) != 0 ||
+				memcmp(&_data[offset + sizeof(headers[caption])], layouts[i].captions[caption], length) != 0)
+				return false;
+		}
+		const uint16 *bubbles = platform == kOldTotPlatformAmiga ? layouts[i].amigaBubbles : layouts[i].bubbles;
+		for (uint bubble = 0; bubble < 2; ++bubble) {
+			byte descriptor[] = {0x43, 0, 0, 0, 80, 0, 93, 0, 136, 0, 24, 0, 0};
+			if (bubble) {
+				descriptor[0] = 0x53;
+				descriptor[6] = 24;
+				WRITE_BE_UINT16(descriptor + 11, bubbles[0] + 11);
+			}
+			const uint length = bubble ? 13 : 11;
+			if (!has(bubbles[bubble], length) || memcmp(&_data[bubbles[bubble]], descriptor, length) != 0)
+				return false;
+		}
+
+		for (uint caption = 0; caption < ARRAYSIZE(headers); ++caption) {
+			WRITE_BE_UINT16(&_data[layouts[i].text[caption] + 1], layouts[i].x[caption]);
+			_data[layouts[i].text[caption] + 10] = 16; // Transparent: retain the bubble artwork.
+		}
+		WRITE_BE_UINT16(&_data[layouts[i].text[0] + 3], 101);
+		WRITE_BE_UINT16(&_data[layouts[i].text[1] + 3], 26);
+		WRITE_BE_UINT16(&_data[layouts[i].text[1] + 7], 20);
+		_data[layouts[i].text[1] + 9] = 10;
 		return true;
 	}
 	return false;
