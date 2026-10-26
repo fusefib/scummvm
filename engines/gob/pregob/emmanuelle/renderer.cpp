@@ -626,7 +626,7 @@ Font *OldTotRenderer::loadLetFont(Common::SeekableReadStream &stream) const {
 }
 
 void PreGob_Emmanuelle::presentFrame(bool waitForFrame, bool force) {
-	if (_hostFailed || (_introSkip.fastForwarding() && !force))
+	if (shouldAbortExecution() || (_introSkip.fastForwarding() && !force))
 		return;
 	_vm->_draw->blitInvalidated();
 	if (_platformTag == kOldTotPlatformDOS) {

@@ -386,7 +386,6 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 		showCursor();
 	else
 		hideCursor();
-	discardPendingInput();
 	setInputContext(kEmmanuelleInputChoice);
 	if (_platformTag == kOldTotPlatformDOS) {
 		if (!_renderer.applyDosPalette(_moduleFileStem, _runtimeState.videoMode))
@@ -397,6 +396,10 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 		_vm->_draw->blitInvalidated();
 		_vm->_video->retrace(false);
 	}
+	// A press during the restored frame's upload predates choice activation.
+	discardPendingInput();
+	if (shouldAbortExecution())
+		return;
 	if (_platformTag == kOldTotPlatformAmiga && state.nativeState.amigaSampleSlot >= 0) {
 		// Restart only after validation and ownership transfer. Replaying the
 		// native command would also repeat its script delays and side effects.

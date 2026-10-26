@@ -76,6 +76,7 @@ public:
 		bool isAutosave = false) const override;
 	Common::Error loadGameStream(Common::SeekableReadStream &stream) override;
 	void handleCustomAction(Common::CustomEventType action) override;
+	void handleMouseDown(int16 x, int16 y, MouseButtons buttons) override;
 
 	bool loadModule(ModuleId moduleId,
 					bool usesLocalGraphics) override;

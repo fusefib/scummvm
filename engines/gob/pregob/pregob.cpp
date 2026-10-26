@@ -74,6 +74,9 @@ Common::Error PreGob::loadGameStream(Common::SeekableReadStream &) {
 void PreGob::handleCustomAction(Common::CustomEventType) {
 }
 
+void PreGob::handleMouseDown(int16, int16, MouseButtons) {
+}
+
 void PreGob::fadeOut() {
 	if (_fadedOut || _vm->shouldQuit())
 		return;

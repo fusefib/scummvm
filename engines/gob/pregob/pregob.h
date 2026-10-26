@@ -60,6 +60,8 @@ public:
 	virtual Common::Error loadGameStream(Common::SeekableReadStream &stream);
 	/** Receive a mapped engine action from Gob's existing event owner. */
 	virtual void handleCustomAction(Common::CustomEventType action);
+	/** Preserve a press even if its release arrives in the same input pass. */
+	virtual void handleMouseDown(int16 x, int16 y, MouseButtons buttons);
 
 	struct AnimProperties {
 		uint16 animation;

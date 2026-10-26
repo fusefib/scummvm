@@ -114,9 +114,19 @@ void Util::processInput(bool scroll) {
 			break;
 		case Common::EVENT_LBUTTONDOWN:
 			_mouseButtons = (MouseButtons) (((uint32) _mouseButtons) | ((uint32) kMouseButtonsLeft));
+			if (_vm->_preGob)
+				_vm->_preGob->handleMouseDown(
+					event.mouse.x + _vm->_video->_scrollOffsetX - _vm->_video->_screenDeltaX,
+					event.mouse.y + _vm->_video->_scrollOffsetY - _vm->_video->_screenDeltaY,
+					kMouseButtonsLeft);
 			break;
 		case Common::EVENT_RBUTTONDOWN:
 			_mouseButtons = (MouseButtons) (((uint32) _mouseButtons) | ((uint32) kMouseButtonsRight));
+			if (_vm->_preGob)
+				_vm->_preGob->handleMouseDown(
+					event.mouse.x + _vm->_video->_scrollOffsetX - _vm->_video->_screenDeltaX,
+					event.mouse.y + _vm->_video->_scrollOffsetY - _vm->_video->_screenDeltaY,
+					kMouseButtonsRight);
 			break;
 		case Common::EVENT_LBUTTONUP:
 			_mouseButtons = (MouseButtons) (((uint32) _mouseButtons) & ~((uint32) kMouseButtonsLeft));

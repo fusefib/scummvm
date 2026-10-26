@@ -61,7 +61,10 @@ void PreGob_Emmanuelle::setInputContext(EmmanuelleInputContext context) {
 void PreGob_Emmanuelle::handleCustomAction(
 		Common::CustomEventType action) {
 	if (action == (Common::CustomEventType)kEmmanuelleActionOpenMainMenu) {
-		const EmmanuelleSaveBoundaryState state = saveBoundaryState();
+		EmmanuelleSaveBoundaryState state = saveBoundaryState();
+		// Finish any pending publication before handing the request to the menu.
+		// chooseInputRegion checks the actual boundary after presentation.
+		state.paletteReady = true;
 		_mainMenuActionThisPoll = state.canHandoffMenu();
 		if (_diagnosticTraceEnabled && !_mainMenuActionThisPoll)
 			debugC(2, kDebugSaveLoad,
@@ -75,6 +78,13 @@ void PreGob_Emmanuelle::handleCustomAction(
 	}
 	if (action == (Common::CustomEventType)kEmmanuelleActionSkipIntro)
 		_introSkip.request();
+}
+
+void PreGob_Emmanuelle::handleMouseDown(int16 x, int16 y,
+		MouseButtons buttons) {
+	// Fights retain their native held-button handling.
+	if (_inputContext != kEmmanuelleInputFight)
+		_pendingInput.noteMouse(x, y, (byte)buttons);
 }
 
 void PreGob_Emmanuelle::processGameEvents() {
@@ -175,9 +185,10 @@ bool PreGob_Emmanuelle::inputIdle(int16 key,
 }
 
 void PreGob_Emmanuelle::discardPendingInput() {
-	_pendingInput.clear();
 	_vm->_util->clearKeyBuf();
 	_vm->_util->forceMouseUp();
+	// clearKeyBuf also pumps events, including mouse presses.
+	_pendingInput.clear();
 }
 
 void PreGob_Emmanuelle::applyInputBoundary(
@@ -189,8 +200,14 @@ void PreGob_Emmanuelle::applyInputBoundary(
 				: boundary.nativeDelayUnits;
 		delay(delayMilliseconds);
 	}
-	if (boundary.discardStale)
+	if (boundary.discardStale) {
+		// Activate the choice only after its interface has been published.
+		if (!servicePresentation())
+			presentFrame(true);
+		if (shouldAbortExecution())
+			return;
 		discardPendingInput();
+	}
 	if (_platformTag == kOldTotPlatformAtariST && boundary.discardStale) {
 		int16 initialX = 0;
 		int16 initialY = 0;
@@ -216,6 +233,7 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 		finishIntro();
 
 	setInputContext(kEmmanuelleInputChoice);
+	_mainMenuActionThisPoll = false;
 	applyInputBoundary(choiceInputBoundary(
 		_platformTag, initialEntry, reentering));
 	int16 mouseX = 0;
@@ -225,7 +243,6 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 	if (_platformTag == kOldTotPlatformAtariST &&
 		_vm->_sound && _vm->_sound->blasterPlayingSound())
 		stopSampleAudio();
-	_mainMenuActionThisPoll = false;
 	const int16 key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
 	const bool menuAction = _mainMenuActionThisPoll;
 	_mainMenuActionThisPoll = false;
@@ -316,9 +333,9 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 		_alternateInputGeometry ? 6 : 8);
 	if (_diagnosticTraceEnabled)
 		debugC(3, kDebugGameFlow,
-			   "EMMA_TRACE event=input_region module=%s node=0x%04X count=%u x=%d y=%d region=%d",
+			   "EMMA_TRACE event=input_region module=%s node=0x%04X count=%u x=%d y=%d region=%d key=%d buttons=%u",
 			   _moduleFileStem.c_str(), nodeOffset, (uint)count, (int)cursorX,
-			   (int)cursorY, (int)region);
+			   (int)cursorY, (int)region, (int)key, (uint)mouseButtons);
 	setInputContext(kEmmanuelleInputNone);
 	return region;
 }
@@ -359,7 +376,7 @@ void PreGob_Emmanuelle::waitInputRelease() {
 }
 
 void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
-	if (_hostFailed)
+	if (shouldAbortExecution())
 		return;
 	if (_introSkip.fastForwarding()) {
 		servicePresentation();

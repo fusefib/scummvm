@@ -158,8 +158,11 @@ void InputLatch::noteLatestKey(int16 key) {
 }
 
 void InputLatch::noteMouse(int16 x, int16 y, byte buttons) {
-	_mouseX = x;
-	_mouseY = y;
+	// Keep the press position when later events move or release the pointer.
+	if (_mouseButtons == 0) {
+		_mouseX = x;
+		_mouseY = y;
+	}
 	_mouseButtons |= buttons;
 }
 
@@ -262,7 +265,7 @@ InputBoundary choiceInputBoundary(OldTotPlatformTag platform,
 		return boundary;
 	if (initialEntry)
 		boundary.nativeDelayUnits = inputEntryDelay(platform);
-	boundary.discardStale = platform != kOldTotPlatformDOS;
+	boundary.discardStale = true;
 	boundary.showCursor = true;
 	return boundary;
 }
