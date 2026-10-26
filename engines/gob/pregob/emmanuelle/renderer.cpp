@@ -1033,6 +1033,8 @@ bool PreGob_Emmanuelle::renderAnimationFrame(
 }
 
 void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
+	if (!_servicingTimer)
+		_schedulerClockRunning = false;
 	OldTotAnimationSetup setup;
 	if (!_tot || !_scriptVM ||
 		!_tot->decodeAnimationSetup(nodeOffset, setup)) {

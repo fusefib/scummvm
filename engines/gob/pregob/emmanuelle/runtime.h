@@ -160,13 +160,13 @@ bool isAudioPlaying(OldTotPlatformTag platform, bool speakerActive,
 	bool samplePlaying);
 bool isAudioReadyForSave(OldTotPlatformTag platform, bool speakerActive,
 	bool samplePlaying, bool blocking);
-/** Native timer quanta per 50 Hz input pass; Amiga retains a remainder. */
-uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
-									 uint32 &accumulator);
+/** Convert logical 50 Hz ticks to saved native units, retaining the remainder. */
+uint64 accumulateTimerQuanta(OldTotPlatformTag platform,
+	uint32 &accumulator, uint32 ticks = 1);
 /** Return only the time still needed to satisfy a minimum duration. */
 uint32 minimumDurationRemaining(uint32 elapsed,
 									  uint32 minimumDuration);
-/** Clamp and round a gameplay minimum to 25 ms steps between 50 and 250 ms. */
+/** Clamp the animation speed factor to the six supported values (0 through 5). */
 byte normalizeAnimationSpeed(int factor);
 /** Whether the first complete title frame has reached a visible state. */
 bool isTitlePresentationVisible(OldTotPlatformTag platform,

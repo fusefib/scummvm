@@ -77,6 +77,7 @@ public:
 	Common::Error loadGameStream(Common::SeekableReadStream &stream) override;
 	void handleCustomAction(Common::CustomEventType action) override;
 	void handleMouseDown(int16 x, int16 y, MouseButtons buttons) override;
+	void notifyPaused(uint32 duration) override;
 
 	bool loadModule(ModuleId moduleId,
 					bool usesLocalGraphics) override;
@@ -96,7 +97,7 @@ public:
 	uint16 fightRandom(uint16 upperExclusive) override {
 		return randomBounded(upperExclusive);
 	}
-	void schedulerTiming(byte period, bool timingVariant, uint16 &reload,
+	void schedulerTiming(byte period, uint16 &reload,
 						 uint16 &initialCountdown) override;
 	bool schedulerChecksZeroBeforeDecrement() const override {
 		return Emmanuelle::schedulerChecksZeroBeforeDecrement(_platformTag);
@@ -241,10 +242,15 @@ private:
 	bool _optionalAtariAudio;
 	bool _silentAtariAudio;
 	bool _enhancedDosFights;
-	// Zero disables the optional hold; this policy is not saved.
+	// Gameplay pacing policy, read once at startup and not saved.
 	byte _animationSpeedFactor;
 	uint32 _schedulerAccumulator;
 	uint32 _schedulerDebt;
+	// Transient active-time anchor; saved counters remain in native units.
+	uint32 _schedulerServiceTime;
+	uint16 _schedulerMilliseconds;
+	bool _schedulerClockRunning;
+	bool _servicingTimer;
 	InputLatch _pendingInput;
 	IntroSkipState _introSkip;
 	// Remains active through protection and the title at the end of fresh INIT.

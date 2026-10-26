@@ -454,6 +454,8 @@ void GobEngine::pauseEngineIntern(bool pause) {
 		uint32 duration = _system->getMillis() - _pauseStart;
 
 		_util->notifyPaused(duration);
+		if (_preGob)
+			_preGob->notifyPaused(duration);
 
 		_game->_startTimeKey += duration;
 		_draw->_cursorTimeKey += duration;

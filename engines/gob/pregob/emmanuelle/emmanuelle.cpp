@@ -89,11 +89,15 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
 	for (uint i = 0; i < ARRAYSIZE(_variables); ++i)
 		_variables[i] = 0;
 
-	// Remainder from converting host input passes to native timer quanta.
+	// Remainder from converting logical service ticks to native timer quanta.
 	_schedulerAccumulator = 0;
 
 	// Preserve quanta deferred by the scheduler's callback limit.
 	_schedulerDebt = 0;
+	_schedulerServiceTime = 0;
+	_schedulerMilliseconds = 0;
+	_schedulerClockRunning = false;
+	_servicingTimer = false;
 
 	// The title's minimum duration starts at its first complete visible frame.
 	_initialInitPresentation = false;
@@ -296,9 +300,11 @@ void PreGob_Emmanuelle::clearModuleObjects() {
 	if (_platformTag == kOldTotPlatformAmiga) {
 		_active.discardAll();
 		_renderer.resetAmigaModuleState();
-		_schedulerAccumulator = 0;
-		_schedulerDebt = 0;
 	}
+	_schedulerAccumulator = 0;
+	_schedulerDebt = 0;
+	_schedulerMilliseconds = 0;
+	_schedulerClockRunning = false;
 	delete _executor;
 	_executor = nullptr;
 	delete _scriptVM;
@@ -485,19 +491,25 @@ uint16 PreGob_Emmanuelle::randomBounded(uint16 upperExclusive) {
 	return dosRandomBounded(_randomState, upperExclusive);
 }
 
-void PreGob_Emmanuelle::schedulerTiming(byte period, bool timingVariant,
+void PreGob_Emmanuelle::schedulerTiming(byte period,
 										uint16 &reload, uint16 &initialCountdown) {
+	// A new cycle cannot inherit time or deferred work from its predecessor.
+	_schedulerAccumulator = 0;
+	_schedulerDebt = 0;
+	_schedulerMilliseconds = 0;
+	_schedulerClockRunning = false;
 	if (_platformTag == kOldTotPlatformAtariST) {
-		(void)timingVariant;
 		getAtariStSchedulerTiming(period, reload, initialCountdown);
-		return;
-	}
-	if (_platformTag == kOldTotPlatformAmiga) {
-		(void)timingVariant;
+	} else if (_platformTag == kOldTotPlatformAmiga) {
 		getAmigaSchedulerTiming(period, reload, initialCountdown);
-		return;
+	} else {
+		getDosSchedulerTiming(period, reload, initialCountdown);
 	}
-	getDosSchedulerTiming(period, timingVariant, reload, initialCountdown);
+	// Amiga's initial zero dispatches on the third logical service tick.
+	// Express the same first dispatch in each platform's saved counter units.
+	uint32 remainder = 0;
+	initialCountdown = (uint16)accumulateTimerQuanta(_platformTag, remainder, 3) -
+		(schedulerChecksZeroBeforeDecrement() ? 1 : 0);
 }
 
 void PreGob_Emmanuelle::beginIntroFastForward() {
@@ -566,6 +578,8 @@ void PreGob_Emmanuelle::setAudioState(
 	_audioRepeatCount = repeatCount;
 	_audioBlocking = blocking && active;
 	_audioActive = active;
+	if (_audioBlocking)
+		_schedulerClockRunning = false;
 	if (_diagnosticTraceEnabled)
 		debugC(3, kDebugSound,
 			   "EMMA_TRACE event=audio_%s platform=%u kind=%u slot=%d "

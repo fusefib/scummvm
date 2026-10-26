@@ -202,14 +202,15 @@ bool isAudioReadyForSave(OldTotPlatformTag platform, bool speakerActive,
 		(platform == kOldTotPlatformAmiga && !blocking);
 }
 
-uint16 accumulateTimerQuanta(OldTotPlatformTag platform,
-									 uint32 &accumulator) {
+uint64 accumulateTimerQuanta(OldTotPlatformTag platform,
+		uint32 &accumulator, uint32 ticks) {
 	// DOS services 5000 calibrated units/s, ST one tick per VBL, and Amiga
-	// 20 ticks/s. Host pacing stays at 50 Hz on all three platforms.
-	accumulator += platform == kOldTotPlatformDOS ? 5000 :
+	// 20 ticks/s. Logical service ticks stay at 50 Hz regardless of polling.
+	const uint rate = platform == kOldTotPlatformDOS ? 5000 :
 		(platform == kOldTotPlatformAtariST ? 50 : 20);
-	const uint16 quanta = (uint16)(accumulator / kHostFrameRate);
-	accumulator %= kHostFrameRate;
+	const uint64 total = accumulator + (uint64)rate * ticks;
+	const uint64 quanta = total / kHostFrameRate;
+	accumulator = total % kHostFrameRate;
 	return quanta;
 }
 

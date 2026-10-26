@@ -336,7 +336,7 @@ bool OldTotVM::executeInline(uint16 offset) {
 	return !_host.executionFailed();
 }
 
-bool OldTotVM::installScheduledCycle(uint16 offset, bool timingVariant) {
+bool OldTotVM::installScheduledCycle(uint16 offset) {
 	OldTotScheduledCycle cycle;
 	if (!_data.decodeScheduledCycle(offset, cycle))
 		return false;
@@ -347,7 +347,7 @@ bool OldTotVM::installScheduledCycle(uint16 offset, bool timingVariant) {
 	if (!_schedulerTargets.empty() && cycle.randomizeInitial == 1)
 		_schedulerIndex = _host.randomBounded(_schedulerTargets.size());
 
-	_host.schedulerTiming(cycle.period, timingVariant, _schedulerReload, _schedulerCountdown);
+	_host.schedulerTiming(cycle.period, _schedulerReload, _schedulerCountdown);
 	return true;
 }
 
@@ -381,7 +381,10 @@ uint32 OldTotVM::advanceTimer(uint32 quanta, uint maxCallbacks) {
 
 		if (_host.shouldQuit() || _host.executionFailed())
 			return 0;
-		if (generation == _schedulerGeneration && !_schedulerTargets.empty())
+		// Remaining quanta belong to the cycle which dispatched this child.
+		if (generation != _schedulerGeneration)
+			return 0;
+		if (!_schedulerTargets.empty())
 			_schedulerIndex = (currentIndex + 1) % _schedulerTargets.size();
 		if (callbacks >= maxCallbacks)
 			return quanta;

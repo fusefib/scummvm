@@ -81,14 +81,9 @@ public:
 	/** Return a value in [0, upperExclusive). */
 	virtual uint16 randomBounded(uint16 upperExclusive) = 0;
 
-	/** Convert opcode-2A's raw period to the native loader countdown.
-	 * DOS LOADER.COM scales by 100 (or 70 in its alternate timing path) and
-	 * starts at one. Atari ST interrupt_ keeps raw periods, maps 200 -> 170,
-	 * while Amiga maps 200 -> 60 and every other value -> 25; both install an
-	 * initial zero countdown. The default implements DOS timing.
-	 */
-	virtual void schedulerTiming(byte period, bool timingVariant, uint16 &reload, uint16 &initialCountdown) {
-		reload = (uint16)period * (timingVariant ? 70 : 100);
+	/** Convert a script period to native countdown units. */
+	virtual void schedulerTiming(byte period, uint16 &reload, uint16 &initialCountdown) {
+		reload = (uint16)period * 100;
 		initialCountdown = 1;
 	}
 
@@ -124,7 +119,7 @@ public:
 	OldTotVM(const OldTotData &data, OldTotHost &host);
 
 	bool executeInline(uint16 offset);
-	bool installScheduledCycle(uint16 offset, bool timingVariant);
+	bool installScheduledCycle(uint16 offset);
 	uint32 advanceTimer(uint32 quanta, uint maxCallbacks);
 
 	uint16 readVariable(uint16 index) const;

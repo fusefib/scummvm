@@ -401,7 +401,7 @@ bool OldTotExecutor::processDispatch(OldTotExecFrame &f) {
 		return applyBranchRecord(record);
 	}
 	if (op == 0x2A) {
-		if (!_vm.installScheduledCycle(current, false))
+		if (!_vm.installScheduledCycle(current))
 			return stop(kOldTotExecutorMalformedData);
 		_frames.pop_back();
 		return true;

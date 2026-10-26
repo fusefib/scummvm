@@ -31,6 +31,7 @@
 #include "common/events.h"
 #include "graphics/cursorman.h"
 #include "gob/gob.h"
+#include "gob/global.h"
 #include "gob/sound/sound.h"
 #include "gob/util.h"
 #include "gob/pregob/emmanuelle/amiga.h"
@@ -169,14 +170,35 @@ int16 PreGob_Emmanuelle::pollInterpreterInput(
 }
 
 void PreGob_Emmanuelle::serviceInterpreterTimer() {
-	if (!_scriptVM || shouldAbortExecution()) {
+	// Scheduled children can synchronously enter another input routine.
+	if (_servicingTimer)
+		return;
+	if (!_scriptVM || !_scriptVM->schedulerEnabled() || shouldAbortExecution()) {
 		_schedulerDebt = 0;
+		_schedulerClockRunning = false;
 		return;
 	}
 
-	_schedulerDebt += accumulateTimerQuanta(
-		_platformTag, _schedulerAccumulator);
+	const uint32 now = g_system->getMillis();
+	const uint64 elapsed = _schedulerClockRunning
+		? (uint64)(uint32)(now - _schedulerServiceTime) * _vm->_global->_speedFactor
+		: 1000 / kHostFrameRate;
+	_schedulerServiceTime = now;
+	_schedulerClockRunning = true;
+	const uint64 milliseconds = elapsed + _schedulerMilliseconds;
+	_schedulerMilliseconds = milliseconds % (1000 / kHostFrameRate);
+	const uint64 quanta = _schedulerDebt + accumulateTimerQuanta(
+		_platformTag, _schedulerAccumulator, milliseconds / (1000 / kHostFrameRate));
+	// Saturate only at the saved field's representable limit.
+	_schedulerDebt = quanta > 0xFFFFFFFFU ? 0xFFFFFFFFU : (uint32)quanta;
+	_servicingTimer = true;
 	_schedulerDebt = _scriptVM->advanceTimer(_schedulerDebt, 8);
+	_servicingTimer = false;
+}
+
+void PreGob_Emmanuelle::notifyPaused(uint32 duration) {
+	if (_schedulerClockRunning)
+		_schedulerServiceTime += duration;
 }
 
 bool PreGob_Emmanuelle::inputIdle(int16 key,
@@ -199,6 +221,13 @@ void PreGob_Emmanuelle::applyInputBoundary(
 				? amigaNativeDelayMilliseconds(boundary.nativeDelayUnits)
 				: boundary.nativeDelayUnits;
 		delay(delayMilliseconds);
+	}
+	if (boundary.showCursor && _scriptVM && _scriptVM->schedulerEnabled()) {
+		// Count the choice's publication, but not the preceding entry delay.
+		// The first logical service tick matches the native Amiga input pass.
+		_schedulerServiceTime = g_system->getMillis();
+		_schedulerMilliseconds += 1000 / kHostFrameRate;
+		_schedulerClockRunning = true;
 	}
 	if (boundary.discardStale) {
 		// Activate the choice only after its interface has been published.
@@ -234,6 +263,8 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 
 	setInputContext(kEmmanuelleInputChoice);
 	_mainMenuActionThisPoll = false;
+	if (initialEntry || reentering)
+		_schedulerClockRunning = false;
 	applyInputBoundary(choiceInputBoundary(
 		_platformTag, initialEntry, reentering));
 	int16 mouseX = 0;
@@ -281,6 +312,7 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 		_vm->_util->setMousePos(cursorX, cursorY);
 
 	if (key == kKeyEscape || mouseButtons == kMouseButtonsRight) {
+		_schedulerClockRunning = false;
 		if (_diagnosticTraceEnabled)
 			debugC(3, kDebugGameFlow,
 				"EMMA_TRACE event=input_cancel module=%s node=0x%04X",
@@ -327,6 +359,7 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 	}
 	hideCursor();
 
+	_schedulerClockRunning = false;
 	const int16 region = hitTestOldTotInputRegions(
 		*_tot, nodeOffset, count, cursorX, cursorY,
 		_alternateInputGeometry ? 0 : 1,
@@ -376,6 +409,7 @@ void PreGob_Emmanuelle::waitInputRelease() {
 }
 
 void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
+	_schedulerClockRunning = false;
 	if (shouldAbortExecution())
 		return;
 	if (_introSkip.fastForwarding()) {
@@ -424,6 +458,8 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
 }
 
 void PreGob_Emmanuelle::delay(uint16 milliseconds) {
+	// Script sleeping and blocking audio do not advance an earlier input wait.
+	_schedulerClockRunning = false;
 	while (milliseconds && !shouldAbortExecution()) {
 		if (_introSkip.fastForwarding()) {
 			processGameEvents();

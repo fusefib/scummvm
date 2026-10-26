@@ -62,6 +62,8 @@ public:
 	virtual void handleCustomAction(Common::CustomEventType action);
 	/** Preserve a press even if its release arrives in the same input pass. */
 	virtual void handleMouseDown(int16 x, int16 y, MouseButtons buttons);
+	/** Resume engine-owned timing after a pause or modal dialog. */
+	virtual void notifyPaused(uint32 duration);
 
 	struct AnimProperties {
 		uint16 animation;

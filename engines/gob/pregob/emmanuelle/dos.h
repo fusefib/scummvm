@@ -39,7 +39,7 @@ namespace Gob {
 namespace Emmanuelle {
 
 uint16 dosRandomBounded(uint32 &state, uint16 upperExclusive);
-void getDosSchedulerTiming(byte period, bool alternateTiming,
+void getDosSchedulerTiming(byte period,
 						   uint16 &reload, uint16 &initialCountdown);
 
 enum {
