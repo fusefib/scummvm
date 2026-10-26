@@ -1069,15 +1069,26 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 				}
 				if (_platformTag == kOldTotPlatformAmiga && rendered) {
 					servicePresentation();
-					delay(amigaNativeDelayMilliseconds(150));
+					if (_currentModule == kModuleInit)
+						delay(amigaNativeDelayMilliseconds(150));
 				}
 				if (_platformTag == kOldTotPlatformAtariST && rendered) {
 					servicePresentation();
-					waitPresentationFrames(atariStAnimationVblCount());
+					if (_currentModule == kModuleInit)
+						waitPresentationFrames(atariStAnimationVblCount());
 				}
 				if (shouldAbortExecution())
 					break;
-				if (setup.frameDelay) {
+				// Gameplay frames sleep after presentation; INIT keeps its native holds.
+				if (_currentModule != kModuleInit) {
+					if (rendered) {
+						const uint16 milliseconds = 100 + (uint16)setup.frameDelay * 20;
+						if (_platformTag == kOldTotPlatformAtariST)
+							delayAtariAnimation(milliseconds);
+						else
+							delay(milliseconds);
+					}
+				} else if (setup.frameDelay) {
 					const uint16 units = (uint16)setup.frameDelay * 10;
 					if (_platformTag == kOldTotPlatformAtariST)
 						delayAtariAnimation(units);

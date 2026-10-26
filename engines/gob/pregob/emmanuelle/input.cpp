@@ -383,6 +383,9 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
 			waitAtariInputRelease();
 		return;
 	}
+	// Gameplay waits count presentation toward an elapsed target.
+	// INIT retains its native requested sleep.
+	const uint32 presentationStart = _currentModule != kModuleInit ? g_system->getMillis() : 0;
 	if (!servicePresentation())
 		presentFrame(true);
 	if (shouldAbortExecution())
@@ -391,6 +394,10 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
 		fadeAtariFromBlack();
 	noteInitialTomahawkVisible();
 	serviceWaitColorCycle();
+	if (_currentModule != kModuleInit) {
+		waitForMinimumDuration(presentationStart, 100 + (arg / 5) * 20);
+		return;
+	}
 	uint16 milliseconds = opcode03DelayUnits(arg);
 	if (_platformTag == kOldTotPlatformDOS)
 		milliseconds = dosOpcode03DelayMilliseconds(arg);
