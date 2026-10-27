@@ -76,8 +76,12 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 		patched = patchCasinoCaptions(platform, language) || patched;
 		return patched;
 	}
-	if (resourceName.equalsIgnoreCase(amiga ? "LOADGAR.TOA" : "LOADGAR.TOT"))
-		return patchPartyHotspots(language) || patched;
+	if (resourceName.equalsIgnoreCase(amiga ? "LOADGAR.TOA" : "LOADGAR.TOT")) {
+		patched = patchPartyHotspots(language) || patched;
+		if (language == Common::ES_ESP)
+			patched = patchSpanishReplies() || patched;
+		return patched;
+	}
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADFAV.TOA" : "LOADFAV.TOT"))
 		return patchVendorAffordability(language) || patched;
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADHOT.TOA" : "LOADHOT.TOT")) {
@@ -753,6 +757,36 @@ bool OldTotData::patchRouletteConfirmation(OldTotPlatformTag platform,
 		return true;
 	}
 	return false;
+}
+
+// Three Spanish LOADGAR replies start with a blank line that pushes their
+// final refusal out of the text rectangle. Replace that first break with a
+// space, retaining every record boundary and the continuation waits.
+// Applies to: All Spanish versions.
+bool OldTotData::patchSpanishReplies() {
+	static const struct {
+		uint16 offset, x, y, width, height;
+		const char *text;
+	} replies[] = {
+		{0x1BA0, 104, 19, 128, 16, "@     OH NO!@    ESO NO!"},
+		{0x1BC8, 104, 19, 128, 16, "@   NO ERES MUY@      HABIL!"},
+		{0x2A1E, 40, 5, 256, 32, "@   SE\xA4OR, NO TENGO EL GUSTO DE@    CONCERLE. QUIEN ES PARA@         COLARSE EN MI@        PALCO? MARCHESE!"}
+	};
+	for (uint i = 0; i < ARRAYSIZE(replies); ++i) {
+		byte header[] = {0x1D, 0, 0, 0, 0, 0, 0, 0, 0, 8, 15, 0, 0, 0, 0};
+		WRITE_BE_UINT16(header + 1, replies[i].x);
+		WRITE_BE_UINT16(header + 3, replies[i].y);
+		WRITE_BE_UINT16(header + 5, replies[i].width);
+		WRITE_BE_UINT16(header + 7, replies[i].height);
+		const uint length = strlen(replies[i].text) + 1;
+		if (!has(replies[i].offset, sizeof(header) + length) ||
+			memcmp(&_data[replies[i].offset], header, sizeof(header)) != 0 ||
+			memcmp(&_data[replies[i].offset + sizeof(header)], replies[i].text, length) != 0)
+			return false;
+	}
+	for (uint i = 0; i < ARRAYSIZE(replies); ++i)
+		_data[replies[i].offset + 15] = ' ';
+	return true;
 }
 
 } // End of namespace Emmanuelle

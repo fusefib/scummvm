@@ -164,6 +164,7 @@ private:
 	bool patchMeterBand();
 	bool patchCasinoReturn(Common::Language language);
 	bool patchPartyHotspots(Common::Language language);
+	bool patchSpanishReplies();
 	bool patchHotelRoomState(Common::Language language);
 	bool patchHotelHelicopter(Common::Language language);
 	bool patchVendorAffordability(Common::Language language);
