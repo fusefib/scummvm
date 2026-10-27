@@ -59,13 +59,15 @@ bool OldTotData::applyScriptPatches(OldTotPlatformTag platform,
 	if (language == Common::DE_DEU && !amiga)
 		return false;
 	bool patched = false;
+	if (amiga)
+		patched = patchAmigaPanelText(language, resourceName);
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADHOT.TOA" : "LOADHOT.TOT") ||
 		resourceName.equalsIgnoreCase(amiga ? "LOADAERO.TOA" : "LOADAERO.TOT") ||
 		resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT") ||
 		resourceName.equalsIgnoreCase(amiga ? "LOADFAV.TOA" : "LOADFAV.TOT") ||
 		resourceName.equalsIgnoreCase(amiga ? "LOADGAR.TOA" : "LOADGAR.TOT") ||
 		resourceName.equalsIgnoreCase(amiga ? "LOADPLA.TOA" : "LOADPLA.TOT"))
-		patched = patchMeterBand();
+		patched = patchMeterBand() || patched;
 	if (resourceName.equalsIgnoreCase(amiga ? "LOADCAS.TOA" : "LOADCAS.TOT")) {
 		patched = patchCasinoEntryPause(platform, language) || patched;
 		patched = patchRouletteTwenty(language) || patched;
@@ -787,6 +789,70 @@ bool OldTotData::patchSpanishReplies() {
 	for (uint i = 0; i < ARRAYSIZE(replies); ++i)
 		_data[replies[i].offset + 15] = ' ';
 	return true;
+}
+
+// These Amiga warning and ending captions reach the patterned left bevel of
+// their 144x22 panels. Inset only the affected text by two pixels; retain the
+// original width, wrapping and transparent background. The scripts redraw
+// the panel between successive messages.
+bool OldTotData::patchAmigaPanelText(Common::Language language,
+		const Common::String &resourceName) {
+	static const struct {
+		Common::Language language;
+		const char *module;
+		uint16 text, panel;
+		const char *caption;
+	} captions[] = {
+		{Common::EN_ANY, "LOADAERO.TOA", 0x29F8, 0x50D0, "  Suddenly, the@girl's protector"},
+		{Common::EN_ANY, "LOADAERO.TOA", 0x2A28, 0x50D0, "   appeared,@looking nasty..."},
+		{Common::EN_ANY, "LOADCAS.TOA", 0x1F53, 0x56FD, "you are dragged@   outside..."},
+		{Common::EN_ANY, "LOADGAR.TOA", 0x2A64, 0x3D4B, "The noise alerts@   the police."},
+		{Common::EN_ANY, "LOADGAR.TOA", 0x2AC0, 0x3D4B, "The performance@     over,"},
+		{Common::EN_ANY, "LOADHOT.TOA", 0x1ACC, 0x7920, "Your indescreet@   attitude"},
+		{Common::ES_ESP, "LOADAERO.TOA", 0x2961, 0x4EC2, "EL PROTECTOR DE@  LA BELLA..."},
+		{Common::ES_ESP, "LOADHOT.TOA", 0x1A82, 0x75EA, "TU COMPORTAMIEN-@ TO INDISCRETO"},
+		{Common::DE_DEU, "INIT.TOA", 0x1484, 0x6BBC, " Ihre Vorr" "\x84" "te@sind ersch" "\x94" "pft."},
+		{Common::DE_DEU, "INIT.TOA", 0x14DC, 0x6BBC, "Sie stellen die@Recherchen ein."},
+		{Common::DE_DEU, "LOADAERO.TOA", 0x2AB5, 0x50F7, "   Die Rache@bricht herein."},
+		{Common::DE_DEU, "LOADGAR.TOA", 0x2AF7, 0x3E02, "Die Polizei hat@  Sie geh" "\x94" "rt!"},
+		{Common::DE_DEU, "LOADGAR.TOA", 0x2B24, 0x3E02, "Sie zahlen eine@dicke Strafe..."},
+		{Common::DE_DEU, "LOADHOT.TOA", 0x1AFA, 0x7998, "Ihr undiskretes@    Benehmen"},
+		{Common::FR_FRA, "INIT.TOA", 0x14B6, 0x6CA7, " Vous " "\x88" "tes com-@pl" "\x8A" "tement ruin" "\x82" "."},
+		{Common::FR_FRA, "INIT.TOA", 0x14E6, 0x6CA7, "Vous abandonnez@les recherches."},
+		{Common::FR_FRA, "LOADAERO.TOA", 0x2A38, 0x4FA7, " Soudain surgit, l'air vindicatif"},
+		{Common::FR_FRA, "LOADAERO.TOA", 0x2A69, 0x4FA7, " le protecteur  de la belle..."},
+		{Common::FR_FRA, "LOADCAS.TOA", 0x1F58, 0x56D1, "vous " "\x88" "tes entrai@ n" "\x82" " au dehors..."},
+		{Common::FR_FRA, "LOADGAR.TOA", 0x2A76, 0x3D87, " Vos bruits ont@alert" "\x82" " la police"},
+		{Common::FR_FRA, "LOADGAR.TOA", 0x2AA6, 0x3D87, "Vous payez une@forte amende..."},
+		{Common::FR_FRA, "LOADGAR.TOA", 0x2B02, 0x3D87, " Vous rentrez " "\x85" "   votre h" "\x93" "tel!"}
+	};
+	const bool init = resourceName.equalsIgnoreCase("INIT.TOA");
+	const uint16 x = init ? 96 : 120, y = init ? 92 : 48;
+	byte header[] = {0x1D, 0, 0, 0, 0, 0, 128, 0, 16, 8, 16, 0, 0, 0, 0};
+	byte panel[] = {0x67, 0, 0, 0, 0, 0, 0, 0, 144, 0, 22, 10};
+	WRITE_BE_UINT16(header + 1, x);
+	WRITE_BE_UINT16(header + 3, y);
+	WRITE_BE_UINT16(panel + 3, x - 8);
+	WRITE_BE_UINT16(panel + 5, y - 3);
+	bool matched = false;
+	for (uint i = 0; i < ARRAYSIZE(captions); ++i) {
+		if (language != captions[i].language || !resourceName.equalsIgnoreCase(captions[i].module))
+			continue;
+		const uint length = strlen(captions[i].caption) + 1;
+		if (!has(captions[i].text, sizeof(header) + length) || !has(captions[i].panel, sizeof(panel)) ||
+			memcmp(&_data[captions[i].text], header, sizeof(header)) != 0 ||
+			memcmp(&_data[captions[i].text + sizeof(header)], captions[i].caption, length) != 0 ||
+			memcmp(&_data[captions[i].panel], panel, sizeof(panel)) != 0)
+			return false;
+		matched = true;
+	}
+	if (matched) {
+		for (uint i = 0; i < ARRAYSIZE(captions); ++i) {
+			if (language == captions[i].language && resourceName.equalsIgnoreCase(captions[i].module))
+				WRITE_BE_UINT16(&_data[captions[i].text + 1], x + 2);
+		}
+	}
+	return matched;
 }
 
 } // End of namespace Emmanuelle
