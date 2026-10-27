@@ -256,6 +256,8 @@ bool OldTotData::patchCasinoEntryPause(OldTotPlatformTag platform,
 // LOADCAS's opening and closed-bets announcements repaint the bubble's bevel,
 // and the English full stops reach its right edge. Keep the existing bubble
 // background and give the text blocks margins and the stakes lines a gap.
+// German Amiga also retains French captions. Translate these in place using
+// the original fonts' lowercase a-umlaut (0x84).
 //
 // Applies to: All supported versions
 // Script: LOADCAS.TOT / LOADCAS.TOA
@@ -265,7 +267,7 @@ bool OldTotData::patchCasinoCaptions(OldTotPlatformTag platform,
 		Common::Language language;
 		uint16 text[3]; // Opening, stakes placed, bets closed.
 		uint16 bubbles[2], amigaBubbles[2]; // Lower and upper bubble.
-		byte x[3]; // Includes the original strings' leading spaces.
+		byte x[3]; // Includes any leading spaces.
 		const char *captions[3];
 	} layouts[] = {
 		{Common::EN_ANY, {0x1B25, 0x1B46, 0x1B6F},
@@ -278,8 +280,11 @@ bool OldTotData::patchCasinoCaptions(OldTotPlatformTag platform,
 			{0x6326, 0x6F8D}, {0x63B4, 0x72EC}, {80, 84, 80},
 			{" FAITES VOS JEUX", "    LES JEUX@   SONT FAITS", " RIEN NE VA PLUS"}},
 		{Common::DE_DEU, {0x1B54, 0x1B74, 0x1B9E},
-			{0, 0}, {0x6423, 0x735B}, {80, 84, 80},
+			{0, 0}, {0x6423, 0x735B}, {97, 96, 84},
 			{" FAITES VOS JEUX", "    LES JEUX@   SONT FAITS", " RIEN NE VA PLUS"}}
+	};
+	static const char *const germanCaptions[] = {
+		"Bitte setzen!", "  Eins\x84tze@  platziert", "Nichts geht mehr"
 	};
 	for (uint i = 0; i < ARRAYSIZE(layouts); ++i) {
 		if (layouts[i].language != language)
@@ -294,6 +299,7 @@ bool OldTotData::patchCasinoCaptions(OldTotPlatformTag platform,
 			const uint16 offset = layouts[i].text[caption];
 			const uint length = strlen(layouts[i].captions[caption]) + 1;
 			if (!has(offset, sizeof(headers[caption]) + length) ||
+				(language == Common::DE_DEU && strlen(germanCaptions[caption]) >= length) ||
 				memcmp(&_data[offset], headers[caption], sizeof(headers[caption])) != 0 ||
 				memcmp(&_data[offset + sizeof(headers[caption])], layouts[i].captions[caption], length) != 0)
 				return false;
@@ -314,6 +320,12 @@ bool OldTotData::patchCasinoCaptions(OldTotPlatformTag platform,
 		for (uint caption = 0; caption < ARRAYSIZE(headers); ++caption) {
 			WRITE_BE_UINT16(&_data[layouts[i].text[caption] + 1], layouts[i].x[caption]);
 			_data[layouts[i].text[caption] + 10] = 16; // Transparent: retain the bubble artwork.
+			if (language == Common::DE_DEU) {
+				// Pad to the existing terminator so later records keep their offsets.
+				byte *text = &_data[layouts[i].text[caption] + 15];
+				memset(text, ' ', strlen(layouts[i].captions[caption]));
+				memcpy(text, germanCaptions[caption], strlen(germanCaptions[caption]));
+			}
 		}
 		WRITE_BE_UINT16(&_data[layouts[i].text[0] + 3], 101);
 		WRITE_BE_UINT16(&_data[layouts[i].text[1] + 3], 26);
