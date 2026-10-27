@@ -34,11 +34,16 @@
 #include "gob/pregob/emmanuelle/oldtot.h"
 
 namespace Gob {
+
+class Font;
+
 namespace Emmanuelle {
 
 struct OldTotTextGlyph {
 	byte character, color;
 	int16 x, y;
+	// Ink may move; the script's opaque character cell must not move with it.
+	int16 cellY;
 };
 
 struct OldTotTextPlan {
@@ -62,6 +67,13 @@ struct OldTotTextPlan {
  * Returns false for the randomized copy-protection form.
  */
 bool planOldTotText(const OldTotData &data, const OldTotVM &vm, uint16 offset, OldTotTextPlan &out);
+
+/** Align the original LET bitmaps without changing wrapping or cell positions.
+ * Returns the highest ink row, for restoring pixels above the text rectangle.
+ * keepSingleLineBaseline allows descenders below a single line when they fit.
+ */
+int16 alignOldTotTextBaselines(OldTotTextPlan &plan, const Font &font,
+	bool keepSingleLineBaseline = false);
 
 } // End of namespace Emmanuelle
 } // End of namespace Gob

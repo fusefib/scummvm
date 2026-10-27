@@ -202,6 +202,8 @@ bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
 
 void OldTotRenderer::commitState(OldTotRendererPreparedState &in) {
 	_vm->_draw->_backSurface->blit(*in.framebuffer);
+	// Dialogue scripts restore their windows before the next saveable choice.
+	// Loading recreates screen captures without temporary caption backgrounds.
 	_savedRegions.swap(in.savedRegions);
 	for (uint i = 0; i < ARRAYSIZE(_atariLogicalPalette); ++i)
 		_atariLogicalPalette[i] = in.atariPalette[i];
@@ -410,6 +412,8 @@ bool OldTotRenderer::restoreScreenRect() {
 		return false;
 
 	const OldTotPreparedSavedRegion saved = _savedRegions.back();
+	// Restoring the captured window also removes raised letters. Its saved
+	// caption background is no longer needed and is released with the window.
 	_savedRegions.pop_back();
 	_vm->_draw->_backSurface->blit(*saved.surface, saved.x, saved.y);
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, saved.x, saved.y,
@@ -426,12 +430,73 @@ bool OldTotRenderer::restoreScreenRect() {
 	return true;
 }
 
+Common::Rect OldTotRenderer::restoreAndCaptureTextOverhang(const Common::Rect &textRect,
+		int16 inkTop) {
+	Common::Rect restored;
+	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface)
+		return restored;
+	Surface &back = *_vm->_draw->_backSurface;
+	for (uint i = _savedRegions.size(); i > 0; --i) {
+		OldTotPreparedSavedRegion &saved = _savedRegions[i - 1];
+		const Common::Rect window(saved.x, saved.y,
+			saved.x + saved.surface->getWidth(), saved.y + saved.surface->getHeight());
+		if (!window.contains(textRect))
+			continue;
+
+		// Only replacing the same text box clears its raised letters. Other
+		// text must leave this caption's saved background alone.
+		if (saved.textOverhangBackground && !saved.textRect.equals(textRect))
+			return restored;
+		if (saved.textOverhangBackground) {
+			restored = saved.textOverhangRect();
+			back.blit(*saved.textOverhangBackground, restored.left, restored.top);
+			saved.textOverhangBackground.reset();
+		}
+
+		// French LOADFAV:10B8 -> HUD -> 1147 reuses the upper panel. Raising
+		// the first caption leaves a pixel at (162,4) above the area cleared by
+		// the next caption. Restore the panel pixels under those old letters;
+		// enlarging a dirty rectangle would only publish the leftover pixel.
+		Common::Rect band(textRect.left, MIN<int16>(inkTop, textRect.top),
+			textRect.right, textRect.top);
+		band.clip(Common::Rect(0, 0, back.getWidth(), back.getHeight()));
+		if (!band.isEmpty() && window.contains(band)) {
+			saved.textOverhangBackground = SurfacePtr(new Surface(band.width(), band.height(), back.getBPP()));
+			saved.textOverhangBackground->blit(back, band.left, band.top,
+				band.right - 1, band.bottom - 1, 0, 0);
+			saved.textRect = textRect;
+		}
+		return restored;
+	}
+	// INIT status text has no dialogue capture. Its native background pieces
+	// are redrawn before each replacement; do not create a persistent fallback.
+	return restored;
+}
+
+void OldTotRenderer::discardCoveredTextOverhangBacking(const Common::Rect &redraw) {
+	for (uint i = _savedRegions.size(); i > 0; --i) {
+		OldTotPreparedSavedRegion &saved = _savedRegions[i - 1];
+		// A covering redraw replaces the panel pixels. Drop their saved copy
+		// so a later caption cannot paint the old panel onto the new artwork.
+		if (saved.textOverhangBackground && redraw.contains(saved.textOverhangRect()))
+			saved.textOverhangBackground.reset();
+		const Common::Rect window(saved.x, saved.y,
+			saved.x + saved.surface->getWidth(), saved.y + saved.surface->getHeight());
+		// A nested window captures the parent's displayed caption. Its restore
+		// will bring that caption back, so retain the parent's saved background.
+		if (window.contains(redraw))
+			return;
+	}
+}
+
 void OldTotRenderer::fillScreen(byte color) {
 	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface)
 		return;
 
 	Surface &back = *_vm->_draw->_backSurface;
 	back.fillRect(0, 0, back.getWidth() - 1, back.getHeight() - 1, color);
+	for (uint i = 0; i < _savedRegions.size(); ++i)
+		_savedRegions[i].textOverhangBackground.reset();
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0, back.getWidth() - 1,
 							back.getHeight() - 1);
 	notePresentationDirtyRect(0, 0, back.getWidth() - 1,
@@ -468,6 +533,8 @@ bool OldTotRenderer::drawPackedPayload(const Common::Array<byte> &payload,
 					dest.putPixelRaw(targetX, targetY, pixel);
 			}
 		}
+		if (!transparentZero)
+			discardCoveredTextOverhangBacking(Common::Rect(x, y, x + width, y + height));
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y,
 								x + width - 1, y + height - 1);
 		notePresentationDirtyRect(x, y, x + width - 1, y + height - 1);
@@ -501,6 +568,8 @@ bool OldTotRenderer::drawPackedPayload(const Common::Array<byte> &payload,
 		}
 	}
 
+	if (!transparentZero)
+		discardCoveredTextOverhangBacking(Common::Rect(x, y, x + width, y + height));
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y,
 							x + width - 1, y + height - 1);
 	notePresentationDirtyRect(x, y, x + width - 1, y + height - 1);
@@ -926,6 +995,100 @@ bool PreGob_Emmanuelle::handleProtectionTextNode(uint16 nodeOffset) {
 	return true;
 }
 
+// Align sharp-s and cedillas using the original font bitmaps. Text wrapping,
+// background cells and script-defined text boxes keep their original positions;
+// only the letters move. Earlier lines move up when needed to leave room.
+//
+// A raised letter can extend above the area cleared by the next caption.
+// Dialogue windows therefore save that narrow strip of panel background before
+// drawing text. restoreAndCaptureTextOverhang() puts it back on replacement;
+// the native window restore releases it. This preserves the panel's artwork.
+int16 alignOldTotTextBaselines(OldTotTextPlan &plan, const Font &font,
+		bool keepSingleLineBaseline) {
+	bool needsAlignment = false;
+	for (uint i = 0; i < plan.glyphs.size(); ++i) {
+		OldTotTextGlyph &glyph = plan.glyphs[i];
+		glyph.y = glyph.cellY;
+		needsAlignment |= glyph.character == 0xE1 || glyph.character == 0x80 || glyph.character == 0x87;
+	}
+	if (!needsAlignment)
+		return plan.y;
+	const bool keepBaseline = keepSingleLineBaseline &&
+		plan.glyphs[0].cellY == plan.glyphs.back().cellY &&
+		plan.glyphs[0].cellY + font.getCharHeight() + 2 <= plan.y + plan.height;
+
+	// Place native E1 (sharp-s) one row below ordinary letters, 87/80 (c/C
+	// with cedilla) two rows below. Lift the line to fit the lowest character.
+	// Mixed German LOADHOT:23C4 uses offsets -2/-1/0 respectively.
+	byte pixels[64];
+	Surface mask(8, 8, 1, pixels);
+	int lift = 0;
+	int nextLineY = 0;
+	int nextInkTop = 32767;
+	int inkTop = plan.y;
+	uint end = plan.glyphs.size();
+	while (end) {
+		const int cellY = plan.glyphs[end - 1].cellY;
+		uint start = end - 1;
+		while (start && plan.glyphs[start - 1].cellY == cellY)
+			--start;
+		bool visibleLine = false;
+		for (uint i = start; i < end; ++i)
+			visibleLine |= plan.glyphs[i].character != ' ';
+		if (!visibleLine) {
+			end = start;
+			continue;
+		}
+
+		// Work backward so a raised line also raises its contiguous predecessors.
+		// Extra blank-line spacing absorbs that carry: the German protection
+		// screen's later colour label must not push its top instructions offscreen.
+		if (nextInkTop != 32767)
+			lift = MAX(0, lift - MAX(0, nextLineY - cellY - plan.lineAdvance));
+		for (uint i = start; i < end; ++i) {
+			OldTotTextGlyph &glyph = plan.glyphs[i];
+			const int offset = glyph.character == 0xE1 ? 1 :
+				(glyph.character == 0x80 || glyph.character == 0x87 ? 2 : 0);
+			glyph.y = glyph.cellY + offset;
+			if (!keepBaseline)
+				lift = MAX(lift, offset);
+		}
+		for (uint i = start; i < end; ++i)
+			plan.glyphs[i].y -= lift;
+
+		// Measure ink rather than cells. The two native fonts have different
+		// vertical extents; a full-cell collision test would lift too much.
+		int top = 32767;
+		int bottom = -32768;
+		for (uint i = start; i < end; ++i) {
+			const OldTotTextGlyph &glyph = plan.glyphs[i];
+			mask.clear();
+			font.drawLetterRaw(mask, glyph.character, 0, 0, 1, 0, false);
+			for (uint row = 0; row < 8; ++row) {
+				for (uint col = 0; col < 8; ++col) {
+					if (pixels[row * 8 + col]) {
+						top = MIN(top, glyph.y + (int)row);
+						bottom = MAX(bottom, glyph.y + (int)row);
+					}
+				}
+			}
+		}
+		if (bottom >= nextInkTop) {
+			const int extra = bottom - nextInkTop + 1;
+			lift += extra;
+			top -= extra;
+			for (uint i = start; i < end; ++i)
+				plan.glyphs[i].y -= extra;
+		}
+		if (top != 32767)
+			nextInkTop = top;
+		inkTop = MIN(inkTop, top);
+		nextLineY = cellY;
+		end = start;
+	}
+	return inkTop;
+}
+
 void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
 	OldTotTextPlan plan;
 	if (!_tot || !_scriptVM ||
@@ -938,6 +1101,9 @@ void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
 		failHostOperation("text font", nodeOffset);
 		return;
 	}
+	// Keep airport names level; the box leaves room for the cedilla.
+	const int16 inkTop = alignOldTotTextBaselines(plan, *font,
+		_currentModule == kModuleLoadAero);
 	if (_platformTag == kOldTotPlatformAmiga) {
 		byte colors[16];
 		if (!getAmigaTextColorTable(_moduleFileStem, colors) || plan.background > 16) {
@@ -958,6 +1124,11 @@ void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
 	const bool amiga = _platformTag == kOldTotPlatformAmiga;
 	Common::Rect dirty(plan.x, plan.y, plan.x + plan.width, plan.y + plan.height);
 	Common::Rect background = dirty;
+	// Transparent text overlays the current caption rather than replacing it.
+	const Common::Rect restored = plan.background == 0x10 ? Common::Rect() :
+		_renderer.restoreAndCaptureTextOverhang(dirty, inkTop);
+	if (!restored.isEmpty())
+		dirty.extend(restored);
 	if (amiga) {
 		// Amiga fills whole eight-pixel units, then paints only glyph strokes.
 		// In LOADCAS this keeps the x=83 text fill inside its x=80 bubble.
@@ -974,11 +1145,32 @@ void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
 	}
 	for (uint i = 0; i < plan.glyphs.size(); ++i) {
 		const OldTotTextGlyph &glyph = plan.glyphs[i];
-		font->drawLetter(*_vm->_draw->_backSurface, glyph.character, glyph.x, glyph.y,
-			glyph.color, plan.background, amiga || plan.background == 0x10);
-		if (amiga)
-			dirty.extend(Common::Rect(glyph.x, glyph.y,
-				glyph.x + font->getCharWidth(glyph.character), glyph.y + font->getCharHeight()));
+		// DOS/ST's opaque cells remain at their nominal Y. Paint shifted ink
+		// transparently so a raised letter cannot expand the original fill.
+		if (!amiga && plan.background != 0x10) {
+			_vm->_draw->_backSurface->fillRect(glyph.x, glyph.cellY,
+				glyph.x + font->getCharWidth(glyph.character) - 1,
+				glyph.cellY + font->getCharHeight() - 1, plan.background);
+		}
+		if (glyph.y < 0) {
+			// Font accepts unsigned Y. Clip the unchanged 8x8 bitmap locally
+			// rather than losing its visible strokes when a line crosses Y=0.
+			byte pixels[64];
+			Surface mask(8, 8, 1, pixels);
+			mask.clear();
+			font->drawLetterRaw(mask, glyph.character, 0, 0, 1, 0, false);
+			for (int y = MAX(0, -glyph.y); y < 8; ++y) {
+				for (int x = 0; x < 8; ++x) {
+					if (pixels[y * 8 + x] && bounds.contains(glyph.x + x, glyph.y + y))
+						_vm->_draw->_backSurface->putPixel(glyph.x + x, glyph.y + y, glyph.color);
+				}
+			}
+		} else {
+			font->drawLetter(*_vm->_draw->_backSurface, glyph.character, glyph.x, glyph.y,
+				glyph.color, plan.background, true);
+		}
+		dirty.extend(Common::Rect(glyph.x, glyph.y,
+			glyph.x + font->getCharWidth(glyph.character), glyph.y + font->getCharHeight()));
 	}
 	dirty.clip(bounds);
 	if (!dirty.isEmpty()) {

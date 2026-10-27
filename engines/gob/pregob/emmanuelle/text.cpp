@@ -31,6 +31,7 @@ namespace Gob {
 namespace Emmanuelle {
 
 static bool isControl(byte c) { return c == '[' || c == ']' || c == '{' || c == '}'; }
+
 static void appendDecimal(Common::Array<byte> &out, uint16 value, byte width) {
 	byte tmp[6];
 	uint n = 0;
@@ -118,7 +119,8 @@ bool planOldTotText(const OldTotData &d, const OldTotVM &vm, uint16 o, OldTotTex
 			if (c == '{' || c == '}')
 				continue;
 			if (c == ' ' || c >= 0x20) {
-				OldTotTextGlyph g = {c, color, cx, (int16)(cy + (out.lineAdvance > 8 ? (out.lineAdvance - 8) / 2 : 0))};
+				const int16 cellY = cy + (out.lineAdvance > 8 ? (out.lineAdvance - 8) / 2 : 0);
+				OldTotTextGlyph g = {c, color, cx, cellY, cellY};
 				out.glyphs.push_back(g);
 				cx += 8;
 			}

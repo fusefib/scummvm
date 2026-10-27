@@ -58,6 +58,19 @@ struct OldTotPreparedSavedRegion {
 	SurfacePtr surface;
 	int16 x;
 	int16 y;
+
+	// Panel pixels covered by letters raised above the text box. Keep them
+	// with this window until its caption is replaced or the window is restored.
+	SurfacePtr textOverhangBackground;
+	Common::Rect textRect;
+
+	// Requires a saved background. Its strip spans the text box and ends
+	// just above it; the surface height accounts for clipping at the screen top.
+	Common::Rect textOverhangRect() const {
+		return Common::Rect(textRect.left,
+			textRect.top - textOverhangBackground->getHeight(),
+			textRect.right, textRect.top);
+	}
 };
 
 struct OldTotRendererPreparedState {
@@ -167,6 +180,10 @@ public:
 	bool saveScreenRect(uint16 x, uint16 y, uint16 width, uint16 height);
 	bool restoreScreenRect();
 	void fillScreen(byte color);
+	/** Restore the preceding caption's raised ink, then preserve the new band.
+	 * Returns restored bounds for the caller's existing dirty notification.
+	 */
+	Common::Rect restoreAndCaptureTextOverhang(const Common::Rect &textRect, int16 inkTop);
 
 	bool drawExternalSprite(const OldTotDrawDescriptor &desc, int16 x, int16 y);
 	bool drawSprite(const OldTotData &tot, const OldTotDrawDescriptor &desc,
@@ -215,6 +232,7 @@ private:
 	void finishAtariTransitionFrame();
 	void clearDirtyRect();
 	void finishAmigaTransitionFrame();
+	void discardCoveredTextOverhangBacking(const Common::Rect &redraw);
 
 	GobEngine *_vm;
 	OldTotPlatformTag _platform;
