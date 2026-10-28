@@ -236,6 +236,56 @@ static bool correctInput(const Common::Array<byte> &source, Common::Array<byte> 
 	return true;
 }
 
+// Append only ordinary 0x21 nodes. Existing data is not relocated and dormant
+// code is not reused as scratch. Stay below 0xFF00: an FF-leading pointer is an
+// inline-command marker inside a sequence. Bounds and size checks are explicit.
+static bool appendCondition(Common::Array<byte> &data, byte var, byte value,
+		uint16 yes, uint16 no, uint16 &offset) {
+	if (data.size() < 16 || data.size() + 10 >= 0xFF00)
+		return false;
+	offset = (uint16)data.size();
+	data.resize(data.size() + 10);
+	byte *p = data.data() + offset;
+	p[0] = 0x21; p[1] = 1; p[2] = var; p[3] = value; // var.word0 != immediate
+	p[4] = 1; WRITE_BE_UINT16(p + 5, yes);
+	p[7] = 1; WRITE_BE_UINT16(p + 8, no);
+	WRITE_BE_UINT16(data.data(), data.size());
+	return true;
+}
+
+// S02: after drawing the hen-seller scene, before its original entry dispatcher:
+//   if mongoose && !basket -> the ALREADY AUTHORED localized refusal sequence.
+// No hen-loss flag is fabricated, no points/RNG are spent on a doomed quiz.
+// Basket present / no mongoose rejoins the entire original dispatcher, including
+// introduction and real historical-loss/replacement handling.
+static bool correctHenProtection(ResourceId id, const Common::Array<byte> &source,
+		Common::Array<byte> &target) {
+	uint16 entryAt, refusalAt, dispatcher;
+	static const byte germanEntry[] = { 0x1C, 4, 0x23, 0xC8, 0xFF, 3, 0x32, 7, 0x89, 0x0D, 0x1F };
+	const byte *entry;
+	switch (id) {
+	case kGermanHen:
+		entryAt = 0x0D29; refusalAt = 0x0CE5; dispatcher = 0x0D1F;
+		entry = germanEntry;
+		break;
+	default:
+		return false;
+	}
+	static const byte refusal[] = { 0x1C, 6, 0xFF, 1, 5, 8, 0x1E, 0x20 };
+	if (!expect(source, entryAt, entry, sizeof(germanEntry)) ||
+		!expect(source, refusalAt, refusal, sizeof(refusal)))
+		return false;
+	const uint32 base = target.size();
+	if (base + 20 >= 0xFF00)
+		return false;
+	uint16 mongoose, basket;
+	if (!appendCondition(target, 0x2C, 0, (uint16)(base + 10), dispatcher, mongoose) ||
+		!appendCondition(target, 0x2A, 0, dispatcher, refusalAt, basket))
+		return false;
+	WRITE_BE_UINT16(target.data() + entryAt + 9, mongoose);
+	return basket == base + 10;
+}
+
 } // End of anonymous namespace
 
 bool prepareMewiloScript(Common::SeekableReadStream &normalizedStream,
@@ -279,6 +329,12 @@ bool prepareMewiloScript(Common::SeekableReadStream &normalizedStream,
 				prepared.appliedMask |= kMewiloFixGermanAliases;
 			++prepared.changedSites;
 		}
+	}
+	if (ok && (policy & kMewiloPatchHenProtection) &&
+		id == kGermanHen) {
+		ok = correctHenProtection(id, source, candidate);
+		prepared.appliedMask |= kMewiloFixHenProtection;
+		++prepared.changedSites;
 	}
 	if (!ok || (prepared.appliedMask && !validate(candidate, platform))) {
 		warning("Mewilo: refusing failed script correction in %s.TOT", moduleStem);

@@ -33,14 +33,16 @@ namespace Mewilo {
 // Original behavior is policy 0. Timing is deliberately NOT one of these flags.
 enum MewiloScriptPatchPolicy {
 	kMewiloPatchGermanText = 1 << 0,   // S04/S05/S07: wording, aliases and rejection text
-	kMewiloKnownScriptPatchPolicies = 1
+	kMewiloPatchHenProtection = 1 << 1, // S02: refuse a hen when mongoose is held without a basket
+	kMewiloKnownScriptPatchPolicies = 3
 };
 
 // Stable recipe IDs, not an indication that every recipe applies to every module.
 enum MewiloScriptPatchId {
 	kMewiloFixLetterWording = 1 << 0,
 	kMewiloFixGermanAliases = 1 << 1,
-	kMewiloFixGermanRejections = 1 << 2
+	kMewiloFixGermanRejections = 1 << 2,
+	kMewiloFixHenProtection = 1 << 3
 };
 
 /** Identity of the bytes actually prepared, NOT a later reopening of the file.

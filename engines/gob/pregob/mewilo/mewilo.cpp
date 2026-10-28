@@ -40,7 +40,7 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : Pr
 	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false),
 	_normalizeTiming(ConfMan.hasKey("mewilo_normalize_timing") && ConfMan.getBool("mewilo_normalize_timing")),
-	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_original_fixes") || ConfMan.getBool("mewilo_original_fixes") ? kMewiloPatchGermanText : 0) {
+	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_original_fixes") || ConfMan.getBool("mewilo_original_fixes") ? kMewiloPatchGermanText | kMewiloPatchHenProtection : 0) {
 	_music = new SoundMixer(*g_system->getMixer(), Audio::Mixer::kMusicSoundType);
 	if (_profile.persistentI00Scratch) {
 		_i00Scratch.resize(kExternalScratchSize);
