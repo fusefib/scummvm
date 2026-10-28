@@ -90,6 +90,9 @@ MODULE_OBJS := \
 	pregob/mewilo/platform.o \
 	pregob/mewilo/tot.o \
 	pregob/mewilo/executor.o \
+	pregob/mewilo/font.o \
+	pregob/mewilo/text.o \
+	pregob/mewilo/graphics.o \
 	pregob/onceupon/onceupon.o \
 	pregob/onceupon/abracadabra.o \
 	pregob/onceupon/babayaga.o \
