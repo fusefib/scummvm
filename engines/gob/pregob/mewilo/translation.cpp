@@ -20,7 +20,6 @@
 
 #include "gob/pregob/mewilo/translation.h"
 
-#include "common/memstream.h"
 #include "common/stream.h"
 
 #include "gob/pregob/mewilo/executor.h"
@@ -90,21 +89,13 @@ bool validEntry(const ReplacementEntry &e) {
 
 bool MewiloReplacements::load(Common::SeekableReadStream &input, Common::String &reason) {
 	reason.clear();
-	if (input.size() < 12 || input.size() > 4 * 1024 * 1024 || !input.seek(0)) {
+	// A changing file must not enlarge the bound used for staged allocations.
+	const int64 size = input.size();
+	if (size < 12 || size > 4 * 1024 * 1024 || !input.seek(0)) {
 		reason = "Invalid replacement pack size";
 		return false;
 	}
-	Common::Array<byte> resident;
-	resident.resize(input.size());
-	if (input.read(resident.data(), resident.size()) != resident.size()) {
-		reason = "Unable to read replacements";
-		return false;
-	}
-	Common::MemoryReadStream s(resident.data(), resident.size());
-	if (s.size() < 12 || s.size() > 4 * 1024 * 1024 || !s.seek(0)) {
-		reason = "Invalid replacement pack size";
-		return false;
-	}
+	Common::SeekableReadStream &s = input;
 	char magic[4];
 	if (s.read(magic, 4) != 4 || memcmp(magic, "MWEN", 4) || s.readUint16LE() != 2) {
 		reason = "Unsupported replacement pack";
@@ -117,7 +108,8 @@ bool MewiloReplacements::load(Common::SeekableReadStream &input, Common::String 
 	}
 	Common::Array<ReplacementEntry> staged;
 	for (uint i = 0; i < count; ++i) {
-		if (s.size() - s.pos() < 16) {
+		const int64 position = s.pos();
+		if (position < 0 || position > size || size - position < 16) {
 			reason = "Truncated replacement record";
 			return false;
 		}
@@ -132,7 +124,9 @@ bool MewiloReplacements::load(Common::SeekableReadStream &input, Common::String 
 		e.width = s.readUint16LE();
 		e.height = s.readUint16LE();
 		const uint32 length = s.readUint32LE();
-		if (reserved || !length || length > uint64(s.size() - s.pos())) {
+		const int64 payloadOffset = s.pos();
+		if (reserved || !length || payloadOffset < 0 || payloadOffset > size ||
+			length > uint64(size - payloadOffset)) {
 			reason = "Invalid replacement payload length";
 			return false;
 		}
@@ -144,12 +138,11 @@ bool MewiloReplacements::load(Common::SeekableReadStream &input, Common::String 
 		}
 		staged.push_back(e);
 	}
-	if (s.err() || s.pos() != s.size()) {
+	if (s.err() || s.pos() != size || s.size() != size) {
 		reason = "Trailing or unreadable replacement payload";
 		return false;
 	}
 	_entries.swap(staged);
-	_residentBytes.swap(resident);
 	_revision = revision;
 	_sparseOriginal = (flags == 1);
 	return true;
@@ -295,11 +288,34 @@ bool MewiloReplacements::applyGlyphs(MewiloFont &font) const {
 }
 
 void MewiloReplacements::writeIdentity(Common::WriteStream &stream) const {
-	if (_residentBytes.empty())
-		return; // Native-language save identities stay unchanged.
+	if (_entries.empty())
+		return;
+	uint32 size = 12;
+	for (uint i = 0; i < _entries.size(); ++i)
+		size += 16 + _entries[i].bytes.size();
 	stream.write("MWEN resident replacements", 26);
-	stream.writeUint32LE(_residentBytes.size());
-	stream.write(_residentBytes.data(), _residentBytes.size());
+	stream.writeUint32LE(size);
+	// Accepted packs have canonical ordering and zero reserved fields. Rebuild
+	// the exact resident bytes instead of keeping a second copy of every image.
+	stream.write("MWEN", 4);
+	stream.writeUint16LE(2);
+	stream.writeUint16LE(_revision);
+	stream.writeUint16LE(_entries.size());
+	stream.writeUint16LE(_sparseOriginal);
+	for (uint i = 0; i < _entries.size(); ++i) {
+		const ReplacementEntry &entry = _entries[i];
+		stream.writeByte(entry.key.family);
+		stream.writeByte(entry.key.module);
+		stream.writeByte(entry.key.kind);
+		stream.writeByte(entry.key.field);
+		stream.writeUint16LE(entry.key.node);
+		stream.writeByte(entry.opcode);
+		stream.writeByte(0);
+		stream.writeUint16LE(entry.width);
+		stream.writeUint16LE(entry.height);
+		stream.writeUint32LE(entry.bytes.size());
+		stream.write(entry.bytes.data(), entry.bytes.size());
+	}
 }
 
 bool drawReplacementImage(const ReplacementEntry &e, Surface &dest, int16 x, int16 y) {

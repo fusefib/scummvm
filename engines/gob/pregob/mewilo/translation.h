@@ -98,7 +98,6 @@ public:
 
 private:
 	Common::Array<ReplacementEntry> _entries;
-	Common::Array<byte> _residentBytes;
 	uint16 _revision;
 	bool _sparseOriginal;
 };
