@@ -77,6 +77,8 @@ enum Features {
 	kFeaturesTrueColor = 1 << 7,
 	kFeatures16Colors  = 1 << 8,
 	kFeatures640x400   = 1 << 9,
+	kFeaturesMewiloThomson = 1 << 10,
+	kFeaturesMewiloThomsonFD = 1 << 11,
 };
 
 enum AdditionalGameFlags {

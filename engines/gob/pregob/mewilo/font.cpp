@@ -18,6 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "common/endian.h"
 #include "gob/surface.h"
 #include "gob/pregob/mewilo/font.h"
 
@@ -27,15 +28,28 @@ namespace Mewilo {
 MewiloFont::MewiloFont() {
 }
 
-bool MewiloFont::load(Common::SeekableReadStream &stream) {
+bool MewiloFont::load(Common::SeekableReadStream &stream, bool thomsonWrapper) {
 	_data.clear();
-	if (stream.size() != 1024)
+	if (stream.size() != (thomsonWrapper ? 1034 : 1024) || !stream.seek(0))
 		return false;
+	if (thomsonWrapper) {
+		// Native BIN load record: 00, size 0400, destination 9C00, payload.
+		byte header[5];
+		if (stream.read(header, 5) != 5 || header[0] != 0 ||
+			READ_BE_UINT16(header + 1) != 1024 || READ_BE_UINT16(header + 3) != 0x9C00)
+			return false;
+	}
 	_data.resize(1024);
-	stream.seek(0);
 	if (stream.read(_data.data(), _data.size()) != _data.size()) {
 		_data.clear();
 		return false;
+	}
+	if (thomsonWrapper) {
+		byte end[5];
+		if (stream.read(end, 5) != 5 || end[0] != 0xFF || READ_BE_UINT16(end + 1) != 0) {
+			_data.clear();
+			return false;
+		}
 	}
 	return true;
 }

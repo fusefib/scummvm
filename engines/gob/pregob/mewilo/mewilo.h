@@ -25,6 +25,7 @@
 #include "gob/pregob/mewilo/executor.h"
 #include "gob/pregob/mewilo/font.h"
 #include "gob/pregob/mewilo/graphics.h"
+#include "gob/pregob/mewilo/thomson_disk.h"
 #include "gob/sound/sounddesc.h"
 #include "audio/mixer.h"
 #include "gob/surface.h"
@@ -37,7 +38,7 @@ namespace Mewilo {
 
 class PreGob_Mewilo : public PreGob, public MewiloExecHost {
 public:
-	explicit PreGob_Mewilo(GobEngine *vm);
+	explicit PreGob_Mewilo(GobEngine *vm, bool thomsonTO = false, bool thomsonFD = false);
 	~PreGob_Mewilo() override;
 
 	void run() override;
@@ -84,6 +85,9 @@ private:
 		PreparedModule &operator=(const PreparedModule &);
 	};
 
+	bool initResources();
+	bool playThomsonMusic(byte command);
+	bool playMusicPcm(const Common::Array<byte> &pcm);
 	Common::SeekableReadStream *openResource(const Common::String &name) const;
 	bool prepareModule(const Common::String &stem, PreparedModule &prepared) const;
 	void commitModule(PreparedModule &prepared);
@@ -113,6 +117,8 @@ private:
 	uint32 activeMillis() const;
 
 	const MewiloPlatformProfile &_profile;
+	bool _useThomsonDisk;
+	MewiloThomsonDisk _thomsonDisk;
 	MewiloAudioBackend _audioBackend;
 	bool _sampleAudioSelected;
 	Audio::SoundHandle _sampleHandle;

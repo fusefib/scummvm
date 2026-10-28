@@ -32,9 +32,9 @@ namespace Mewilo {
 
 static const uint32 kExternalScratchSize = 32000;
 
-PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm) : PreGob(vm),
-	_profile(getMewiloPlatformProfile(vm->getPlatform() == Common::kPlatformAmstradCPC ? kMewiloPlatformAmstradCPC : vm->getPlatform() == Common::kPlatformAmiga ? kMewiloPlatformAmiga : kMewiloPlatformAtariST)),
-	_audioBackend(_profile.audioBackend), _sampleAudioSelected(false), _executor(*this),
+PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : PreGob(vm),
+	_profile(getMewiloPlatformProfile(mewiloPlatformFromCommon(vm->getPlatform(), thomsonTO))),
+	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false), _executor(*this),
 	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false) {
 	_music = new SoundMixer(*g_system->getMixer(), Audio::Mixer::kMusicSoundType);
@@ -56,9 +56,10 @@ bool PreGob_Mewilo::shouldQuit() const {
 
 void PreGob_Mewilo::run() {
 	initScreen();
-	selectSampleAudio();
+	if (!initResources())
+		return;
 	byte palette[16 * 3];
-	buildMewiloPalette(_profile.platform, palette);
+	buildMewiloDisplayPalette(_profile.platform, palette);
 	// Gob's palette fade accepts six-bit staging values, not RGB888.
 	for (uint i = 0; i < sizeof(palette); ++i)
 		palette[i] >>= 2;
@@ -131,14 +132,32 @@ void PreGob_Mewilo::resetForRestart() {
 	clearScreen();
 }
 
+bool PreGob_Mewilo::initResources() {
+	if (!_useThomsonDisk) {
+		selectSampleAudio();
+		return true;
+	}
+	if (_profile.platform != kMewiloPlatformThomsonTO) return false;
+	if (!_thomsonDisk.empty()) return true; // one immutable media snapshot per session
+	Common::SeekableReadStream *disk = _vm->_dataIO->getFile("mewilo.fd");
+	Common::String reason;
+	const bool ok = disk && _thomsonDisk.load(*disk, reason);
+	delete disk;
+	if (!ok) warning("Mewilo: cannot open mewilo.fd (%s)", reason.c_str());
+	return ok;
+}
+
 Common::SeekableReadStream *PreGob_Mewilo::openResource(const Common::String &name) const {
+	// Disk sessions resolve exclusively from the owned media snapshot.
+	if (_useThomsonDisk)
+		return _thomsonDisk.openFile(name);
 	Common::SeekableReadStream *stream = _vm->_dataIO->getFile(name);
 	return _profile.platform == kMewiloPlatformAmstradCPC ? normalizeMewiloCpcResource(stream) : stream;
 }
 
 bool PreGob_Mewilo::loadFont() {
 	Common::SeekableReadStream *stream = openResource("LETTRES.BIN");
-	const bool ok = stream && _font.load(*stream);
+	const bool ok = stream && _font.load(*stream, _profile.platform == kMewiloPlatformThomsonTO);
 	delete stream;
 	return ok;
 }

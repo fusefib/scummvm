@@ -91,7 +91,8 @@ void PreGob_Mewilo::waitOrDelay(byte argument) {
 	// Retain the explicit Atari compatibility estimate until its CPU loop is
 	// calibrated. Other platforms must supply their own native conversion.
 	const uint speed = MAX<int16>(1, _vm->_global->_speedFactor);
-	const uint32 nativeMs = uint32(argument) * (_profile.platform == kMewiloPlatformAmstradCPC ? 10 : 1);
+	bool calibrated;
+	const uint32 nativeMs = mewiloNativeDelayMillis(_profile.platform, argument, calibrated);
 	waitMilliseconds((nativeMs + speed - 1) / speed);
 }
 

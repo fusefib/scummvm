@@ -35,7 +35,7 @@ class MewiloFont {
 public:
 	MewiloFont();
 
-	bool load(Common::SeekableReadStream &stream);
+	bool load(Common::SeekableReadStream &stream, bool thomsonWrapper = false);
 	bool valid() const { return _data.size() == 1024; }
 
 	/** Draw one 8x8 direct-index glyph. Rows are stored bottom-first on disk. */

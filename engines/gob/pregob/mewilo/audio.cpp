@@ -28,6 +28,7 @@
 #include "gob/global.h"
 #include "gob/util.h"
 #include "gob/pregob/mewilo/music.h"
+#include "gob/pregob/mewilo/thomson_music.h"
 #include "gob/sound/sound.h"
 #include "gob/sound/soundmixer.h"
 #include "gob/pregob/mewilo/mewilo.h"
@@ -161,6 +162,48 @@ void PreGob_Mewilo::stopMewiloAudio() {
 	_music->stop(0);
 }
 
+bool PreGob_Mewilo::playThomsonMusic(byte command) {
+	if ((command != 6 && command != 8) || shouldQuit())
+		return false;
+	// FD and loose installations share this sealed resource opener. Firmware
+	// was used only to derive the renderer; players need no system-ROM files.
+	Common::SeekableReadStream *stream = openResource("PARTIE4.BIN");
+	Common::Array<MewiloThomsonNote> notes;
+	const bool loaded = stream && readMewiloThomsonMusic(*stream, command, notes);
+	delete stream;
+	Common::Array<byte> pcm;
+	if (!loaded || !renderMewiloThomsonMusic(notes, pcm) || shouldQuit())
+		return false;
+	return playMusicPcm(pcm);
+}
+
+bool PreGob_Mewilo::playMusicPcm(const Common::Array<byte> &pcm) {
+	if (pcm.empty() || shouldQuit())
+		return false;
+	byte *owned = (byte *)malloc(pcm.size());
+	if (!owned)
+		return false;
+	memcpy(owned, pcm.data(), pcm.size());
+	Audio::SeekableAudioStream *raw = Audio::makeRawStream(owned, pcm.size(),
+		kMewiloThomsonSampleRate, 0, DisposeAfterUse::YES);
+	if (!raw) {
+		free(owned);
+		return false;
+	}
+	Audio::Mixer *mixer = g_system->getMixer();
+	mixer->stopHandle(_sampleHandle);
+	mixer->playStream(Audio::Mixer::kMusicSoundType, &_sampleHandle, raw);
+	// The producer can finish before the rate converter's buffered tail is
+	// audible. Wait for the finite mixer handle, not SoundMixer::isPlaying().
+	// This also preserves the unplayed tail across mixer pauses.
+	while (!shouldQuit() && !hasError() && samplePlaying()) {
+		serviceEvents();
+		g_system->delayMillis(1);
+	}
+	mixer->stopHandle(_sampleHandle);
+	return !shouldQuit() && !hasError();
+}
+
 bool PreGob_Mewilo::playCpcMusic(const Common::String &name) {
 	Common::SeekableReadStream *stream = openResource(name);
 	if (!stream)
@@ -236,6 +279,12 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 		return;
 	}
 
+	if (_audioBackend == kMewiloAudioThomsonNote) {
+		if ((command == 6 || command == 8) && !playThomsonMusic(command))
+			renderFailure("unable to replay Thomson NOTE stream", 0);
+		return;
+	}
+
 	// Native Atari ST SPL dispatch.
 	switch (command) {
 	case 1: playRawSample("OISEAUX.SPL", 7680); break;
@@ -279,6 +328,10 @@ void PreGob_Mewilo::choiceFeedback(byte value) {
 		playAmigaSample("musbon.smp", 64);
 		return;
 	}
+
+	// PARTIE4's feedback entry $8930 is an RTS; keep choices silent.
+	if (_audioBackend == kMewiloAudioThomsonNote)
+		return;
 
 	// Native Atari feedback tones.
 	static const int16 kFrequencies[3] = { 131, 261, 521 };

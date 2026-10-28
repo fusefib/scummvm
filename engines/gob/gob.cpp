@@ -741,7 +741,8 @@ Common::Error GobEngine::initGameParts() {
 		_map      = new Map_v2(this);
 		_goblin   = new Goblin_v2(this);
 		_scenery  = new Scenery_v2(this);
-		_preGob   = new Mewilo::PreGob_Mewilo(this);
+		_preGob   = new Mewilo::PreGob_Mewilo(this,
+			(_features & kFeaturesMewiloThomson) != 0, (_features & kFeaturesMewiloThomsonFD) != 0);
 		break;
 
 	default:

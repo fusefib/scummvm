@@ -23,6 +23,7 @@
 
 #include "common/scummsys.h"
 #include "common/str.h"
+#include "common/platform.h"
 #include "common/stream.h"
 
 namespace Gob {
@@ -56,8 +57,11 @@ struct MewiloPlatformProfile {
 Common::SeekableReadStream *normalizeMewiloCpcResource(Common::SeekableReadStream *stream);
 
 bool isValidMewiloPlatform(MewiloPlatform platform);
+MewiloPlatform mewiloPlatformFromCommon(Common::Platform platform, bool thomsonTO);
 const MewiloPlatformProfile &getMewiloPlatformProfile(MewiloPlatform platform);
 void buildMewiloPalette(MewiloPlatform platform, byte palette[16 * 3]);
+void buildMewiloDisplayPalette(MewiloPlatform platform, byte palette[16 * 3]);
+uint32 mewiloNativeDelayMillis(MewiloPlatform platform, byte operand, bool &calibrated);
 int mewiloModuleIndex(const Common::String &stem, const char *prefix);
 Common::String mewiloModuleStem(uint index, const char *prefix);
 

@@ -100,4 +100,42 @@
 	"LOAD.TOT",
 	0},
 
+// Thomson TO8-family French release. Canonical DOS extraction only: 255
+// data bytes per physical sector for BIN/BASIC; custom TOT/I00 retain 256.
+// The earlier 7907/1038-byte BIN extraction is deliberately unsupported.
+// Common::Platform has no Thomson target,
+// so a Mewilo-specific feature selects the THLOAD/native-6809 host profile.
+{
+	{"mewilo",
+	 "Thomson TO",
+	 AD_ENTRY3s(
+		 "PARTIE4.BIN", "4ff70a80f5ec33b7eb3ddb8df0739af5", 7877,
+		 "THLOAD.TOT", "65b9355f7ad1c15c468e39d57aa3f240", 17549,
+		 "LETTRES.BIN", "fa838215f362888651db1ef7f0f20370", 1034),
+	 FR_FRA,
+	 kPlatformUnknown,
+	 ADGF_UNSTABLE,
+	 GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
+	kFeatures16Colors | kFeaturesMewiloThomson,
+	nullptr,
+	"THLOAD.TOT",
+	0},
+
+// Same canonical Thomson resources read directly from the verified raw FD.
+// Rename the image to mewilo.fd without modifying its bytes. The first 5000
+// bytes coincide with THLOAD.TOT; FAT/directory and all resource contracts are
+// validated by the separate reader and normal loaders, not this anchor alone.
+{
+	{"mewilo",
+	 "Thomson TO (FD image)",
+	 AD_ENTRY1s("mewilo.fd", "65b9355f7ad1c15c468e39d57aa3f240", 327680),
+	 FR_FRA,
+	 kPlatformUnknown,
+	 ADGF_UNSTABLE,
+	 GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
+	kFeatures16Colors | kFeaturesMewiloThomson | kFeaturesMewiloThomsonFD,
+	nullptr,
+	"THLOAD.TOT",
+	0},
+
 #endif // GOB_DETECTION_TABLES_MEWILO_H
