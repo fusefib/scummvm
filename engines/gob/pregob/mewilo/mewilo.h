@@ -29,6 +29,7 @@
 #include "gob/pregob/mewilo/presentation.h"
 #include "gob/pregob/mewilo/script_patches.h"
 #include "gob/pregob/mewilo/saveload.h"
+#include "gob/pregob/mewilo/translation.h"
 #include "gob/sound/sounddesc.h"
 #include "audio/mixer.h"
 #include "gob/surface.h"
@@ -70,6 +71,9 @@ public:
 	bool waitInput(MewiloInputEvent &event) override;
 	bool editTextField(const MewiloTextField &field, Common::Array<byte> &text) override;
 	void showRejectMessage(const byte *text, uint length) override;
+	bool translatedAnswer(const MewiloTotData &tot, uint16 node, byte field,
+		const Common::Array<byte> &input, bool &handled) const override;
+	void showRejectMessageAt(const MewiloTotData &tot, uint16 node, const byte *text, uint length) override;
 
 private:
 	friend class MewiloHostTestSuite;
@@ -109,6 +113,8 @@ private:
 	bool prepareModule(const Common::String &stem, PreparedModule &prepared) const;
 	void commitModule(PreparedModule &prepared);
 	bool loadFont();
+	bool loadReplacements();
+	const ReplacementEntry *replacementEntry(const MewiloTotData &tot, uint16 node, byte kind, byte field = 0) const;
 	bool loadModule(const Common::String &stem);
 	bool executeModule(const Common::String &stem);
 	void unloadModule();
@@ -169,6 +175,8 @@ private:
 	PreparedRestore *_pendingRestore;
 	uint32 _effectToneUntil;
 	MewiloReleaseIdentity _releaseIdentity;
+	MewiloOutputMode _outputMode;
+	MewiloReplacements _replacements;
 };
 
 } // End of namespace Mewilo

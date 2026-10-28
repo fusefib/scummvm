@@ -41,7 +41,10 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : Pr
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false),
 	_normalizeTiming(ConfMan.hasKey("mewilo_presentation_timing") && ConfMan.getBool("mewilo_presentation_timing")),
 	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_script_fixes") || ConfMan.getBool("mewilo_script_fixes") ? kMewiloPatchGermanText | kMewiloPatchHenProtection : 0),
-	_saveReady(false), _startupLoad(false), _pendingRestore(nullptr), _effectToneUntil(0) {
+	_saveReady(false), _startupLoad(false), _pendingRestore(nullptr), _effectToneUntil(0), _outputMode(kMewiloOriginal) {
+	const Common::String output = ConfMan.hasKey("mewilo_output") ? ConfMan.get("mewilo_output") : Common::String();
+	if (output == "corrected") _outputMode = kMewiloCorrectedOriginal;
+	else if (output == "english") _outputMode = kMewiloEnglish;
 	memset(_fontMd5, 0, sizeof(_fontMd5));
 	_effectToneUntil = activeMillis();
 	// Freeze the optional enhancement independently of the known corrections.
@@ -75,6 +78,8 @@ void PreGob_Mewilo::run() {
 	for (uint i = 0; i < sizeof(palette); ++i)
 		palette[i] >>= 2;
 	setPalette(palette, 16);
+	if (!loadReplacements())
+		return;
 	if (!loadFont()) {
 		warning("Mewilo: unable to load LETTRES.BIN");
 		return;
@@ -184,7 +189,7 @@ bool PreGob_Mewilo::loadFont() {
 	Common::SeekableReadStream *stream = openResource("LETTRES.BIN");
 	const bool ok = stream && _font.load(*stream, _profile.platform == kMewiloPlatformThomsonTO);
 	delete stream;
-	return ok && _font.computeMD5(_fontMd5);
+	return ok && _font.computeMD5(_fontMd5) && _replacements.applyGlyphs(_font);
 }
 
 PreGob_Mewilo::PreparedModule::PreparedModule() : tot(nullptr), i00(nullptr) {
@@ -216,6 +221,14 @@ bool PreGob_Mewilo::prepareModule(const Common::String &stem, PreparedModule &ou
 	if (!out.tot->validateReachableGraph(stats)) {
 		warning("Mewilo: invalid %s.TOT graph", upper.c_str());
 		return false;
+	}
+	if (_replacements.size()) {
+		const int index = mewiloModuleIndex(upper, _profile.modulePrefix);
+		Common::String reason;
+		if (index < 0 || !_replacements.validateModule(*out.tot, index, reason)) {
+			warning("Mewilo: incompatible output replacements for %s (%s)", upper.c_str(), reason.c_str());
+			return false;
+		}
 	}
 	stream = openResource(upper + ".I00");
 	if (stream) {

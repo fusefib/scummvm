@@ -128,6 +128,12 @@ void PreGob_Mewilo::waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte ar
 	if (!argument) { waitOrDelay(0); return; }
 	MewiloTimingPlan plan = mewiloTimingPlan(tot, _moduleStem.c_str(),
 		_vm->_language, _profile.platform, site, argument, _normalizeTiming);
+	const ReplacementEntry *text = plan.textNode ? replacementEntry(tot, plan.textNode, kReplacementText) : nullptr;
+	if (text) {
+		bool calibrated = false;
+		plan.milliseconds = MAX<uint32>(mewiloNativeDelayMillis(_profile.platform, argument, calibrated),
+			mewiloReadingMillis(text->bytes.data(), text->bytes.size()));
+	}
 	waitPresentation(plan, site);
 }
 

@@ -89,6 +89,9 @@ public:
 	virtual bool waitInput(MewiloInputEvent &event) = 0;
 	virtual bool editTextField(const MewiloTextField &field, Common::Array<byte> &text) = 0;
 	virtual void showRejectMessage(const byte *text, uint length) = 0;
+	virtual bool translatedAnswer(const MewiloTotData &, uint16, byte,
+		const Common::Array<byte> &, bool &handled) const { handled = false; return false; }
+	virtual void showRejectMessageAt(const MewiloTotData &, uint16, const byte *text, uint length) { showRejectMessage(text, length); }
 };
 
 // Continuations contain script offsets, never native pointers or C++ frames.

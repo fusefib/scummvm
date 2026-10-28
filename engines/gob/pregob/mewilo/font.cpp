@@ -56,6 +56,12 @@ bool MewiloFont::load(Common::SeekableReadStream &stream, bool thomsonWrapper) {
 	return true;
 }
 
+bool MewiloFont::replaceGlyph(uint code, const byte *rows, uint length) {
+	if (!valid() || code >= 128 || !rows || length != 8) return false;
+	memcpy(_data.data() + code * 8, rows, 8);
+	return true;
+}
+
 void MewiloFont::drawChar(Surface &dest, byte c, int16 x, int16 y, byte color) const {
 	if (!valid() || c >= 128)
 		return;

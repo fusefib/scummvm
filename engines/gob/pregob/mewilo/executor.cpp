@@ -448,7 +448,9 @@ bool MewiloExecutor::executeFreeText(uint16 offset, uint depth, uint16 &tailTarg
 			}
 			if (_host.shouldQuit() || _host.hasError())
 				return false;
-			if (answerMatches(fields[i], input))
+			bool handled = false;
+			const bool translated = _host.translatedAnswer(*_tot, offset, i, input, handled);
+			if (handled ? translated : answerMatches(fields[i], input))
 				++acceptedFields;
 		}
 
@@ -469,7 +471,7 @@ bool MewiloExecutor::executeFreeText(uint16 offset, uint depth, uint16 &tailTarg
 		uint rejectChars = rejectLength;
 		if (rejectChars && _tot->byteAt(rejectOffset + rejectChars - 1) == 0)
 			--rejectChars;
-		_host.showRejectMessage(_tot->dataAt(rejectOffset), rejectChars);
+		_host.showRejectMessageAt(*_tot, offset, _tot->dataAt(rejectOffset), rejectChars);
 	}
 
 	if (_host.shouldQuit() || _host.hasError())

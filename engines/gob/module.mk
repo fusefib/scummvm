@@ -92,6 +92,8 @@ MODULE_OBJS := \
 	pregob/mewilo/script_patches.o \
 	pregob/mewilo/saveload.o \
 	pregob/mewilo/state.o \
+	pregob/mewilo/translation.o \
+	pregob/mewilo/localization.o \
 	pregob/mewilo/executor.o \
 	pregob/mewilo/font.o \
 	pregob/mewilo/text.o \

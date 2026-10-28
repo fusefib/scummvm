@@ -125,6 +125,7 @@ bool PreGob_Mewilo::buildReleaseIdentity(MewiloReleaseIdentity &out) const {
 				candidate.exactImages = false;
 		}
 	}
+	_replacements.writeIdentity(manifest);
 	if (manifest.err()) return false;
 	Common::MemoryReadStream input(manifest.getData(), manifest.size());
 	if (!Common::computeStreamMD5(input, candidate.digest)) return false;

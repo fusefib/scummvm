@@ -93,8 +93,9 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 	if (!tot.has(textOffset))
 		return;
 
-	const byte *text = tot.dataAt(textOffset);
-	const uint32 textSize = tot.size() - textOffset;
+	const ReplacementEntry *replacement = replacementEntry(tot, nodeOffset, kReplacementText);
+	const byte *text = replacement ? replacement->bytes.data() : tot.dataAt(textOffset);
+	const uint32 textSize = replacement ? replacement->bytes.size() : tot.size() - textOffset;
 	uint32 sourceOffset = 0;
 	int16 y = top;
 	int16 dirtyBottom = (height > 0) ? top + height - 1 : top - 1;
@@ -168,6 +169,10 @@ void PreGob_Mewilo::drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset)
 		_profile.packedOutputScaleX);
 	if (!result.complete)
 		renderFailure("incomplete inline image", nodeOffset);
+	// Native decoding (including persistent Atari scratch writes) comes first.
+	const ReplacementEntry *replacement = replacementEntry(tot, nodeOffset, kReplacementImage);
+	if (replacement && !drawReplacementImage(*replacement, *_vm->_draw->_backSurface, x, y))
+		renderFailure("invalid replacement image", nodeOffset);
 	markDirty(x, y, outputWidth, height);
 	tracePresentationDraw("image", nodeOffset, Common::Rect(x, y, x + outputWidth, y + height));
 }
@@ -230,6 +235,10 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 		_profile.packedOutputScaleX);
 	if (!result.complete)
 		renderFailure("incomplete external image", nodeOffset);
+	// Native decoding (including persistent Atari scratch writes) comes first.
+	const ReplacementEntry *replacement = replacementEntry(tot, nodeOffset, kReplacementImage);
+	if (replacement && !drawReplacementImage(*replacement, *_vm->_draw->_backSurface, x, y))
+		renderFailure("invalid replacement image", nodeOffset);
 	markDirty(x, y, outputWidth, height);
 	tracePresentationDraw("image", nodeOffset, Common::Rect(x, y, x + outputWidth, y + height));
 }
