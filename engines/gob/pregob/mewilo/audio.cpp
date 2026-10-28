@@ -22,6 +22,8 @@
 #include "common/util.h"
 #include "gob/gob.h"
 #include "gob/global.h"
+#include "gob/util.h"
+#include "gob/pregob/mewilo/music.h"
 #include "gob/sound/sound.h"
 #include "gob/sound/soundmixer.h"
 #include "gob/pregob/mewilo/mewilo.h"
@@ -82,6 +84,36 @@ void PreGob_Mewilo::stopMewiloAudio() {
 	_music->stop(0);
 }
 
+bool PreGob_Mewilo::playCpcMusic(const Common::String &name) {
+	Common::SeekableReadStream *stream = openResource(name);
+	if (!stream)
+		return false;
+	MewiloCpcMusicData music(*stream);
+	delete stream;
+	if (!music.valid())
+		return false;
+	Common::Array<byte> cycle;
+	if (!renderMewiloCpcMusic(music, cycle)) return false;
+	byte *pcm = new byte[cycle.size()];
+	memcpy(pcm, cycle.data(), cycle.size());
+	playSample(pcm, cycle.size(), 25000, -1, true);
+
+	// Native code loops the music until CP/M BIOS console-status reports a key.
+	// ScummVM's checkKey consumes the buffered event, so retain it for the next
+	// VM input node to preserve the native "status only" behavior.
+	while (!shouldQuit() && !hasError() && _music->isPlaying()) {
+		serviceEvents();
+		const int16 key = _vm->_util->checkKey();
+		if (key) {
+			_pendingKey = key;
+			break;
+		}
+	}
+
+	_music->stop(0);
+	return !shouldQuit() && !hasError();
+}
+
 void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uint variableCount) {
 	const uint score = variableCount > 0x17 ? (uint16)variables[0x17].word0 : 0;
 
@@ -92,6 +124,14 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 	case 7: return;
 	case 9: drawScore(score, 28 * 8, 56, 1); return;
 	default: break;
+	}
+
+	if (_profile.platform == kMewiloPlatformAmstradCPC) {
+		// The resident CPC dispatch only implements music commands 6 and 8.
+		if ((command == 6 && !playCpcMusic("MEWIL2.MUS")) ||
+			(command == 8 && !playCpcMusic("MEWILO.MUS")))
+			renderFailure("unable to play native CPC music", 0);
+		return;
 	}
 
 	// Native Atari ST SPL dispatch.
@@ -124,6 +164,13 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 void PreGob_Mewilo::choiceFeedback(byte value) {
 	if (value >= 3)
 		return;
+
+	if (_profile.platform == kMewiloPlatformAmstradCPC) {
+		static const uint16 kPeriods[3] = { 120, 478, 239 };
+		static const int32 kLengths[3] = { 250, 350, 250 };
+		beep(mewiloCpcTonePeriodToHz(kPeriods[value]), kLengths[value]);
+		return;
+	}
 
 	// Native Atari feedback tones.
 	static const int16 kFrequencies[3] = { 131, 261, 521 };

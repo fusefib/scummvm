@@ -100,6 +100,7 @@ private:
 	byte translateInputKey(int16 key) const;
 	bool playRawSample(const Common::String &name, uint16 frequency, int16 repetitions = 1, bool music = false);
 	void playSample(byte *pcm, uint32 size, uint16 frequency, int16 repetitions, bool music);
+	bool playCpcMusic(const Common::String &name);
 	void stopMewiloAudio();
 	void installCrossCursor();
 	void waitMilliseconds(uint32 durationMs);

@@ -23,6 +23,7 @@
 
 #include "common/scummsys.h"
 #include "common/str.h"
+#include "common/stream.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -43,9 +44,12 @@ struct MewiloPlatformProfile {
 	bool loadOptionalI01;
 };
 
+// Takes ownership even when the input has no valid AMSDOS wrapper.
+Common::SeekableReadStream *normalizeMewiloCpcResource(Common::SeekableReadStream *stream);
+
 bool isValidMewiloPlatform(MewiloPlatform platform);
 const MewiloPlatformProfile &getMewiloPlatformProfile(MewiloPlatform platform);
-void buildMewiloAtariPalette(byte palette[16 * 3]);
+void buildMewiloPalette(MewiloPlatform platform, byte palette[16 * 3]);
 int mewiloModuleIndex(const Common::String &stem, const char *prefix);
 Common::String mewiloModuleStem(uint index, const char *prefix);
 

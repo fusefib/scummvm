@@ -30,11 +30,11 @@ namespace Mewilo {
 MewiloI00Bank::MewiloI00Bank() : _tailOffset(0) {
 }
 
-MewiloI00Bank::MewiloI00Bank(Common::SeekableReadStream &stream) : _tailOffset(0) {
-	load(stream);
+MewiloI00Bank::MewiloI00Bank(Common::SeekableReadStream &stream, bool cpcZeroPrefix) : _tailOffset(0) {
+	load(stream, cpcZeroPrefix);
 }
 
-bool MewiloI00Bank::load(Common::SeekableReadStream &stream) {
+bool MewiloI00Bank::load(Common::SeekableReadStream &stream, bool cpcZeroPrefix) {
 	_data.clear();
 	_records.clear();
 	_tailOffset = 0;
@@ -59,6 +59,30 @@ bool MewiloI00Bank::load(Common::SeekableReadStream &stream) {
 		p += framedSize;
 	}
 
+
+	// One known CPC AMSOAD1.I00 has a 128-byte zero prefix where the other
+	// extracted files carry an AMSDOS header. It is not an image record. If
+	// ordinary framing found nothing, recognize that packaging quirk without
+	// weakening the framed-stream parser itself.
+	if (cpcZeroPrefix && _records.empty() && _data.size() > 130) {
+		bool zeroPrefix = true;
+		for (uint i = 0; i < 128; ++i) {
+			if (_data[i]) {
+				zeroPrefix = false;
+				break;
+			}
+		}
+		if (zeroPrefix) {
+			p = 128;
+			while (p + 2 <= _data.size()) {
+				const uint16 framedSize = READ_BE_UINT16(&_data[p]);
+				if (framedSize < 2 || p + framedSize > _data.size())
+					break;
+				_records.push_back(Record(p, framedSize));
+				p += framedSize;
+			}
+		}
+	}
 
 	_tailOffset = p;
 	return !_records.empty();

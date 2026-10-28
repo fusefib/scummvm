@@ -98,6 +98,7 @@ MODULE_OBJS := \
 	pregob/mewilo/input.o \
 	pregob/mewilo/timing.o \
 	pregob/mewilo/audio.o \
+	pregob/mewilo/music.o \
 	pregob/mewilo/keymaps.o \
 	pregob/onceupon/onceupon.o \
 	pregob/onceupon/abracadabra.o \

@@ -33,7 +33,7 @@ namespace Mewilo {
 static const uint32 kExternalScratchSize = 32000;
 
 PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm) : PreGob(vm),
-	_profile(getMewiloPlatformProfile(kMewiloPlatformAtariST)), _executor(*this),
+	_profile(getMewiloPlatformProfile(vm->getPlatform() == Common::kPlatformAmstradCPC ? kMewiloPlatformAmstradCPC : kMewiloPlatformAtariST)), _executor(*this),
 	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false) {
 	_music = new SoundMixer(*g_system->getMixer(), Audio::Mixer::kMusicSoundType);
@@ -56,7 +56,7 @@ bool PreGob_Mewilo::shouldQuit() const {
 void PreGob_Mewilo::run() {
 	initScreen();
 	byte palette[16 * 3];
-	buildMewiloAtariPalette(palette);
+	buildMewiloPalette(_profile.platform, palette);
 	// Gob's palette fade accepts six-bit staging values, not RGB888.
 	for (uint i = 0; i < sizeof(palette); ++i)
 		palette[i] >>= 2;
@@ -130,7 +130,8 @@ void PreGob_Mewilo::resetForRestart() {
 }
 
 Common::SeekableReadStream *PreGob_Mewilo::openResource(const Common::String &name) const {
-	return _vm->_dataIO->getFile(name);
+	Common::SeekableReadStream *stream = _vm->_dataIO->getFile(name);
+	return _profile.platform == kMewiloPlatformAmstradCPC ? normalizeMewiloCpcResource(stream) : stream;
 }
 
 bool PreGob_Mewilo::loadFont() {
@@ -163,7 +164,7 @@ bool PreGob_Mewilo::prepareModule(const Common::String &stem, PreparedModule &ou
 	}
 	stream = openResource(upper + ".I00");
 	if (stream) {
-		out.i00 = new MewiloI00Bank(*stream);
+		out.i00 = new MewiloI00Bank(*stream, _profile.platform == kMewiloPlatformAmstradCPC);
 		delete stream;
 		if (!out.i00->valid()) {
 			delete out.i00;

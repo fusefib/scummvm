@@ -34,9 +34,9 @@ namespace Mewilo {
 class MewiloI00Bank {
 public:
 	MewiloI00Bank();
-	explicit MewiloI00Bank(Common::SeekableReadStream &stream);
+	explicit MewiloI00Bank(Common::SeekableReadStream &stream, bool cpcZeroPrefix = false);
 
-	bool load(Common::SeekableReadStream &stream);
+	bool load(Common::SeekableReadStream &stream, bool cpcZeroPrefix = false);
 	bool valid() const { return !_records.empty(); }
 	uint recordCount() const { return _records.size(); }
 	uint32 tailOffset() const { return _tailOffset; }
