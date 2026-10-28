@@ -35,6 +35,7 @@
 #include "gob/gameidtotype.h"
 #include "gob/gob.h"
 #include "gob/pregob/mewilo/keymaps.h"
+#include "gob/pregob/mewilo/options.h"
 
 // For struct GOBGameDescription.
 #include "gob/detection/detection.h"
@@ -82,11 +83,20 @@ public:
 	SaveStateDescriptor querySaveMetaInfos(const char *target, int slot) const override;
 	Common::String getSavegameFile(int saveGameIdx, const char *target = nullptr) const override;
 	Common::KeymapArray initKeymaps(const char *target) const override;
+	GUI::OptionsContainerWidget *buildEngineOptionsWidget(GUI::GuiObject *boss,
+		const Common::String &name, const Common::String &target) const override;
 
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
 		return optionsList;
 	}
 };
+
+GUI::OptionsContainerWidget *GobMetaEngine::buildEngineOptionsWidget(GUI::GuiObject *boss,
+		const Common::String &name, const Common::String &target) const {
+	if (getGameId(target.c_str()) == "mewilo")
+		return Gob::Mewilo::createMewiloOptions(boss, name, target);
+	return MetaEngine::buildEngineOptionsWidget(boss, name, target);
+}
 
 bool GobMetaEngine::hasFeature(MetaEngineFeature f) const {
 	return f == kSupportsListSaves ||

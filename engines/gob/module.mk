@@ -94,6 +94,7 @@ MODULE_OBJS := \
 	pregob/mewilo/state.o \
 	pregob/mewilo/translation.o \
 	pregob/mewilo/localization.o \
+	pregob/mewilo/options.o \
 	pregob/mewilo/executor.o \
 	pregob/mewilo/font.o \
 	pregob/mewilo/text.o \
@@ -162,7 +163,7 @@ endif
 include $(srcdir)/rules.mk
 
 # Detection objects
-DETECT_OBJS += $(MODULE)/detection/detection.o
+DETECT_OBJS += $(MODULE)/detection/detection.o $(MODULE)/pregob/mewilo/detection.o
 
 # Skip building the following objects if a static
 # module is enabled, because it already has the contents.

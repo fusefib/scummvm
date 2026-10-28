@@ -31,6 +31,7 @@
 
 #include "gob/dataio.h"
 #include "gob/detection/detection.h"
+#include "gob/pregob/mewilo/detection.h"
 #include "gob/detection/tables.h"
 #include "gob/obsolete.h" // Obsolete ID table.
 #include "gob/gob.h"
@@ -54,6 +55,11 @@ static const DebugChannelDef debugFlagList[] = {
 class GobMetaEngineDetection : public AdvancedMetaEngineDetection<Gob::GOBGameDescription> {
 public:
 	GobMetaEngineDetection();
+	DetectedGames detectGames(const Common::FSList &files, uint32 skipFlags, bool skipIncomplete) override {
+		DetectedGames games = AdvancedMetaEngineDetection::detectGames(files, skipFlags, skipIncomplete);
+		Gob::preferMewiloNativeProfile(files, games);
+		return games;
+	}
 
 	PlainGameDescriptor findGame(const char *gameId) const override {
 		return Engines::findGameID(gameId, _gameIds, obsoleteGameIDsTable);

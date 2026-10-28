@@ -28,6 +28,7 @@
 #include "gob/util.h"
 #include "gob/sound/soundmixer.h"
 #include "gob/pregob/mewilo/mewilo.h"
+#include "gob/pregob/mewilo/options.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -35,16 +36,13 @@ namespace Mewilo {
 static const uint32 kExternalScratchSize = 32000;
 
 PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : PreGob(vm),
-	_profile(getMewiloPlatformProfile(mewiloPlatformFromCommon(vm->getPlatform(), thomsonTO))),
+	_profile(getMewiloPlatformProfile(mewiloPresentationPlatform(vm->getPlatform(), thomsonTO))),
 	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false), _executor(*this),
 	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false),
 	_normalizeTiming(ConfMan.hasKey("mewilo_presentation_timing") && ConfMan.getBool("mewilo_presentation_timing")),
 	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_script_fixes") || ConfMan.getBool("mewilo_script_fixes") ? kMewiloPatchGermanText | kMewiloPatchHenProtection : 0),
-	_saveReady(false), _startupLoad(false), _pendingRestore(nullptr), _effectToneUntil(0), _outputMode(kMewiloOriginal) {
-	const Common::String output = ConfMan.hasKey("mewilo_output") ? ConfMan.get("mewilo_output") : Common::String();
-	if (output == "corrected") _outputMode = kMewiloCorrectedOriginal;
-	else if (output == "english") _outputMode = kMewiloEnglish;
+	_saveReady(false), _startupLoad(false), _pendingRestore(nullptr), _effectToneUntil(0), _outputMode(mewiloOutputMode()) {
 	memset(_fontMd5, 0, sizeof(_fontMd5));
 	_effectToneUntil = activeMillis();
 	// Freeze the optional enhancement independently of the known corrections.
