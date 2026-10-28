@@ -45,7 +45,8 @@ namespace Emmanuelle {
 
 enum EmmanuelleRuntimeProfile : byte {
 	kEmmanuelleProfileInvalid = 0,
-	kEmmanuelleProfileDosEnglish = 1
+	kEmmanuelleProfileDosEnglish = 1,
+	kEmmanuelleProfileDosSpanish = 2
 };
 
 EmmanuelleRuntimeProfile emmanuelleRuntimeProfile(
