@@ -89,6 +89,7 @@ MODULE_OBJS := \
 	pregob/seqfile.o \
 	pregob/mewilo/platform.o \
 	pregob/mewilo/tot.o \
+	pregob/mewilo/executor.o \
 	pregob/onceupon/onceupon.o \
 	pregob/onceupon/abracadabra.o \
 	pregob/onceupon/babayaga.o \
