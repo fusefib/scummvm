@@ -181,8 +181,10 @@ void PreGob_Mewilo::drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset)
 	const MewiloPackedDecodeResult result =
 		drawMewiloPacked(tot.dataAt(nodeOffset + 7), recordSize - 7, *_vm->_draw->_backSurface, x,
 			y, sourceWidth, height, _profile.packedOutputScaleX);
-	if (!result.complete)
+	if (!result.complete) {
 		renderFailure("incomplete inline image", nodeOffset);
+		return;
+	}
 	// Native decoding (including persistent Atari scratch writes) comes first.
 	const ReplacementEntry *replacement = replacementEntry(tot, nodeOffset, kReplacementImage);
 	if (replacement && !drawReplacementImage(*replacement, *_vm->_draw->_backSurface, x, y))
@@ -248,8 +250,10 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 	}
 	const MewiloPackedDecodeResult result = drawMewiloPacked(decodePayload, decodeSize,
 		*_vm->_draw->_backSurface, x, y, sourceWidth, height, _profile.packedOutputScaleX);
-	if (!result.complete)
+	if (!result.complete) {
 		renderFailure("incomplete external image", nodeOffset);
+		return;
+	}
 	// Native decoding (including persistent Atari scratch writes) comes first.
 	const ReplacementEntry *replacement = replacementEntry(tot, nodeOffset, kReplacementImage);
 	if (replacement && !drawReplacementImage(*replacement, *_vm->_draw->_backSurface, x, y))
