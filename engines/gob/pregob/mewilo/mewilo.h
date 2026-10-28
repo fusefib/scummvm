@@ -148,7 +148,7 @@ private:
 	void waitMilliseconds(uint32 durationMs);
 	void presentFrame();
 	void tracePresentationDraw(const char *kind, uint16 site, const Common::Rect &region);
-	void waitPresentation(const MewiloTimingPlan &plan, uint16 site);
+	void waitPresentation(const MewiloTimingPlan &plan, uint16 site, bool ownsStep = true);
 	uint32 activeMillis() const;
 
 	const MewiloPlatformProfile &_profile;

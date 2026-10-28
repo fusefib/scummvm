@@ -182,11 +182,20 @@ uint32 mewiloNativeDelayMillis(MewiloPlatform platform, byte operand, bool &cali
 		// 1 MHz E clock; exclude interrupts and the resource-read trampoline.
 		return ((uint32)operand * 1220 + 999) / 1000;
 	default:
-		// The Atari busy loop is recovered, but its wall-clock rate is unproved.
-		// Preserve the explicit compatibility estimate, never borrow audio units.
+		// Atari file +0x29BA multiplies the operand by three before helper +0x560.
+		// MC68000 instruction/addressing cycles give 20292*operand + 250 cycles
+		// at nominal 8 MHz. RAM contention and interrupt/audio service are not
+		// included; this is a code-derived estimate, not hardware calibration.
 		calibrated = false;
-		return operand;
+		return (20292U * operand + 250U + 7999U) / 8000U;
 	}
+}
+
+uint32 mewiloAtariFixedDelayMillis(uint16 units) {
+	// PSG feedback and the RHUM gap pass their counter directly to $560.
+	// The immediate push/call plus helper take 6764*units + 208 cycles.
+	// FF03 has a separate multiplier/call cost; zero FF03 remains input.
+	return (6764U * units + 208U + 7999U) / 8000U;
 }
 
 static const char *const kModuleSuffixes[9] = {"", "0", "1", "2", "3", "4", "5", "7", "8"};

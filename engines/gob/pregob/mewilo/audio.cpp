@@ -27,7 +27,6 @@
 #include "common/util.h"
 
 #include "gob/dataio.h"
-#include "gob/global.h"
 #include "gob/gob.h"
 #include "gob/pregob/mewilo/music.h"
 #include "gob/pregob/mewilo/sample_audio.h"
@@ -374,10 +373,9 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 		break;
 	case 12:
 		playRawSample("BOUCHON.SPL", 7680);
-		// Native Atari code uses its fixed-delay helper with argument 600 before
-		// starting RHUM. Milliseconds remain a compatibility approximation until
-		// that CPU-loop delay is calibrated.
-		waitMilliseconds(600 / MAX<int16>(1, _vm->_global->_speedFactor));
+		// The native 600 is a direct busy-loop counter, without FF03's x3.
+		// Convert its recovered cycle count at nominal 8 MHz, not PCM units.
+		waitMilliseconds(mewiloAtariFixedDelayMillis(600));
 		if (!shouldQuit() && !hasError())
 			playRawSample("RHUM.SPL", 7680);
 		break;
@@ -416,8 +414,14 @@ void PreGob_Mewilo::choiceFeedback(byte value) {
 
 	// Native Atari feedback tones.
 	static const int16 kFrequencies[3] = {131, 261, 521};
-	static const int32 kLengths[3] = {150, 100, 100};
-	playEffectTone(kFrequencies[value], kLengths[value]);
+	static const uint16 kDelayUnits[3] = {150, 100, 100};
+	const int32 duration = mewiloAtariFixedDelayMillis(kDelayUnits[value]);
+	playEffectTone(kFrequencies[value], duration);
+	// Native feedback waits for the helper, then turns the PSG voice off.
+	// Keep its ordering while servicing events and excluding modal pause time.
+	waitMilliseconds(duration);
+	_vm->_sound->speakerOff();
+	_effectToneUntil = activeMillis();
 }
 
 } // End of namespace Mewilo

@@ -61,6 +61,7 @@ const MewiloPlatformProfile &getMewiloPlatformProfile(MewiloPlatform platform);
 void buildMewiloPalette(MewiloPlatform platform, byte palette[16 * 3]);
 void buildMewiloDisplayPalette(MewiloPlatform platform, byte palette[16 * 3]);
 uint32 mewiloNativeDelayMillis(MewiloPlatform platform, byte operand, bool &calibrated);
+uint32 mewiloAtariFixedDelayMillis(uint16 units);
 int mewiloModuleIndex(const Common::String &stem, const char *prefix);
 Common::String mewiloModuleStem(uint index, const char *prefix);
 
