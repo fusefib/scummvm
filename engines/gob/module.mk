@@ -89,6 +89,7 @@ MODULE_OBJS := \
 	pregob/seqfile.o \
 	pregob/mewilo/platform.o \
 	pregob/mewilo/tot.o \
+	pregob/mewilo/script_patches.o \
 	pregob/mewilo/executor.o \
 	pregob/mewilo/font.o \
 	pregob/mewilo/text.o \

@@ -19,6 +19,7 @@
  */
 
 #include "common/system.h"
+#include "common/memstream.h"
 #include "common/config-manager.h"
 #include "common/textconsole.h"
 
@@ -38,7 +39,8 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : Pr
 	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false), _executor(*this),
 	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false),
-	_normalizeTiming(ConfMan.hasKey("mewilo_normalize_timing") && ConfMan.getBool("mewilo_normalize_timing")) {
+	_normalizeTiming(ConfMan.hasKey("mewilo_normalize_timing") && ConfMan.getBool("mewilo_normalize_timing")),
+	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_original_fixes") || ConfMan.getBool("mewilo_original_fixes") ? kMewiloPatchGermanText : 0) {
 	_music = new SoundMixer(*g_system->getMixer(), Audio::Mixer::kMusicSoundType);
 	if (_profile.persistentI00Scratch) {
 		_i00Scratch.resize(kExternalScratchSize);
@@ -179,8 +181,16 @@ bool PreGob_Mewilo::prepareModule(const Common::String &stem, PreparedModule &ou
 	Common::SeekableReadStream *stream = openResource(upper + ".TOT");
 	if (!stream)
 		return false;
-	out.tot = new MewiloTotData(*stream, _profile.platform);
+	// Semantic corrections prepare a private copy of normalized resident bytes.
+	// Presentation recipes use local guards separately from these fingerprints.
+	Common::Array<byte> script;
+	const bool ok = prepareMewiloScript(*stream, upper.c_str(), _profile.platform,
+		_vm->_language, _scriptPatchPolicy, script, out.scriptPatchReport);
 	delete stream;
+	if (!ok)
+		return false;
+	Common::MemoryReadStream effective(script.data(), script.size());
+	out.tot = new MewiloTotData(effective, _profile.platform);
 	MewiloGraphStats stats;
 	if (!out.tot->validateReachableGraph(stats)) {
 		warning("Mewilo: invalid %s.TOT graph", upper.c_str());
@@ -227,6 +237,7 @@ void PreGob_Mewilo::unloadModule() {
 	_i00 = nullptr;
 	_i01.clear();
 	_moduleStem.clear();
+	_scriptPatchReport = MewiloScriptPatchReport();
 }
 
 void PreGob_Mewilo::commitModule(PreparedModule &prepared) {
@@ -237,6 +248,7 @@ void PreGob_Mewilo::commitModule(PreparedModule &prepared) {
 	prepared.i00 = nullptr;
 	_i01.swap(prepared.i01);
 	_moduleStem = prepared.stem;
+	_scriptPatchReport = prepared.scriptPatchReport;
 }
 
 bool PreGob_Mewilo::loadModule(const Common::String &stem) {

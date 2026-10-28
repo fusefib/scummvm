@@ -27,6 +27,7 @@
 #include "gob/pregob/mewilo/graphics.h"
 #include "gob/pregob/mewilo/thomson_disk.h"
 #include "gob/pregob/mewilo/presentation.h"
+#include "gob/pregob/mewilo/script_patches.h"
 #include "gob/sound/sounddesc.h"
 #include "audio/mixer.h"
 #include "gob/surface.h"
@@ -79,6 +80,7 @@ private:
 		MewiloI00Bank *i00;
 		Common::Array<byte> i01;
 		Common::String stem;
+		MewiloScriptPatchReport scriptPatchReport;
 
 		PreparedModule();
 		~PreparedModule();
@@ -146,6 +148,8 @@ private:
 	uint _pauseDepth;
 	bool _hostFailed;
 	bool _normalizeTiming;
+	uint32 _scriptPatchPolicy;
+	MewiloScriptPatchReport _scriptPatchReport;
 	MewiloPresentation _presentation;
 };
 
