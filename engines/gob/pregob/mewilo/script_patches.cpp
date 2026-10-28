@@ -36,7 +36,7 @@ MewiloScriptPatchReport::MewiloScriptPatchReport() {
 
 namespace {
 
-enum ResourceId { kUnknownResource, kGermanTown, kGermanHouse, kGermanHen, kGermanEnd, kFrenchHen };
+enum ResourceId { kUnknownResource, kGermanTown, kGermanHouse, kGermanHen, kGermanEnd, kFrenchHen, kGermanMap, kCpcMap, kThomsonMap, kFrenchMap };
 
 struct ResourceIdentity {
 	ResourceId id;
@@ -62,6 +62,17 @@ static const ResourceIdentity kResources[] = {
 	{ kGermanEnd, "LOAD8", 17114, "e8046f82c18ff92f5fce83c7e46f6f8b",
 		k68kPlatforms, Common::DE_DEU },
 	{ kFrenchHen, "LOAD5", 18798, "069b5f0e5dc077d9032331cce2731212",
+		k68kPlatforms, Common::FR_FRA },
+	{ kGermanMap, "LOAD0", 3966, "ce7ffa5b587e9ec6bf43f228aa384d69",
+		k68kPlatforms, Common::DE_DEU },
+	{ kCpcMap, "AMSOAD0", 4884, "9fcf3642e2594e6bf85a11fda5fe2204",
+		(1U << kMewiloPlatformAmstradCPC), Common::FR_FRA },
+	{ kThomsonMap, "THLOAD0", 25606, "6dea5e03f37d87f22a118bcce54bf296",
+		(1U << kMewiloPlatformThomsonTO), Common::FR_FRA },
+	// Verified full French resources, identical recipes under Atari and Amiga.
+	// Exact source guards remain mandatory. THLOAD5 shares bytes with LOAD5,
+	// but the reduced Thomson flow must NOT acquire the full-family hen fix.
+	{ kFrenchMap, "LOAD0", 2456, "7409c969da053c1d51f8ea7a0737043b",
 		k68kPlatforms, Common::FR_FRA },
 };
 
@@ -293,6 +304,32 @@ static bool correctHenProtection(ResourceId id, const Common::Array<byte> &sourc
 	return basket == base + 10;
 }
 
+// S01 is a deliberate optional puzzle-policy change, NOT an established claim
+// about author intent. Keep V25 as "encounter started". Only after the existing
+// V25==1 gate also require V16==0 (the successfully answered/closed question).
+// No flag is reinterpreted or repaired; other progression requirements remain.
+static bool requireCeceAnswer(ResourceId id, const Common::Array<byte> &source,
+		Common::Array<byte> &target) {
+	uint16 at, blocked, next;
+	switch (id) {
+	case kGermanMap: at = 0x0AB9; blocked = 0x0A63; next = 0x0AC3; break;
+	case kCpcMap: at = 0x095F; blocked = 0x0909; next = 0x0969; break;
+	case kThomsonMap: at = 0x0982; blocked = 0x092C; next = 0x098C; break;
+	case kFrenchMap: at = 0x04C3; blocked = 0x046D; next = 0x04CD; break;
+	default: return false;
+	}
+	byte expected[] = { 0x21, 1, 0x25, 1, 1, 0, 0, 1, 0, 0 };
+	WRITE_BE_UINT16(expected + 5, blocked);
+	WRITE_BE_UINT16(expected + 8, next);
+	if (!expect(source, at, expected, sizeof(expected)))
+		return false;
+	uint16 added;
+	if (!appendCondition(target, 0x16, 0, blocked, next, added))
+		return false;
+	WRITE_BE_UINT16(target.data() + at + 8, added);
+	return true;
+}
+
 } // End of anonymous namespace
 
 bool prepareMewiloScript(Common::SeekableReadStream &normalizedStream,
@@ -341,6 +378,12 @@ bool prepareMewiloScript(Common::SeekableReadStream &normalizedStream,
 		(id == kGermanHen || id == kFrenchHen)) {
 		ok = correctHenProtection(id, source, candidate);
 		prepared.appliedMask |= kMewiloFixHenProtection;
+		++prepared.changedSites;
+	}
+	if (ok && (policy & kMewiloPatchRequireCeceAnswer) &&
+		(id == kGermanMap || id == kCpcMap || id == kThomsonMap || id == kFrenchMap)) {
+		ok = requireCeceAnswer(id, source, candidate);
+		prepared.appliedMask |= kMewiloFixCeceGate;
 		++prepared.changedSites;
 	}
 	if (!ok || (prepared.appliedMask && !validate(candidate, platform))) {

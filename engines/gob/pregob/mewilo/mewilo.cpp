@@ -39,8 +39,11 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : Pr
 	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false), _executor(*this),
 	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false),
-	_normalizeTiming(ConfMan.hasKey("mewilo_normalize_timing") && ConfMan.getBool("mewilo_normalize_timing")),
-	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_original_fixes") || ConfMan.getBool("mewilo_original_fixes") ? kMewiloPatchGermanText | kMewiloPatchHenProtection : 0) {
+	_normalizeTiming(ConfMan.hasKey("mewilo_presentation_timing") && ConfMan.getBool("mewilo_presentation_timing")),
+	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_script_fixes") || ConfMan.getBool("mewilo_script_fixes") ? kMewiloPatchGermanText | kMewiloPatchHenProtection : 0) {
+	// Freeze the optional enhancement independently of the known corrections.
+	if (ConfMan.hasKey("mewilo_require_cece_answer") && ConfMan.getBool("mewilo_require_cece_answer"))
+		_scriptPatchPolicy |= kMewiloPatchRequireCeceAnswer;
 	_music = new SoundMixer(*g_system->getMixer(), Audio::Mixer::kMusicSoundType);
 	if (_profile.persistentI00Scratch) {
 		_i00Scratch.resize(kExternalScratchSize);
