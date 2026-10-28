@@ -46,7 +46,7 @@ void GobConsole::printEmmanuelleHelp() {
 	debugPrintf("Emmanuelle\n");
 	debugPrintf("----------\n");
 	debugPrintf(" emmaState - prints old-TOT runtime state\n");
-	debugPrintf(" emmaVars - prints variables; usage: emmaVars (changed | start (count))\n");
+	debugPrintf(" emmaVars - prints variables; usage: emmaVars (details | changed | start (count))\n");
 	debugPrintf(" emmaStack - prints the explicit old-TOT executor stack\n");
 	debugPrintf(" emmaTrace - controls parseable tracing; usage: emmaTrace (on | off)\n");
 	debugPrintf(" cpsolve - prints the active copy-protection answers\n");
@@ -144,17 +144,314 @@ bool GobConsole::cmd_emmaState(int argc, const char **argv) {
 	return true;
 }
 
-static bool emmanuelleVariableUsed(uint index) {
-	// These ranges cover the seven known DOS, ST and Amiga script sets.
-	static const byte ranges[][2] = {
-		{0, 6}, {10, 33}, {35, 73}, {75, 77}, {80, 99},
-		{120, 124}, {126, 127}, {129, 130}, {210, 215}, {217, 219}
+enum EmmanuelleVariableGroup {
+	kEmmaGameStatus,
+	kEmmaInventory,
+	kEmmaEncounters,
+	kEmmaScene,
+	kEmmaConversation,
+	kEmmaHotelReplies,
+	kEmmaRoulette,
+	kEmmaProtection,
+	kEmmaOtherNonzero,
+};
+
+static EmmanuelleVariableGroup emmanuelleVariableGroup(uint index) {
+	struct VariableRange {
+		byte first;
+		byte last;
+		EmmanuelleVariableGroup group;
+	};
+
+	// One fixed partition defines both the known slots and their display order.
+	static const VariableRange ranges[] = {
+		{0, 0, kEmmaGameStatus},
+		{1, 6, kEmmaProtection},
+		{10, 19, kEmmaScene},
+		{20, 21, kEmmaGameStatus},
+		{22, 28, kEmmaInventory},
+		{29, 30, kEmmaGameStatus},
+		{31, 33, kEmmaInventory},
+		{35, 35, kEmmaEncounters},
+		{36, 36, kEmmaInventory},
+		{37, 37, kEmmaEncounters},
+		{38, 38, kEmmaInventory},
+		{39, 42, kEmmaScene},
+		{43, 43, kEmmaEncounters},
+		{44, 44, kEmmaGameStatus},
+		{45, 45, kEmmaEncounters},
+		{46, 48, kEmmaInventory},
+		{49, 49, kEmmaScene},
+		{50, 50, kEmmaInventory},
+		{51, 56, kEmmaHotelReplies},
+		{57, 62, kEmmaEncounters},
+		{63, 63, kEmmaGameStatus},
+		{64, 70, kEmmaEncounters},
+		{71, 72, kEmmaHotelReplies},
+		{73, 73, kEmmaInventory},
+		{75, 75, kEmmaInventory},
+		{76, 76, kEmmaScene},
+		{77, 77, kEmmaEncounters},
+		{80, 98, kEmmaConversation},
+		{99, 99, kEmmaScene},
+		{120, 124, kEmmaRoulette},
+		{126, 127, kEmmaRoulette},
+		{129, 130, kEmmaRoulette},
+		{210, 215, kEmmaRoulette},
+		{217, 219, kEmmaRoulette},
 	};
 	for (uint i = 0; i < ARRAYSIZE(ranges); ++i) {
-		if (index >= ranges[i][0] && index <= ranges[i][1])
-			return true;
+		if (index >= ranges[i].first && index <= ranges[i].last)
+			return ranges[i].group;
 	}
-	return false;
+	return kEmmaOtherNonzero;
+}
+
+static bool emmanuelleVariableUsed(uint index) {
+	return emmanuelleVariableGroup(index) != kEmmaOtherNonzero;
+}
+
+static Common::String emmanuelleVariableDescription(uint index, uint16 value,
+		const Common::String &module) {
+	struct VariableState {
+		uint16 value;
+		const char *description;
+	};
+
+	static const VariableState heldStates[] = {
+		{0, "not held"}, {1, "held"}, {0, nullptr}
+	};
+	static const VariableState boughtStates[] = {
+		{0, "not bought"}, {1, "bought"}, {0, nullptr}
+	};
+	static const VariableState receivedStates[] = {
+		{0, "not received"}, {1, "received"}, {0, nullptr}
+	};
+	static const VariableState shownStates[] = {
+		{0, "not shown"}, {1, "shown"}, {0, nullptr}
+	};
+	static const VariableState completedStates[] = {
+		{0, "not completed"}, {1, "completed"}, {0, nullptr}
+	};
+	static const VariableState acceptedStates[] = {
+		{0, "not accepted"}, {1, "accepted"}, {0, nullptr}
+	};
+	static const VariableState enabledStates[] = {
+		{0, "disabled"}, {1, "enabled"}, {0, nullptr}
+	};
+	static const VariableState availableStates[] = {
+		{0, "unavailable"}, {1, "available"}, {0, nullptr}
+	};
+	static const VariableState helicopterStates[] = {
+		{0, "unavailable"}, {1, "available"}, {2, "available"}, {0, nullptr}
+	};
+	static const VariableState collectedStates[] = {
+		{0, "not collected"}, {1, "already collected"}, {0, nullptr}
+	};
+	static const VariableState encounterStates[] = {
+		{0, "not attempted"}, {1, "unfinished"}, {2, "completed"}, {0, nullptr}
+	};
+	static const VariableState airportStates[] = {
+		{0, "not attempted"}, {1, "failed"}, {2, "successful"}, {0, nullptr}
+	};
+	// A completed encounter need not earn its law.
+	static const VariableState asymmetryStates[] = {
+		{0, "not attempted"}, {1, "unfinished"}, {2, "completed without Asymmetry"},
+		{3, "Asymmetry achieved"}, {0, nullptr}
+	};
+	static const VariableState unusualStates[] = {
+		{0, "not attempted"}, {1, "unfinished"}, {2, "completed without Unusual"},
+		{3, "Unusual achieved"}, {0, nullptr}
+	};
+	static const VariableState numberStates[] = {
+		{0, "not completed"}, {1, "completed without Number"}, {2, "Number achieved"}, {0, nullptr}
+	};
+	static const VariableState invitationStates[] = {
+		{0, "not invited"}, {1, "invited or unfinished"}, {2, "completed"}, {0, nullptr}
+	};
+	static const VariableState protectorStates[] = {
+		{0, "not attempted"}, {1, "protector appeared"}, {2, "completed"}, {0, nullptr}
+	};
+	static const VariableState aphrodisiacStates[] = {
+		{0, "consumed"}, {1, "full"}, {65535, "not held"}, {0, nullptr}
+	};
+	// Callbacks change the displayed reply before the player accepts it.
+	static const VariableState replyStates[] = {
+		{0, "unset"}, {1, "refuse payment"}, {2, "agree to pay"}, {3, "payment not requested"},
+		{4, "accept intimacy"}, {5, "decline intimacy"}, {0, nullptr}
+	};
+	static const VariableState referralStates[] = {
+		{0, "not pending"}, {1, "pending"}, {0, nullptr}
+	};
+	static const VariableState sequenceStates[] = {
+		{0, "full"}, {2, "short"}, {0, nullptr}
+	};
+
+	static const VariableState setupStates[] = {
+		{0, "pending"}, {1, "initialized"}, {0, nullptr}
+	};
+	static const VariableState giftStates[] = {
+		{0, "none"}, {1, "cigar"}, {2, "whisky"}, {0, nullptr}
+	};
+
+	Common::String description;
+	const VariableState *states = nullptr;
+	bool contextual = false;
+	const bool hasDialogue = module.equalsIgnoreCase("LOADAERO") ||
+		module.equalsIgnoreCase("LOADCAS") || module.equalsIgnoreCase("LOADGAR") ||
+		module.equalsIgnoreCase("LOADHOT") || module.equalsIgnoreCase("LOADPLA");
+	if (index >= 64 && index <= 67) {
+		static const char *const cities[] = {"Rio", "Salvador", "Manaus", "Iguacu"};
+		description = Common::String::format("%s airport encounter", cities[index - 64]);
+		states = airportStates;
+	} else if (index >= 1 && index <= 6) {
+		static const char *const fields[] = {"letter", "box", "color"};
+		description = Common::String::format("Protection prompt %u %s", (index - 1) / 3 + 1,
+			fields[(index - 1) % 3]);
+	} else if (hasDialogue && index == 12) {
+		description = "Approach";
+		states = acceptedStates;
+		contextual = true;
+	} else if (index >= 80 && index <= 89) {
+		description = Common::String::format("Dialogue topic %u weight", index - 79);
+	} else if (index >= 90 && index <= 98) {
+		static const char *const names[] = {
+			"Displayed topic weight", "Dialogue random roll (0-9)", "Dialogue score",
+			"Dialogue/travel option", "Offered dialogue topic A", "Offered dialogue topic B",
+			"Offered dialogue topic C", "Displayed reply", "Payment prompt"
+		};
+		description = names[index - 90];
+		if (index == 97)
+			states = replyStates;
+		if (index == 98)
+			states = enabledStates;
+	} else if (index >= 120 && index <= 122) {
+		description = Common::String::format("Roulette wager %u code", index - 119);
+	} else if (index >= 217 && index <= 219) {
+		description = Common::String::format("Roulette wager %u stake", index - 216);
+	} else {
+		struct VariableDescription {
+			uint16 index;
+			const char *module;
+			const char *description;
+			const VariableState *states;
+		};
+		// LOADHOT stores Emmanuelle's or Mario's room in v15/v16. The selected
+		// door matches when the current floor (v17) equals v15 and v10 equals v16.
+		static const VariableDescription descriptions[] = {
+			{0, nullptr, "Module selector", nullptr},
+			{10, "LOADFAV", "Encounter sequence", sequenceStates},
+			{11, "LOADHOT", "Helicopter", helicopterStates},
+			{13, nullptr, "Encounter character", nullptr},
+			{14, "LOADCAS", "Offered gift", giftStates},
+			{14, "LOADGAR", "Conversation topic", nullptr},
+			{15, "LOADCAS", "Casino man response stage", nullptr},
+			{15, "LOADHOT", "Special room floor", nullptr},
+			{16, "LOADCAS", "Casino woman response stage", nullptr},
+			{16, "LOADHOT", "Special room door", nullptr},
+			{17, nullptr, "Current hotel floor", nullptr},
+			{18, nullptr, "Hotel tip contact", availableStates},
+			{19, "LOADCAS", "Predicted roulette number", nullptr},
+			{19, "LOADFAV", "Market warning", shownStates},
+			{19, "LOADGAR", "Reply alternation", nullptr},
+			{19, "LOADHOT", "Hotel information contact", availableStates},
+			{20, nullptr, "Game hour", nullptr},
+			{21, nullptr, "Cash (hundreds)", nullptr},
+			{22, nullptr, "Pandeiro", heldStates},
+			{23, nullptr, "Rio statuette", heldStates},
+			{24, nullptr, "Waterfall statuette", heldStates},
+			{25, nullptr, "Opera statuette", heldStates},
+			{26, nullptr, "Carnival mask", heldStates},
+			{27, nullptr, "Toucan", boughtStates},
+			{28, nullptr, "Opera glasses", heldStates},
+			{29, nullptr, "Energy", nullptr},
+			{30, nullptr, "Erotic potential", nullptr},
+			{31, nullptr, "Aphrodisiac", aphrodisiacStates},
+			{32, nullptr, "Eroticism lesson", receivedStates},
+			{33, nullptr, "Waterfall statuette pickup", collectedStates},
+			{35, nullptr, "Salvador beach encounter", encounterStates},
+			{36, nullptr, "Casino number tip", receivedStates},
+			{37, nullptr, "Casino encounter", encounterStates},
+			{38, nullptr, "Casino contact referral", referralStates},
+			{39, nullptr, "Energy budget or fight result", nullptr},
+			{40, nullptr, "Energy gauge remainder", nullptr},
+			{41, nullptr, "Encounter animation variant", nullptr},
+			{42, nullptr, "Beach contact remark", nullptr},
+			{43, nullptr, "Helicopter pilot encounter", completedStates},
+			{44, nullptr, "Location selector", nullptr},
+			{45, nullptr, "Rio beach encounter", asymmetryStates},
+			{46, nullptr, "Waterfall harness", receivedStates},
+			{47, nullptr, "Boatman introduction", shownStates},
+			{48, nullptr, "Governor introduction", shownStates},
+			{49, nullptr, "Favela penalty bypass", enabledStates},
+			{50, nullptr, "Fortifying potion", receivedStates},
+			{51, nullptr, "Rio hotel information reply", nullptr},
+			{52, nullptr, "Salvador hotel information reply", nullptr},
+			{53, nullptr, "Manaus hotel information reply", nullptr},
+			{54, nullptr, "Iguacu hotel information reply", nullptr},
+			{55, nullptr, "Rio hotel gossip reply", nullptr},
+			{56, nullptr, "Salvador hotel gossip reply", nullptr},
+			{57, nullptr, "Salvador lower-town left encounter", encounterStates},
+			{58, nullptr, "Salvador lower-town middle encounter", protectorStates},
+			{59, nullptr, "Salvador lower-town right encounter", unusualStates},
+			{60, nullptr, "Rio lobby encounter", encounterStates},
+			{61, nullptr, "Salvador lobby encounter", encounterStates},
+			{62, nullptr, "Garden-party companion state", invitationStates},
+			{63, nullptr, "Initial LOADHOT setup", setupStates},
+			{68, nullptr, "Garden-party middle encounter", numberStates},
+			{69, nullptr, "Iguacu lobby encounter", numberStates},
+			{70, nullptr, "Garden-party right encounter", encounterStates},
+			{71, nullptr, "Manaus hotel gossip reply", nullptr},
+			{72, nullptr, "Iguacu hotel gossip reply", nullptr},
+			{73, nullptr, "Manaus hotel introduction", shownStates},
+			{75, nullptr, "Aphrodisiac mission", acceptedStates},
+			{76, nullptr, "Beach contact return screen", nullptr},
+			{77, nullptr, "Encounter result count", nullptr},
+			{99, nullptr, "Wrong-room keyhole views", nullptr},
+			{123, nullptr, "Roulette chip X", nullptr},
+			{124, nullptr, "Roulette chip Y", nullptr},
+			{126, nullptr, "Selected chip value", nullptr},
+			{127, nullptr, "Roulette result", nullptr},
+			{129, nullptr, "Roulette ball X", nullptr},
+			{130, nullptr, "Roulette ball Y", nullptr},
+			{210, nullptr, "Ten-unit chips", nullptr},
+			{211, nullptr, "Chip setup remainder input", nullptr},
+			{212, nullptr, "Five-unit chips", nullptr},
+			{213, nullptr, "One-unit chips", nullptr},
+			{214, nullptr, "Selected roulette wager code", nullptr},
+			{215, nullptr, "Next roulette wager slot", nullptr},
+		};
+		for (uint i = 0; i < ARRAYSIZE(descriptions); ++i) {
+			if (index == descriptions[i].index &&
+				(!descriptions[i].module || module.equalsIgnoreCase(descriptions[i].module))) {
+				description = descriptions[i].description;
+				states = descriptions[i].states;
+				contextual = descriptions[i].module != nullptr;
+				break;
+			}
+		}
+	}
+	if (description.empty() && ((index >= 10 && index <= 12) ||
+		(index >= 14 && index <= 16) || index == 19))
+		description = "Shared scene value";
+	if (states) {
+		const char *meaning = "unknown state";
+		for (uint i = 0; states[i].description; ++i) {
+			if (value == states[i].value) {
+				meaning = states[i].description;
+				break;
+			}
+		}
+		description = Common::String::format("%s: %s", description.c_str(), meaning);
+	}
+	if (contextual) {
+		if ((index >= 14 && index <= 16) || index == 19)
+			return Common::String::format("Shared scene value\n          // Currently: %s / %s",
+				description.c_str(), module.c_str());
+		return Common::String::format("Shared scene value\n          // Currently: %s",
+			description.c_str());
+	}
+	return description;
 }
 
 bool GobConsole::cmd_emmaVars(int argc, const char **argv) {
@@ -172,8 +469,11 @@ bool GobConsole::cmd_emmaVars(int argc, const char **argv) {
 					? _emmanuellePreviousVariables[i]
 					: 0;
 			if (previous != state.variables[i]) {
-				debugPrintf("v[%u]: %u -> %u\n", i, (uint)previous,
-					(uint)state.variables[i]);
+				const Common::String description = emmanuelleVariableDescription(
+					i, state.variables[i], state.module);
+				debugPrintf("v[%u]: %u -> %u%s%s\n", i, (uint)previous,
+					(uint)state.variables[i], description.empty() ? "" : "  // ",
+					description.c_str());
 				++changes;
 			}
 		}
@@ -182,36 +482,74 @@ bool GobConsole::cmd_emmaVars(int argc, const char **argv) {
 		return true;
 	}
 
-	int start = argc > 1 ? atoi(argv[1]) : 0;
-	int count = argc > 2 ? atoi(argv[2]) :
-		(argc > 1 ? 64 : (int)state.variables.size());
+	static const char usage[] = "Usage: emmaVars [details | changed | start [count]]\n";
+	const bool compactView = argc == 1;
+	const bool detailsView = argc == 2 && Common::String(argv[1]).equalsIgnoreCase("details");
+	if (!compactView && !detailsView && (argv[1][0] < '0' || argv[1][0] > '9')) {
+		debugPrintf("%s", usage);
+		return true;
+	}
+	int start = compactView || detailsView ? 0 : atoi(argv[1]);
+	int count = compactView || detailsView ? (int)state.variables.size() :
+		(argc > 2 ? atoi(argv[2]) : 64);
 	if (start < 0 || count < 1 || (uint)start >= state.variables.size()) {
-		debugPrintf("Usage: emmaVars (changed | start (count))\n");
+		debugPrintf("%s", usage);
 		return true;
 	}
 	const uint end = MIN<uint>((uint)start + (uint)count,
 							 state.variables.size());
-	if (argc == 1)
-		debugPrintf("Showing known used slots and nonzero values; use emmaVars 0 %u for all slots.\n",
-			(uint)state.variables.size());
-	uint columns = 0;
-	for (uint i = (uint)start; i < end; ++i) {
-		// Keep unexpected nonzero state visible even outside the known ranges.
-		if (argc == 1 && !emmanuelleVariableUsed(i) && state.variables[i] == 0)
-			continue;
-		if (argc == 1) {
+	if (compactView) {
+		debugPrintf("Use emmaVars details for grouped descriptions and current states.\n");
+		debugPrintf("Module: %s\n", state.module.c_str());
+		uint columns = 0;
+		for (uint i = 0; i < state.variables.size(); ++i) {
+			if (!emmanuelleVariableUsed(i) && state.variables[i] == 0)
+				continue;
 			const Common::String cell = Common::String::format("v[%u]=%u", i, (uint)state.variables[i]);
 			debugPrintf("%-13s", cell.c_str());
 			if (++columns == 6) {
 				debugPrintf("\n");
 				columns = 0;
 			}
-		} else {
-			debugPrintf("v[%u]=%u\n", i, (uint)state.variables[i]);
 		}
+		if (columns)
+			debugPrintf("\n");
+		_emmanuellePreviousVariables = state.variables;
+		return true;
 	}
-	if (columns)
-		debugPrintf("\n");
+	if (detailsView) {
+		debugPrintf("Module: %s\n", state.module.c_str());
+		debugPrintf("Stored values may be inactive or left over from another scene.\n");
+		static const char *const groupNames[] = {
+			"Game status and setup", "Inventory and story progress", "Encounter progress",
+			"Scene and shared script state", "Conversation state", "Hotel information and gossip",
+			"Roulette", "Protection", "Other nonzero values"
+		};
+		for (uint category = 0; category < ARRAYSIZE(groupNames); ++category) {
+			debugPrintf("\n%s:\n", groupNames[category]);
+			bool hasValues = false;
+			for (uint i = 0; i < state.variables.size(); ++i) {
+				if ((uint)emmanuelleVariableGroup(i) != category ||
+					(category == kEmmaOtherNonzero && state.variables[i] == 0))
+					continue;
+				const Common::String description = emmanuelleVariableDescription(
+					i, state.variables[i], state.module);
+				debugPrintf("v[%u]=%u%s%s\n", i, (uint)state.variables[i],
+					description.empty() ? "" : "  // ", description.c_str());
+				hasValues = true;
+			}
+			if (!hasValues)
+				debugPrintf("(none)\n");
+		}
+		_emmanuellePreviousVariables = state.variables;
+		return true;
+	}
+	for (uint i = (uint)start; i < end; ++i) {
+		const Common::String description = emmanuelleVariableDescription(
+			i, state.variables[i], state.module);
+		debugPrintf("v[%u]=%u%s%s\n", i, (uint)state.variables[i],
+			description.empty() ? "" : "  // ", description.c_str());
+	}
 	_emmanuellePreviousVariables = state.variables;
 	return true;
 }
