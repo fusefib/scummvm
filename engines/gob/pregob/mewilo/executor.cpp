@@ -161,6 +161,10 @@ bool MewiloExecutor::runFrames(uint baseDepth) {
 		}
 		case 0x12: {
 			uint16 tail = 0;
+			// Escape callbacks can open another modal question after the target
+			// frame was popped. Bound that C++ nesting as well as script frames.
+			if (_modalDepth >= kMaxExecDepth)
+				return false;
 			++_modalDepth;
 			const bool ok = executeFreeText(offset, _frames.size(), tail);
 			--_modalDepth;
@@ -428,15 +432,12 @@ bool MewiloExecutor::executeFreeText(uint16 offset, uint depth, uint16 &tailTarg
 		acceptedFields = 0;
 		for (uint i = 0; i < fields.size(); ++i) {
 			Common::Array<byte> input;
-			bool completed = false;
-			while (!completed && !_host.shouldQuit() && !_host.hasError()) {
+			while (!_host.shouldQuit() && !_host.hasError()) {
 				const bool edited = _host.editTextField(fields[i], input);
 				if (_host.shouldQuit() || _host.hasError())
 					return false;
-				if (edited) {
-					completed = true;
+				if (edited)
 					break;
-				}
 
 				if (escapeCallback) {
 					if (!executeTarget(escapeCallback, depth + 1))
