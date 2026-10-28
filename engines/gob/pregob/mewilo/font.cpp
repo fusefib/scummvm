@@ -60,14 +60,20 @@ bool MewiloFont::replaceGlyph(uint code, const byte *rows, uint length) {
 	return true;
 }
 
-void MewiloFont::drawChar(Surface &dest, byte c, int16 x, int16 y, byte color) const {
+void MewiloFont::drawChar(Surface &dest, byte c, int16 x, int16 y, byte color, bool cpcPixels) const {
 	if (!valid() || c >= 128)
 		return;
 
 	const uint32 glyphBase = (uint32)c * 8;
 	for (int row = 0; row < 8; ++row) {
 		// Native code reads glyph bytes from (c+1)*8-1 down to c*8.
-		const byte bits = _data[glyphBase + (7 - row)];
+		byte bits = _data[glyphBase + (7 - row)];
+		if (cpcPixels) {
+			// CPC selects bits 6/4/2/0 for its four source pixels. Their
+			// neighbours need not match; double the selected bits for output.
+			bits &= 0x55;
+			bits |= bits << 1;
+		}
 		for (int col = 0; col < 8; ++col) {
 			if (!(bits & (0x80 >> col)))
 				continue;

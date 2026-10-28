@@ -64,7 +64,8 @@ void PreGob_Mewilo::drawByteString(
 			y += lineAdvance;
 			continue;
 		}
-		_font.drawChar(*_vm->_draw->_backSurface, c, x, y, color);
+		_font.drawChar(*_vm->_draw->_backSurface, c, x, y, color,
+			_profile.platform == kMewiloPlatformAmstradCPC);
 		x += 8;
 	}
 }
@@ -134,7 +135,8 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 				break;
 			}
 
-			_font.drawChar(*_vm->_draw->_backSurface, c, x, y, color);
+			_font.drawChar(*_vm->_draw->_backSurface, c, x, y, color,
+				_profile.platform == kMewiloPlatformAmstradCPC);
 			if (strike) {
 				const int16 strikeY = y + MAX<int16>(0, ((int16)lineAdvance - 1) / 2);
 				if (x >= 0 && x + 7 < 320 && strikeY >= 0 && strikeY < 200)

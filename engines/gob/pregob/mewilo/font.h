@@ -38,8 +38,8 @@ public:
 	bool replaceGlyph(uint code, const byte *rows, uint length);
 	bool valid() const { return _data.size() == 1024; }
 
-	/** Draw one 8x8 direct-index glyph. Rows are stored bottom-first on disk. */
-	void drawChar(Surface &dest, byte c, int16 x, int16 y, byte color) const;
+	/** Draw one output cell. Rows are stored bottom-first on disk. */
+	void drawChar(Surface &dest, byte c, int16 x, int16 y, byte color, bool cpcPixels = false) const;
 
 private:
 	Common::Array<byte> _data;
