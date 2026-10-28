@@ -35,6 +35,13 @@ enum MewiloPlatform {
 	kMewiloPlatformThomsonTO
 };
 
+enum MewiloAudioBackend {
+	kMewiloAudioAtariSpl,
+	kMewiloAudioCpcMus,
+	kMewiloAudioAmigaSmp,
+	kMewiloAudioThomsonNote
+};
+
 struct MewiloPlatformProfile {
 	MewiloPlatform platform;
 	const char *modulePrefix;
@@ -42,6 +49,7 @@ struct MewiloPlatformProfile {
 	byte packedOutputScaleX;
 	bool persistentI00Scratch;
 	bool loadOptionalI01;
+	MewiloAudioBackend audioBackend;
 };
 
 // Takes ownership even when the input has no valid AMSDOS wrapper.

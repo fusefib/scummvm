@@ -33,7 +33,8 @@ namespace Mewilo {
 static const uint32 kExternalScratchSize = 32000;
 
 PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm) : PreGob(vm),
-	_profile(getMewiloPlatformProfile(vm->getPlatform() == Common::kPlatformAmstradCPC ? kMewiloPlatformAmstradCPC : kMewiloPlatformAtariST)), _executor(*this),
+	_profile(getMewiloPlatformProfile(vm->getPlatform() == Common::kPlatformAmstradCPC ? kMewiloPlatformAmstradCPC : vm->getPlatform() == Common::kPlatformAmiga ? kMewiloPlatformAmiga : kMewiloPlatformAtariST)),
+	_audioBackend(_profile.audioBackend), _sampleAudioSelected(false), _executor(*this),
 	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false) {
 	_music = new SoundMixer(*g_system->getMixer(), Audio::Mixer::kMusicSoundType);
@@ -55,6 +56,7 @@ bool PreGob_Mewilo::shouldQuit() const {
 
 void PreGob_Mewilo::run() {
 	initScreen();
+	selectSampleAudio();
 	byte palette[16 * 3];
 	buildMewiloPalette(_profile.platform, palette);
 	// Gob's palette fade accepts six-bit staging values, not RGB888.

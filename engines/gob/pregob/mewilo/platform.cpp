@@ -29,10 +29,10 @@ namespace Mewilo {
 // CPC stores four source pixels per cell, then doubles them for presentation.
 // The shared script coordinate space remains 40 cells wide on every platform.
 static const MewiloPlatformProfile kProfiles[] = {
-	{ kMewiloPlatformAtariST, "LOAD", 8, 1, true, true },
-	{ kMewiloPlatformAmstradCPC, "AMSOAD", 4, 2, false, false },
-	{ kMewiloPlatformAmiga, "LOAD", 8, 1, false, false },
-	{ kMewiloPlatformThomsonTO, "THLOAD", 8, 1, false, false }
+	{ kMewiloPlatformAtariST, "LOAD", 8, 1, true, true, kMewiloAudioAtariSpl },
+	{ kMewiloPlatformAmstradCPC, "AMSOAD", 4, 2, false, false, kMewiloAudioCpcMus },
+	{ kMewiloPlatformAmiga, "LOAD", 8, 1, false, false, kMewiloAudioAmigaSmp },
+	{ kMewiloPlatformThomsonTO, "THLOAD", 8, 1, false, false, kMewiloAudioThomsonNote }
 };
 
 bool isValidMewiloPlatform(MewiloPlatform platform) {
@@ -61,6 +61,11 @@ void buildMewiloPalette(MewiloPlatform platform, byte palette[16 * 3]) {
 		0x444, 0x511, 0x140, 0x753, 0x335, 0x030, 0x730, 0x541
 	};
 	for (uint i = 0; i < 16; ++i) {
+		if (platform == kMewiloPlatformAmiga) {
+			for (uint c = 0; c < 3; ++c)
+				palette[i * 3 + c] = ((kColors[i] >> (8 - c * 4)) & 7) * 2 * 17;
+			continue;
+		}
 		palette[i * 3] = (((kColors[i] >> 8) & 7) * 255 + 3) / 7;
 		palette[i * 3 + 1] = (((kColors[i] >> 4) & 7) * 255 + 3) / 7;
 		palette[i * 3 + 2] = ((kColors[i] & 7) * 255 + 3) / 7;

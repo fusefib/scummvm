@@ -111,7 +111,7 @@ bool MewiloExecutor::runFrames(uint baseDepth) {
 				if (!executeInlineFF(item.offset))
 					return false;
 			} else if (item.target) {
-				if (frame.index + 1 == items.size())
+				if (uint(frame.index) + 1 == items.size())
 					_frames.pop_back(); // retain the original last-item tail optimization
 				if (!pushFrame(MewiloExecFrame::kTarget, item.target))
 					return false;

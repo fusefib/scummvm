@@ -26,6 +26,7 @@
 #include "gob/pregob/mewilo/font.h"
 #include "gob/pregob/mewilo/graphics.h"
 #include "gob/sound/sounddesc.h"
+#include "audio/mixer.h"
 #include "gob/surface.h"
 
 namespace Gob {
@@ -100,6 +101,10 @@ private:
 	byte translateInputKey(int16 key) const;
 	bool playRawSample(const Common::String &name, uint16 frequency, int16 repetitions = 1, bool music = false);
 	void playSample(byte *pcm, uint32 size, uint16 frequency, int16 repetitions, bool music);
+	Common::SeekableReadStream *openAmigaSample(const Common::String &name) const;
+	void selectSampleAudio();
+	bool samplePlaying() const;
+	bool playAmigaSample(const Common::String &name, byte volume, int16 repetitions = 1, bool music = false);
 	bool playCpcMusic(const Common::String &name);
 	void stopMewiloAudio();
 	void installCrossCursor();
@@ -108,6 +113,9 @@ private:
 	uint32 activeMillis() const;
 
 	const MewiloPlatformProfile &_profile;
+	MewiloAudioBackend _audioBackend;
+	bool _sampleAudioSelected;
+	Audio::SoundHandle _sampleHandle;
 	MewiloExecutor _executor;
 	MewiloTotData *_tot;
 	MewiloI00Bank *_i00;
