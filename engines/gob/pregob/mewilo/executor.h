@@ -101,6 +101,11 @@ struct MewiloExecFrame {
 	MewiloExecFrame(byte k = kTarget, uint16 o = 0, uint16 i = 0) : kind(k), offset(o), index(i) {}
 };
 
+struct MewiloExecState {
+	MewiloVar variables[kMewiloVariableCount];
+	Common::Array<MewiloExecFrame> frames;
+};
+
 class MewiloExecutor {
 public:
 	explicit MewiloExecutor(MewiloExecHost &host);
@@ -108,6 +113,11 @@ public:
 	void detachModule();
 	bool executeRoot(const MewiloTotData &tot);
 	bool resume();
+	bool atSaveBoundary() const { return _atInput && !_modalDepth; }
+	bool exportState(MewiloExecState &out) const;
+	static bool validateState(const MewiloTotData &tot, const MewiloExecState &state);
+	bool importState(const MewiloTotData &tot, const MewiloExecState &state);
+	void adoptState(MewiloExecutor &prepared);
 	static void normalizeAnswer(Common::Array<byte> &text);
 
 	MewiloVar &variable(uint index) { return _variables[index]; }
@@ -130,6 +140,8 @@ private:
 	const MewiloTotData *_tot;
 	uint _dispatchesUntilService;
 	Common::Array<MewiloExecFrame> _frames;
+	uint _modalDepth;
+	bool _atInput;
 	MewiloVar _variables[kMewiloVariableCount];
 };
 
