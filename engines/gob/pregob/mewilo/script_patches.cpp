@@ -36,7 +36,7 @@ MewiloScriptPatchReport::MewiloScriptPatchReport() {
 
 namespace {
 
-enum ResourceId { kUnknownResource, kGermanTown, kGermanHouse, kGermanHen, kGermanEnd };
+enum ResourceId { kUnknownResource, kGermanTown, kGermanHouse, kGermanHen, kGermanEnd, kFrenchHen };
 
 struct ResourceIdentity {
 	ResourceId id;
@@ -61,6 +61,8 @@ static const ResourceIdentity kResources[] = {
 		k68kPlatforms, Common::DE_DEU },
 	{ kGermanEnd, "LOAD8", 17114, "e8046f82c18ff92f5fce83c7e46f6f8b",
 		k68kPlatforms, Common::DE_DEU },
+	{ kFrenchHen, "LOAD5", 18798, "069b5f0e5dc077d9032331cce2731212",
+		k68kPlatforms, Common::FR_FRA },
 };
 
 static bool contains(const Common::Array<byte> &data, uint32 at, uint32 count) {
@@ -262,11 +264,16 @@ static bool correctHenProtection(ResourceId id, const Common::Array<byte> &sourc
 		Common::Array<byte> &target) {
 	uint16 entryAt, refusalAt, dispatcher;
 	static const byte germanEntry[] = { 0x1C, 4, 0x23, 0xC8, 0xFF, 3, 0x32, 7, 0x89, 0x0D, 0x1F };
+	static const byte frenchEntry[] = { 0x1C, 4, 0x23, 0xEE, 0xFF, 3, 0x32, 7, 0xD1, 0x0D, 0x45 };
 	const byte *entry;
 	switch (id) {
 	case kGermanHen:
 		entryAt = 0x0D29; refusalAt = 0x0CE5; dispatcher = 0x0D1F;
 		entry = germanEntry;
+		break;
+	case kFrenchHen:
+		entryAt = 0x0D4F; refusalAt = 0x0D0B; dispatcher = 0x0D45;
+		entry = frenchEntry;
 		break;
 	default:
 		return false;
@@ -331,7 +338,7 @@ bool prepareMewiloScript(Common::SeekableReadStream &normalizedStream,
 		}
 	}
 	if (ok && (policy & kMewiloPatchHenProtection) &&
-		id == kGermanHen) {
+		(id == kGermanHen || id == kFrenchHen)) {
 		ok = correctHenProtection(id, source, candidate);
 		prepared.appliedMask |= kMewiloFixHenProtection;
 		++prepared.changedSites;
