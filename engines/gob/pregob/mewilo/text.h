@@ -44,7 +44,7 @@ struct MewiloTextLine {
  * and wrapping rewinds the source to the word after the last literal space.
  */
 bool extractMewiloTextLine(const byte *source, uint32 sourceSize,
-		uint16 visibleWidth, MewiloTextLine &line);
+	uint16 visibleWidth, MewiloTextLine &line);
 
 /** Count visible glyph cells in an extracted Mewilo line. */
 uint16 countMewiloVisibleTextCells(const Common::Array<byte> &line);

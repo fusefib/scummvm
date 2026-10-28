@@ -19,14 +19,18 @@
  */
 
 #include "gob/pregob/mewilo/detection.h"
+
 #include "common/endian.h"
 #include "common/stream.h"
+
 namespace Gob {
 namespace {
+
 bool sampleMarker(const Common::FSList &files, const char *name, bool amiga) {
 	for (Common::FSList::const_iterator it = files.begin(); it != files.end(); ++it) {
 		const Common::FSNode &file = *it;
-		if (file.isDirectory() || !file.getName().equalsIgnoreCase(name)) continue;
+		if (file.isDirectory() || !file.getName().equalsIgnoreCase(name))
+			continue;
 		Common::SeekableReadStream *s = file.createReadStream();
 		bool ok = s && s->size() > 0 && s->size() <= 8 * 1024 * 1024;
 		if (ok && amiga) {
@@ -35,32 +39,39 @@ bool sampleMarker(const Common::FSList &files, const char *name, bool amiga) {
 				READ_BE_UINT32(h) == uint64(s->size() - 6) && READ_BE_UINT16(h + 4) != 0;
 		}
 		delete s;
-		if (ok) return true;
+		if (ok)
+			return true;
 	}
 	return false;
 }
-}
+} // End of anonymous namespace
+
 void preferMewiloNativeProfile(const Common::FSList &files, DetectedGames &games) {
 	bool relevant = false;
 	for (uint i = 0; i < games.size(); ++i) {
 		const DetectedGame &g = games[i];
 		if (g.gameId == "mewilo" && !g.hasUnknownFiles &&
-			(g.platform == Common::kPlatformAtariST || g.platform == Common::kPlatformAmiga)) relevant = true;
+			(g.platform == Common::kPlatformAtariST || g.platform == Common::kPlatformAmiga))
+			relevant = true;
 	}
-	if (!relevant) return;
+	if (!relevant)
+		return;
 	const bool spl = sampleMarker(files, "INTRO.SPL", false);
 	bool smp = sampleMarker(files, "intro.smp", true);
-	if (!smp) for (Common::FSList::const_iterator it = files.begin(); it != files.end(); ++it) {
-		const Common::FSNode &dir = *it;
-		if (!dir.isDirectory() || !dir.getName().equalsIgnoreCase("sounds")) continue;
-		Common::FSList children;
-		if (dir.getChildren(children, Common::FSNode::kListFilesOnly) &&
-			sampleMarker(children, "intro.smp", true)) {
-			smp = true;
-			break;
+	if (!smp)
+		for (Common::FSList::const_iterator it = files.begin(); it != files.end(); ++it) {
+			const Common::FSNode &dir = *it;
+			if (!dir.isDirectory() || !dir.getName().equalsIgnoreCase("sounds"))
+				continue;
+			Common::FSList children;
+			if (dir.getChildren(children, Common::FSNode::kListFilesOnly) &&
+				sampleMarker(children, "intro.smp", true)) {
+				smp = true;
+				break;
+			}
 		}
-	}
-	if (spl == smp) return; // Ambiguous or incomplete: preserve explicit alternatives.
+	if (spl == smp)
+		return; // Ambiguous or incomplete: preserve explicit alternatives.
 	const Common::Platform preferred = smp ? Common::kPlatformAmiga : Common::kPlatformAtariST;
 	for (uint i = 0; i < games.size();) {
 		const DetectedGame &g = games[i];
@@ -70,10 +81,14 @@ void preferMewiloNativeProfile(const Common::FSList &files, DetectedGames &games
 			for (uint j = 0; j < games.size(); ++j) {
 				const DetectedGame &candidate = games[j];
 				if (candidate.gameId == g.gameId && candidate.language == g.language &&
-					candidate.platform == preferred && !candidate.hasUnknownFiles) alternative = true;
+					candidate.platform == preferred && !candidate.hasUnknownFiles)
+					alternative = true;
 			}
 		}
-		if (alternative) games.remove_at(i); else ++i;
+		if (alternative)
+			games.remove_at(i);
+		else
+			++i;
 	}
 }
-} // namespace Gob
+} // End of namespace Gob

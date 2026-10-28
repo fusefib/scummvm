@@ -30,8 +30,7 @@ MewiloCpcMusicData::MewiloCpcMusicData() : _tailSize(0), _valid(false) {
 	memset(_channels, 0, sizeof(_channels));
 }
 
-MewiloCpcMusicData::MewiloCpcMusicData(Common::SeekableReadStream &stream) :
-		_tailSize(0), _valid(false) {
+MewiloCpcMusicData::MewiloCpcMusicData(Common::SeekableReadStream &stream) : _tailSize(0), _valid(false) {
 	memset(_channels, 0, sizeof(_channels));
 	load(stream);
 }
@@ -82,7 +81,6 @@ bool MewiloCpcMusicData::load(const byte *data, uint32 size) {
 	_valid = true;
 	return true;
 }
-
 
 void MewiloCpcMusicData::buildNativeEvents(Common::Array<MewiloCpcSoundEvent> &events) const {
 	events.clear();
@@ -140,13 +138,15 @@ uint32 MewiloCpcMusicData::channelACycleDurationCs() const {
 
 bool renderMewiloCpcMusic(const MewiloCpcMusicData &music, Common::Array<byte> &pcm) {
 	pcm.clear();
-	if (!music.valid()) return false;
+	if (!music.valid())
+		return false;
 	const uint32 samplesPerCs = 250, sampleRate = 25000;
 	uint32 cycleCs = 0;
 	for (uint channel = 0; channel < 3; ++channel) {
 		uint32 time = 0;
 		const MewiloCpcMusicData::Channel &c = music.channel(channel);
-		for (uint i = 0; i < c.count; ++i) time += c.second[i];
+		for (uint i = 0; i < c.count; ++i)
+			time += c.second[i];
 		cycleCs = MAX(cycleCs, time);
 	}
 	// Firmware SOUND queues serialize events on the same voice. A new noise
@@ -161,13 +161,13 @@ bool renderMewiloCpcMusic(const MewiloCpcMusicData &music, Common::Array<byte> &
 	}
 	cycleCs = MAX(cycleCs, noiseEnd);
 	// Both shipped cycles are under 15 seconds. Bound even adversarial data.
-	if (!cycleCs || cycleCs > 60000) return false;
+	if (!cycleCs || cycleCs > 60000)
+		return false;
 	pcm.resize(cycleCs * samplesPerCs);
 	memset(pcm.data(), 0, pcm.size());
 	static const uint16 kAyVolume[16] = {
 		0, 513, 828, 1239, 1923, 3238, 4926, 9110,
-		10344, 17876, 24682, 30442, 38844, 47270, 56402, 65535
-	};
+		10344, 17876, 24682, 30442, 38844, 47270, 56402, 65535};
 	const MewiloCpcMusicData::Channel &tone = music.channel(0);
 	uint32 dst = 0, phase = 0;
 	for (uint i = 0; i < tone.count; ++i) {
@@ -183,7 +183,8 @@ bool renderMewiloCpcMusic(const MewiloCpcMusicData &music, Common::Array<byte> &
 				const int amplitude = (kAyVolume[volume] * 120U + 32767U) / 65535U;
 				value = (phase & 0x80000000U) ? amplitude : -amplitude;
 			}
-			if (period) phase += step;
+			if (period)
+				phase += step;
 			pcm[dst++] = byte(int8(value));
 		}
 	}
@@ -193,7 +194,8 @@ bool renderMewiloCpcMusic(const MewiloCpcMusicData &music, Common::Array<byte> &
 	uint32 rng = 1, noiseClock = 0;
 	uint event = 0;
 	for (uint32 i = 0; noise.count && i < pcm.size(); ++i) {
-		while (event < noise.count && i >= (noiseStarts[event] + 3) * samplesPerCs) ++event;
+		while (event < noise.count && i >= (noiseStarts[event] + 3) * samplesPerCs)
+			++event;
 		if (event < noise.count && i >= noiseStarts[event] * samplesPerCs) {
 			const int amplitude = (kAyVolume[noise.third[event] & 15] * 120U + 32767U) / 65535U;
 			const int value = int(int8(pcm[i])) + ((rng & 1) ? amplitude : -amplitude);

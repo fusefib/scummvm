@@ -20,18 +20,45 @@
 
 #ifndef GOB_PREGOB_MEWILO_TRANSLATION_H
 #define GOB_PREGOB_MEWILO_TRANSLATION_H
-#include "common/array.h"
-#include "common/stream.h"
-#include "common/str.h"
-#include "gob/pregob/mewilo/tot.h"
-namespace Gob {
-class Surface;
-namespace Mewilo {
-class MewiloFont;
 
-enum MewiloOutputMode { kMewiloOriginal, kMewiloCorrectedOriginal, kMewiloEnglish };
-enum ReplacementFamily { kReplacementFullFrench, kReplacementFullGerman, kReplacementCpcFrench, kReplacementThomsonFrench };
-enum ReplacementKind { kReplacementText = 1, kReplacementAnswers, kReplacementReject, kReplacementImage, kReplacementGlyph };
+#include "common/array.h"
+#include "common/str.h"
+
+namespace Common {
+class SeekableReadStream;
+class WriteStream;
+} // End of namespace Common
+
+namespace Gob {
+
+class Surface;
+
+namespace Mewilo {
+
+class MewiloFont;
+class MewiloTotData;
+
+enum MewiloOutputMode {
+	kMewiloOriginal,
+	kMewiloCorrectedOriginal,
+	kMewiloEnglish
+};
+
+enum ReplacementFamily {
+	kReplacementFullFrench,
+	kReplacementFullGerman,
+	kReplacementCpcFrench,
+	kReplacementThomsonFrench
+};
+
+enum ReplacementKind {
+	kReplacementText = 1,
+	kReplacementAnswers,
+	kReplacementReject,
+	kReplacementImage,
+	kReplacementGlyph
+};
+
 struct ReplacementKey {
 	byte family, module, kind, field;
 	uint16 node;
@@ -40,13 +67,12 @@ struct ReplacementEntry {
 	ReplacementKey key;
 	byte opcode;
 	uint16 width, height;
-	Common::Array<byte> bytes; // NUL-terminated game-encoded text OR source-resolution pen indices.
+	Common::Array<byte> bytes; ///< Terminated game-encoded text or source-resolution pen indices.
 };
-/** Owns an external single-family MWEN v2 pack. Load once before a new game or prepared restore;
- * do not hot-reload while clients retain entry pointers. Failure leaves the previous
- * pack unchanged. Source language and platform remain separate from output wording.
- * Header flag 1 marks a sparse corrected-original pack; flag 0 requires
- * complete English text/input coverage. Every supplied entry is checked.
+
+/** Owns one MWEN v2 pack. Failed loads leave the previous entries and pointers intact.
+ * Header flag 1 selects sparse corrected-original text; flag 0 requires complete
+ * English text and input coverage. Successful reloads invalidate entry pointers.
  */
 class MewiloReplacements {
 public:
@@ -58,30 +84,31 @@ public:
 	byte family() const { return _entries.empty() ? 255 : _entries[0].key.family; }
 	bool validateModule(const MewiloTotData &tot, byte module, Common::String &reason) const;
 	bool applyGlyphs(MewiloFont &font) const;
-	// The existing save identity includes the resident output bytes, not a later
-	// reopening of the sidecar. No separate hash/signature matcher is introduced.
+	/** Serialize the loaded content into the save identity without reopening the sidecar. */
 	void writeIdentity(Common::WriteStream &stream) const;
 	const ReplacementEntry *find(const ReplacementKey &key) const;
-	/** Known family/module/offset plus opcode and geometry, not a checksum or scan.
-	 * field is an ordinal in the current input node, NOT a relocated descriptor offset.
+	/** Resolve a known family/module/node and verify its opcode and geometry.
+	 * field is an ordinal in the input node, not a relocated descriptor offset.
 	 */
 	const ReplacementEntry *resolve(const MewiloTotData &tot, const ReplacementKey &key) const;
-	/** handled=true means the English dictionary was present: false then means
-	 * WRONG ANSWER, not permission to fall back to the source-language dictionary.
+	/** handled distinguishes a rejected replacement answer from a missing dictionary.
 	 */
 	bool answerMatches(const MewiloTotData &tot, const ReplacementKey &key,
 		const Common::Array<byte> &input, bool &handled) const;
+
 private:
 	Common::Array<ReplacementEntry> _entries;
 	Common::Array<byte> _residentBytes;
 	uint16 _revision;
 	bool _sparseOriginal;
 };
-/** Draw a complete replacement at its original geometry. The host must first perform
- * the ordinary native decode/scratch side effects, then use this BEFORE presentation
- * tracking/dirty marking. Those side effects must not disappear on Atari.
+
+/** Draw a replacement after native decode/scratch effects and before dirty marking.
+ * This ordering preserves the Atari scratch bytes needed by subsequent images.
  */
 bool drawReplacementImage(const ReplacementEntry &entry, Surface &dest, int16 x, int16 y);
-} // namespace Mewilo
-} // namespace Gob
-#endif
+
+} // End of namespace Mewilo
+} // End of namespace Gob
+
+#endif // GOB_PREGOB_MEWILO_TRANSLATION_H

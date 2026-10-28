@@ -23,6 +23,7 @@
 
 #include "common/array.h"
 #include "common/stream.h"
+
 #include "gob/pregob/mewilo/platform.h"
 
 namespace Gob {
@@ -45,6 +46,7 @@ MewiloAudioBackend chooseMewiloSampleBackend(MewiloAudioBackend preferred,
 bool readMewiloAmigaSample(Common::SeekableReadStream &stream,
 	Common::Array<byte> &pcm, uint16 &rate);
 
-} // namespace Mewilo
-} // namespace Gob
-#endif
+} // End of namespace Mewilo
+} // End of namespace Gob
+
+#endif // GOB_PREGOB_MEWILO_SAMPLE_AUDIO_H

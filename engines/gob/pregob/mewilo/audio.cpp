@@ -18,20 +18,23 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/textconsole.h"
-#include "common/system.h"
+#include "gob/pregob/mewilo/mewilo.h"
+
 #include "audio/decoders/raw.h"
-#include "gob/dataio.h"
-#include "gob/pregob/mewilo/sample_audio.h"
+
+#include "common/system.h"
+#include "common/textconsole.h"
 #include "common/util.h"
-#include "gob/gob.h"
+
+#include "gob/dataio.h"
 #include "gob/global.h"
-#include "gob/util.h"
+#include "gob/gob.h"
 #include "gob/pregob/mewilo/music.h"
+#include "gob/pregob/mewilo/sample_audio.h"
 #include "gob/pregob/mewilo/thomson_music.h"
 #include "gob/sound/sound.h"
 #include "gob/sound/soundmixer.h"
-#include "gob/pregob/mewilo/mewilo.h"
+#include "gob/util.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -42,32 +45,47 @@ Common::SeekableReadStream *PreGob_Mewilo::openAmigaSample(const Common::String 
 }
 
 void PreGob_Mewilo::selectSampleAudio() {
-	if (_sampleAudioSelected) return;
+	if (_sampleAudioSelected)
+		return;
 	_sampleAudioSelected = true;
 	if (_profile.platform != kMewiloPlatformAtariST && _profile.platform != kMewiloPlatformAmiga)
 		return;
 	uint spl = 0, smp = 0;
 	Common::String missingSpl, missingSmp;
 	for (uint i = 0; i < mewiloSampleCount(kMewiloAudioAtariSpl); ++i) {
-		Common::SeekableReadStream *stream = _vm->_dataIO->getFile(mewiloSampleName(kMewiloAudioAtariSpl, i));
-		if (stream && stream->size() > 0 && stream->size() <= 8 * 1024 * 1024) ++spl;
-		else { if (!missingSpl.empty()) missingSpl += ", "; missingSpl += mewiloSampleName(kMewiloAudioAtariSpl, i); }
+		Common::SeekableReadStream *stream =
+			_vm->_dataIO->getFile(mewiloSampleName(kMewiloAudioAtariSpl, i));
+		if (stream && stream->size() > 0 && stream->size() <= 8 * 1024 * 1024)
+			++spl;
+		else {
+			if (!missingSpl.empty())
+				missingSpl += ", ";
+			missingSpl += mewiloSampleName(kMewiloAudioAtariSpl, i);
+		}
 		delete stream;
 	}
 	for (uint i = 0; i < mewiloSampleCount(kMewiloAudioAmigaSmp); ++i) {
-		Common::SeekableReadStream *stream = openAmigaSample(mewiloSampleName(kMewiloAudioAmigaSmp, i));
-		Common::Array<byte> pcm; uint16 rate = 0;
-		if (stream && readMewiloAmigaSample(*stream, pcm, rate)) ++smp;
-		else { if (!missingSmp.empty()) missingSmp += ", "; missingSmp += mewiloSampleName(kMewiloAudioAmigaSmp, i); }
+		Common::SeekableReadStream *stream =
+			openAmigaSample(mewiloSampleName(kMewiloAudioAmigaSmp, i));
+		Common::Array<byte> pcm;
+		uint16 rate = 0;
+		if (stream && readMewiloAmigaSample(*stream, pcm, rate))
+			++smp;
+		else {
+			if (!missingSmp.empty())
+				missingSmp += ", ";
+			missingSmp += mewiloSampleName(kMewiloAudioAmigaSmp, i);
+		}
 		delete stream;
 	}
 	_audioBackend = chooseMewiloSampleBackend(_profile.audioBackend, spl, smp);
 	const bool amiga = _audioBackend == kMewiloAudioAmigaSmp;
-	debugC(1, kDebugGameFlow, "Mewilo: using %s audio (%u valid SPL / %u valid SMP), independently of presentation",
+	debugC(1, kDebugGameFlow,
+		"Mewilo: using %s audio (%u valid SPL / %u valid SMP), independently of presentation",
 		amiga ? "Amiga SMP" : "Atari SPL", spl, smp);
 	if ((amiga ? smp : spl) != mewiloSampleCount(_audioBackend))
 		warning("Mewilo: incomplete %s audio (%u/%u). Missing or invalid: %s. "
-			"SMP files may be in sounds/ or the game root; SPL files belong in the game root.",
+				"SMP files may be in sounds/ or the game root; SPL files belong in the game root.",
 			amiga ? "SMP" : "SPL", amiga ? smp : spl, mewiloSampleCount(_audioBackend),
 			(amiga ? missingSmp : missingSpl).c_str());
 }
@@ -76,20 +94,31 @@ bool PreGob_Mewilo::samplePlaying() const {
 	return g_system->getMixer()->isSoundHandleActive(_sampleHandle);
 }
 
-bool PreGob_Mewilo::playAmigaSample(const Common::String &name, byte volume, int16 repetitions, bool music) {
+bool PreGob_Mewilo::playAmigaSample(
+	const Common::String &name, byte volume, int16 repetitions, bool music) {
 	Common::SeekableReadStream *stream = openAmigaSample(name);
-	Common::Array<byte> pcm; uint16 rate = 0;
+	Common::Array<byte> pcm;
+	uint16 rate = 0;
 	const bool valid = stream && readMewiloAmigaSample(*stream, pcm, rate);
 	delete stream;
 	if (!valid || repetitions <= 0) {
-		renderFailure(Common::String::format("missing or invalid Amiga sample %s", name.c_str()).c_str(), 0);
+		renderFailure(
+			Common::String::format("missing or invalid Amiga sample %s", name.c_str()).c_str(), 0);
 		return false;
 	}
 	byte *owned = (byte *)malloc(pcm.size());
-	if (!owned) { renderFailure("unable to allocate sample", 0); return false; }
+	if (!owned) {
+		renderFailure("unable to allocate sample", 0);
+		return false;
+	}
 	memcpy(owned, pcm.data(), pcm.size());
-	Audio::SeekableAudioStream *raw = Audio::makeRawStream(owned, pcm.size(), rate, 0, DisposeAfterUse::YES);
-	if (!raw) { free(owned); renderFailure("unable to create sample stream", 0); return false; }
+	Audio::SeekableAudioStream *raw =
+		Audio::makeRawStream(owned, pcm.size(), rate, 0, DisposeAfterUse::YES);
+	if (!raw) {
+		free(owned);
+		renderFailure("unable to create sample stream", 0);
+		return false;
+	}
 	Audio::AudioStream *loop = Audio::makeLoopingAudioStream(raw, repetitions);
 	Audio::Mixer *mixer = g_system->getMixer();
 	mixer->stopHandle(_sampleHandle);
@@ -108,7 +137,8 @@ bool PreGob_Mewilo::playAmigaSample(const Common::String &name, byte volume, int
 	return !shouldQuit() && !hasError();
 }
 
-bool PreGob_Mewilo::playRawSample(const Common::String &name, uint16 frequency, int16 repetitions, bool music) {
+bool PreGob_Mewilo::playRawSample(
+	const Common::String &name, uint16 frequency, int16 repetitions, bool music) {
 	Common::SeekableReadStream *stream = openResource(name);
 	if (!stream) {
 		renderFailure(Common::String::format("missing sample %s", name.c_str()).c_str(), 0);
@@ -135,8 +165,8 @@ bool PreGob_Mewilo::playRawSample(const Common::String &name, uint16 frequency, 
 	return true;
 }
 
-void PreGob_Mewilo::playSample(byte *pcm, uint32 size, uint16 frequency,
-		int16 repetitions, bool music) {
+void PreGob_Mewilo::playSample(
+	byte *pcm, uint32 size, uint16 frequency, int16 repetitions, bool music) {
 	SoundDesc &sample = music ? _musicSample : _sample;
 	// Stop the reader before replacing its backing bytes. Separate descriptors
 	// mean an animal effect cannot free or stop a currently playing song.
@@ -185,8 +215,8 @@ bool PreGob_Mewilo::playMusicPcm(const Common::Array<byte> &pcm) {
 	if (!owned)
 		return false;
 	memcpy(owned, pcm.data(), pcm.size());
-	Audio::SeekableAudioStream *raw = Audio::makeRawStream(owned, pcm.size(),
-		kMewiloThomsonSampleRate, 0, DisposeAfterUse::YES);
+	Audio::SeekableAudioStream *raw =
+		Audio::makeRawStream(owned, pcm.size(), kMewiloThomsonSampleRate, 0, DisposeAfterUse::YES);
 	if (!raw) {
 		free(owned);
 		return false;
@@ -214,7 +244,8 @@ bool PreGob_Mewilo::playCpcMusic(const Common::String &name) {
 	if (!music.valid())
 		return false;
 	Common::Array<byte> cycle;
-	if (!renderMewiloCpcMusic(music, cycle)) return false;
+	if (!renderMewiloCpcMusic(music, cycle))
+		return false;
 	byte *pcm = new byte[cycle.size()];
 	memcpy(pcm, cycle.data(), cycle.size());
 	playSample(pcm, cycle.size(), 25000, -1, true);
@@ -240,11 +271,20 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 
 	// Presentation/VM-adjacent commands are shared across the native ports.
 	switch (command) {
-	case 0: drawScore(score, 37 * 8, 184, 7); return;
-	case 2: installCrossCursor(); showCursor(); return;
-	case 7: return;
-	case 9: drawScore(score, 28 * 8, 56, 1); return;
-	default: break;
+	case 0:
+		drawScore(score, 37 * 8, 184, 7);
+		return;
+	case 2:
+		installCrossCursor();
+		showCursor();
+		return;
+	case 7:
+		return;
+	case 9:
+		drawScore(score, 28 * 8, 56, 1);
+		return;
+	default:
+		break;
 	}
 
 	if (_audioBackend == kMewiloAudioCpcMus) {
@@ -258,21 +298,41 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 	if (_audioBackend == kMewiloAudioAmigaSmp) {
 		// Native Amiga $4FBC arguments: sample index, repetitions, volume.
 		switch (command) {
-		case 1: playAmigaSample("oiseaux.smp", 40); break;
-		case 3: playAmigaSample("poule.smp", 64); break;
-		case 4: playAmigaSample("henni.smp", 40); break;
-		case 5: playAmigaSample("cloche.smp", 64, 2); break;
-		case 6: playAmigaSample("musicfin.smp", 64, 1, true); break;
-		case 8: playAmigaSample("intro.smp", 64, 1, true); break;
-		case 10: playAmigaSample("cochon.smp", 64); break;
-		case 11: playAmigaSample("porte.smp", 64); break;
+		case 1:
+			playAmigaSample("oiseaux.smp", 40);
+			break;
+		case 3:
+			playAmigaSample("poule.smp", 64);
+			break;
+		case 4:
+			playAmigaSample("henni.smp", 40);
+			break;
+		case 5:
+			playAmigaSample("cloche.smp", 64, 2);
+			break;
+		case 6:
+			playAmigaSample("musicfin.smp", 64, 1, true);
+			break;
+		case 8:
+			playAmigaSample("intro.smp", 64, 1, true);
+			break;
+		case 10:
+			playAmigaSample("cochon.smp", 64);
+			break;
+		case 11:
+			playAmigaSample("porte.smp", 64);
+			break;
 		case 12:
 			playAmigaSample("bouchon.smp", 40);
 			if (!shouldQuit() && !hasError())
 				playAmigaSample("rhum.smp", 64);
 			break;
-		case 13: playAmigaSample("riviere.smp", 64, 2); break;
-		case 14: playAmigaSample("pendule.smp", 40, 2); break;
+		case 13:
+			playAmigaSample("riviere.smp", 64, 2);
+			break;
+		case 14:
+			playAmigaSample("pendule.smp", 40, 2);
+			break;
 		default:
 			debugC(4, kDebugGameFlow, "Mewilo Amiga: native FF0B no-op/unknown %u", command);
 			break;
@@ -288,14 +348,30 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 
 	// Native Atari ST SPL dispatch.
 	switch (command) {
-	case 1: playRawSample("OISEAUX.SPL", 7680); break;
-	case 3: playRawSample("POULE.SPL", 7680); break;
-	case 4: playRawSample("CHEVAL.SPL", 7680); break;
-	case 5: playRawSample("CLOCHE.SPL", 7680); break;
-	case 6: playRawSample("PERDU.SPL", 9600, 1, true); break;
-	case 8: playRawSample("INTRO.SPL", 9600, 1, true); break;
-	case 10: playRawSample("COCHON.SPL", 7680, 2); break;
-	case 11: playRawSample("PORTE.SPL", 7680); break;
+	case 1:
+		playRawSample("OISEAUX.SPL", 7680);
+		break;
+	case 3:
+		playRawSample("POULE.SPL", 7680);
+		break;
+	case 4:
+		playRawSample("CHEVAL.SPL", 7680);
+		break;
+	case 5:
+		playRawSample("CLOCHE.SPL", 7680);
+		break;
+	case 6:
+		playRawSample("PERDU.SPL", 9600, 1, true);
+		break;
+	case 8:
+		playRawSample("INTRO.SPL", 9600, 1, true);
+		break;
+	case 10:
+		playRawSample("COCHON.SPL", 7680, 2);
+		break;
+	case 11:
+		playRawSample("PORTE.SPL", 7680);
+		break;
 	case 12:
 		playRawSample("BOUCHON.SPL", 7680);
 		// Native Atari code uses its fixed-delay helper with argument 600 before
@@ -305,8 +381,12 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 		if (!shouldQuit() && !hasError())
 			playRawSample("RHUM.SPL", 7680);
 		break;
-	case 13: playRawSample("RIVIERE.SPL", 7680); break;
-	case 14: playRawSample("COUCOU.SPL", 7680); break;
+	case 13:
+		playRawSample("RIVIERE.SPL", 7680);
+		break;
+	case 14:
+		playRawSample("COUCOU.SPL", 7680);
+		break;
 	default:
 		warning("Mewilo Atari: unknown FF0B command %u", command);
 		break;
@@ -318,8 +398,8 @@ void PreGob_Mewilo::choiceFeedback(byte value) {
 		return;
 
 	if (_audioBackend == kMewiloAudioCpcMus) {
-		static const uint16 kPeriods[3] = { 120, 478, 239 };
-		static const int32 kLengths[3] = { 250, 350, 250 };
+		static const uint16 kPeriods[3] = {120, 478, 239};
+		static const int32 kLengths[3] = {250, 350, 250};
 		playEffectTone(mewiloCpcTonePeriodToHz(kPeriods[value]), kLengths[value]);
 		return;
 	}
@@ -335,8 +415,8 @@ void PreGob_Mewilo::choiceFeedback(byte value) {
 		return;
 
 	// Native Atari feedback tones.
-	static const int16 kFrequencies[3] = { 131, 261, 521 };
-	static const int32 kLengths[3] = { 150, 100, 100 };
+	static const int16 kFrequencies[3] = {131, 261, 521};
+	static const int32 kLengths[3] = {150, 100, 100};
 	playEffectTone(kFrequencies[value], kLengths[value]);
 }
 

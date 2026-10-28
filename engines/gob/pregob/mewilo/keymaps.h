@@ -25,8 +25,10 @@
 
 namespace Gob {
 namespace Mewilo {
+
 Common::KeymapArray createMewiloKeymaps();
+
 } // End of namespace Mewilo
 } // End of namespace Gob
 
-#endif
+#endif // GOB_PREGOB_MEWILO_KEYMAPS_H

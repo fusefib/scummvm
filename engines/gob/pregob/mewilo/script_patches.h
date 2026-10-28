@@ -24,21 +24,21 @@
 #include "common/array.h"
 #include "common/language.h"
 #include "common/stream.h"
+
 #include "gob/pregob/mewilo/platform.h"
 
 namespace Gob {
 namespace Mewilo {
 
-// Stable policy bits. Freeze at game start; do not change while a game is running.
-// Original behavior is policy 0. Timing is deliberately NOT one of these flags.
+// Script policy is frozen at game start. Presentation timing is separate.
 enum MewiloScriptPatchPolicy {
-	kMewiloPatchGermanText = 1 << 0,   // S04/S05/S07: wording, aliases and rejection text
-	kMewiloPatchHenProtection = 1 << 1, // S02: refuse a hen when mongoose is held without a basket
+	kMewiloPatchGermanText = 1 << 0,        // Wording, aliases and rejection text
+	kMewiloPatchHenProtection = 1 << 1,     // Refuse a hen when mongoose is held without a basket
 	kMewiloPatchRequireCeceAnswer = 1 << 2, // Optional stronger final-location gate
 	kMewiloKnownScriptPatchPolicies = 7
 };
 
-// Stable recipe IDs, not an indication that every recipe applies to every module.
+// Only recipes applicable to the current module appear in its report.
 enum MewiloScriptPatchId {
 	kMewiloFixLetterWording = 1 << 0,
 	kMewiloFixGermanAliases = 1 << 1,
@@ -47,12 +47,10 @@ enum MewiloScriptPatchId {
 	kMewiloFixCeceGate = 1 << 4
 };
 
-/** Identity of the bytes actually prepared, NOT a later reopening of the file.
+/** Fingerprints of the normalized source and effective bytes actually prepared.
  *
- * These are full normalized-resource MD5s (not detection's 5000-byte window).
- * MD5 here is a release fingerprint, not an adversarial authenticity guarantee.
- * Future saves must additionally pin the run-wide policy and recipe revision;
- * appliedMask alone is insufficient (it describes only this resident module).
+ * Unlike detection's 5000-byte window, these cover each complete resource.
+ * appliedMask describes this module; saves also need the session's policy.
  */
 struct MewiloScriptPatchReport {
 	enum { kRecipeRevision = 2 };
@@ -69,16 +67,12 @@ struct MewiloScriptPatchReport {
 	MewiloScriptPatchReport();
 };
 
-/** Prepare a privately owned normalized TOT for the existing Mewilo parser.
+/** Prepare a privately owned normalized TOT, keeping existing node/root offsets.
  *
- * Caller must remove any AMSDOS wrapper first and supply the canonical uppercase
- * module stem (without .TOT). No file is written. Unknown identities/platforms/
- * languages pass through unchanged; a known recipe guard/validation failure
- * returns false, with output and report cleared (no partially patched result).
- *
- * Original and resulting graphs are validated. Original node/root offsets stay
- * fixed; the optional inventory/gate recipes append ordinary native conditions
- * and redirect one verified branch. No new VM opcode or serialized dialect.
+ * The caller strips AMSDOS wrappers and supplies the uppercase stem without .TOT.
+ * Valid unrecognized resources pass through unchanged. Source and resulting
+ * graphs are validated; failures clear output and report. Gate recipes append
+ * native conditions and redirect a verified branch without relocating old nodes.
  */
 bool prepareMewiloScript(Common::SeekableReadStream &normalizedStream,
 	const char *moduleStem, MewiloPlatform platform, Common::Language language,

@@ -92,7 +92,7 @@ public:
 	/** Return the byte size of an FF01..FF0B item, or zero if unknown. */
 	static byte inlineFFSize(byte subOpcode);
 
-	/** Corpus-style graph walk used by runtime assertions and regression tests. */
+	/** Validate reachable nodes and determine their required bank-0 records. */
 	bool validateReachableGraph(MewiloGraphStats &stats, Common::Array<uint16> *nodes = nullptr) const;
 
 private:

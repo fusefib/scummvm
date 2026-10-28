@@ -20,11 +20,16 @@
 
 #ifndef GOB_PREGOB_MEWILO_DETECTION_H
 #define GOB_PREGOB_MEWILO_DETECTION_H
+
 #include "common/fs.h"
 #include "engines/game.h"
+
 namespace Gob {
+
 // Advisory audio evidence chooses between the already matched 68k profiles.
 // Both/absent markers retain both choices. Does not change resource detection.
 void preferMewiloNativeProfile(const Common::FSList &files, DetectedGames &games);
-}
-#endif
+
+} // End of namespace Gob
+
+#endif // GOB_PREGOB_MEWILO_DETECTION_H

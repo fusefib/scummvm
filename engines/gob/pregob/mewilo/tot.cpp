@@ -103,13 +103,12 @@ const byte *MewiloTotData::dataAt(uint32 offset) const {
 
 byte MewiloTotData::inlineFFSize(byte subOpcode) {
 	static const byte kSizes[12] = {
-		0, 6, 2, 3, 3, 4, 4, 4, 4, 4, 4, 3
-	};
+		0, 6, 2, 3, 3, 4, 4, 4, 4, 4, 4, 3};
 	return subOpcode < ARRAYSIZE(kSizes) ? kSizes[subOpcode] : 0;
 }
 
 bool MewiloTotData::decodeSequence(uint16 sequenceOffset,
-		Common::Array<MewiloSequenceItem> &items, uint16 &endOffset) const {
+	Common::Array<MewiloSequenceItem> &items, uint16 &endOffset) const {
 	items.clear();
 	endOffset = sequenceOffset;
 	if (!has(sequenceOffset))
@@ -162,7 +161,7 @@ bool MewiloTotData::scanCString(uint32 offset, uint32 &endOffset) const {
 }
 
 bool MewiloTotData::validateNode(uint16 offset, uint16 &nodeSize,
-		Common::Array<uint16> &targets) const {
+	Common::Array<uint16> &targets) const {
 	nodeSize = 0;
 	targets.clear();
 	if (!has(offset) || offset == 0)
@@ -353,7 +352,8 @@ bool MewiloTotData::validateReachableGraph(MewiloGraphStats &stats, Common::Arra
 			continue;
 		}
 
-		if (nodes) nodes->push_back(offset);
+		if (nodes)
+			nodes->push_back(offset);
 		++stats.reachableNodes;
 		++stats.opcodeCounts[byteAt(offset)];
 		if (byteAt(offset) == 0x60)

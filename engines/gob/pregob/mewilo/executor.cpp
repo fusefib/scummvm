@@ -25,7 +25,8 @@ namespace Mewilo {
 
 static const uint kMaxExecDepth = 256;
 
-MewiloExecutor::MewiloExecutor(MewiloExecHost &host) : _host(host), _tot(nullptr), _dispatchesUntilService(0), _modalDepth(0), _atInput(false) {
+MewiloExecutor::MewiloExecutor(MewiloExecHost &host) :
+	_host(host), _tot(nullptr), _dispatchesUntilService(0), _modalDepth(0), _atInput(false) {
 	reset();
 }
 
@@ -60,7 +61,8 @@ bool MewiloExecutor::executeRoot(const MewiloTotData &tot) {
 }
 
 bool MewiloExecutor::serviceHost() {
-	if (_host.hasError()) return false;
+	if (_host.hasError())
+		return false;
 	if (!_dispatchesUntilService) {
 		_host.serviceEvents();
 		_dispatchesUntilService = 256;
@@ -129,34 +131,50 @@ bool MewiloExecutor::runFrames(uint baseDepth) {
 			return false;
 		switch (_tot->byteAt(offset)) {
 		case 0x1C:
-			if (!pushFrame(MewiloExecFrame::kSequence, offset + 1)) return false;
+			if (!pushFrame(MewiloExecFrame::kSequence, offset + 1))
+				return false;
 			break;
-		case 0x1D: _host.drawTextNode(*_tot, offset); break;
-		case 0x41: _host.drawInlineImage(*_tot, offset); break;
-		case 0x60: _host.drawExternalImage(*_tot, offset); break;
+		case 0x1D:
+			_host.drawTextNode(*_tot, offset);
+			break;
+		case 0x41:
+			_host.drawInlineImage(*_tot, offset);
+			break;
+		case 0x60:
+			_host.drawExternalImage(*_tot, offset);
+			break;
 		case 0x20: {
 			const byte count = _tot->byteAt(offset + 1);
-			if (!count || !_tot->has(offset + 2, count * 2)) return false;
+			if (!count || !_tot->has(offset + 2, count * 2))
+				return false;
 			const uint16 index = _host.randomModulo(count);
-			if (index >= count) return false;
+			if (index >= count)
+				return false;
 			const uint16 target = _tot->uint16BEAt(offset + 2 + index * 2);
-			if (target && !pushFrame(MewiloExecFrame::kTarget, target)) return false;
+			if (target && !pushFrame(MewiloExecFrame::kTarget, target))
+				return false;
 			break;
 		}
 		case 0x21: {
-			if (!_tot->has(offset, 10)) return false;
+			if (!_tot->has(offset, 10))
+				return false;
 			const MewiloBranch branch = _tot->branchAt(offset + (conditionTrue(offset) ? 4 : 7));
-			if (branch.target && !pushFrame(MewiloExecFrame::kTarget, branch.target)) return false;
+			if (branch.target && !pushFrame(MewiloExecFrame::kTarget, branch.target))
+				return false;
 			break;
 		}
 		case 0x1B:
-			if (!pushFrame(MewiloExecFrame::kMouse, offset)) return false;
+			if (!pushFrame(MewiloExecFrame::kMouse, offset))
+				return false;
 			break;
 		case 0x22: {
-			if (!_tot->has(offset, 7)) return false;
+			if (!_tot->has(offset, 7))
+				return false;
 			const uint16 setup = _tot->uint16BEAt(offset + 3);
-			if (!pushFrame(MewiloExecFrame::kNumbered, offset)) return false;
-			if (setup && !pushFrame(MewiloExecFrame::kTarget, setup)) return false;
+			if (!pushFrame(MewiloExecFrame::kNumbered, offset))
+				return false;
+			if (setup && !pushFrame(MewiloExecFrame::kTarget, setup))
+				return false;
 			break;
 		}
 		case 0x12: {
@@ -168,10 +186,12 @@ bool MewiloExecutor::runFrames(uint baseDepth) {
 			++_modalDepth;
 			const bool ok = executeFreeText(offset, _frames.size(), tail);
 			--_modalDepth;
-			if (!ok || (tail && !pushFrame(MewiloExecFrame::kTarget, tail))) return false;
+			if (!ok || (tail && !pushFrame(MewiloExecFrame::kTarget, tail)))
+				return false;
 			break;
 		}
-		default: return false;
+		default:
+			return false;
 		}
 	}
 	return !_host.shouldQuit() && !_host.hasError();
@@ -185,7 +205,7 @@ bool MewiloExecutor::executeTarget(uint16 offset, uint depth) {
 }
 
 bool MewiloExecutor::executeBranch(const MewiloBranch &branch, uint depth,
-		bool &tailTaken, uint16 &tailTarget) {
+								   bool &tailTaken, uint16 &tailTarget) {
 	tailTaken = branch.target && branch.kind == 1;
 	tailTarget = tailTaken ? branch.target : 0;
 	return !branch.target || tailTaken || executeTarget(branch.target, depth + 1);
@@ -194,32 +214,38 @@ bool MewiloExecutor::executeBranch(const MewiloBranch &branch, uint depth,
 bool MewiloExecutor::stepInput(const MewiloExecFrame &frame) {
 	const uint16 offset = frame.offset;
 	const bool mouse = frame.kind == MewiloExecFrame::kMouse;
-	if (!_tot->has(offset, mouse ? 4 : 7)) return false;
+	if (!_tot->has(offset, mouse ? 4 : 7))
+		return false;
 	const byte count = _tot->byteAt(offset + (mouse ? 3 : 6));
 	const uint32 branchBase = mouse ? offset + 4 + uint32(count) * 4 : offset + 7;
-	if (!_tot->has(branchBase, mouse ? uint32(count + 1) * 3 : uint32(count) * 4)) return false;
+	if (!_tot->has(branchBase, mouse ? uint32(count + 1) * 3 : uint32(count) * 4))
+		return false;
 	MewiloInputEvent event;
 	_atInput = true;
 	const bool gotInput = _host.waitInput(event);
 	_atInput = false;
-	if (!gotInput || _host.shouldQuit() || _host.hasError()) return false;
+	if (!gotInput || _host.shouldQuit() || _host.hasError())
+		return false;
 	if (event.key == kMewiloKeyEscape) {
 		const uint16 callback = _tot->uint16BEAt(offset + 1);
 		return !callback || pushFrame(MewiloExecFrame::kTarget, callback);
 	}
 	MewiloBranch branch;
 	if (mouse) {
-		if (!event.mouseButtons) return true;
+		if (!event.mouseButtons)
+			return true;
 		int selected = -1;
 		for (uint i = 0; i < count; ++i) {
 			const uint32 p = offset + 4 + i * 4;
 			const int left = _tot->byteAt(p) * 8, top = _tot->byteAt(p + 1);
 			if (event.x >= left && event.x < left + _tot->byteAt(p + 2) * 8 &&
-				event.y >= top && event.y < top + _tot->byteAt(p + 3)) selected = i;
+				event.y >= top && event.y < top + _tot->byteAt(p + 3))
+				selected = i;
 		}
 		branch = _tot->branchAt(branchBase + (selected + 1) * 3);
 	} else {
-		if (event.key < '1' || event.key >= uint16('1' + count)) return true;
+		if (event.key < '1' || event.key >= uint16('1' + count))
+			return true;
 		const uint32 entry = branchBase + (event.key - '1') * 4;
 		const byte value = _tot->byteAt(entry);
 		if (value <= 2)
@@ -233,35 +259,45 @@ bool MewiloExecutor::stepInput(const MewiloExecFrame &frame) {
 		}
 		branch = _tot->branchAt(entry + 1);
 	}
-	if (!branch.target) return true;
-	if (branch.kind == 1) _frames.pop_back();
+	if (!branch.target)
+		return true;
+	if (branch.kind == 1)
+		_frames.pop_back();
 	return pushFrame(MewiloExecFrame::kTarget, branch.target);
 }
 
 bool MewiloExecutor::exportState(MewiloExecState &out) const {
-	if (!atSaveBoundary() || !_tot) return false;
+	if (!atSaveBoundary() || !_tot)
+		return false;
 	out.frames = _frames;
-	for (uint i = 0; i < kMewiloVariableCount; ++i) out.variables[i] = _variables[i];
+	for (uint i = 0; i < kMewiloVariableCount; ++i)
+		out.variables[i] = _variables[i];
 	return validateState(*_tot, out);
 }
 
 bool MewiloExecutor::validateState(const MewiloTotData &tot, const MewiloExecState &state) {
-	if (state.frames.empty() || state.frames.size() > kMaxExecDepth) return false;
+	if (state.frames.empty() || state.frames.size() > kMaxExecDepth)
+		return false;
 	MewiloGraphStats stats;
 	Common::Array<uint16> nodes;
-	if (!tot.validateReachableGraph(stats, &nodes)) return false;
+	if (!tot.validateReachableGraph(stats, &nodes))
+		return false;
 	for (uint i = 0; i < state.frames.size(); ++i) {
 		const MewiloExecFrame &f = state.frames[i];
 		uint16 node = f.offset;
 		if (f.kind == MewiloExecFrame::kSequence) {
 			if (f.offset != tot.rootOffset()) {
-				if (!f.offset) return false;
+				if (!f.offset)
+					return false;
 				node = f.offset - 1;
-				if (tot.byteAt(node) != 0x1C) return false;
-			} else node = 0;
+				if (tot.byteAt(node) != 0x1C)
+					return false;
+			} else
+				node = 0;
 			Common::Array<MewiloSequenceItem> items;
 			uint16 end = 0;
-			if (!tot.decodeSequence(f.offset, items, end) || !f.index || f.index > items.size()) return false;
+			if (!tot.decodeSequence(f.offset, items, end) || !f.index || f.index > items.size())
+				return false;
 		} else if (f.kind == MewiloExecFrame::kContinue) {
 			// An inline wait is not an independently addressable graph node. It
 			// must be the just-dispatched item of its suspended sequence owner.
@@ -269,20 +305,27 @@ bool MewiloExecutor::validateState(const MewiloTotData &tot, const MewiloExecSta
 				tot.byteAt(f.offset) != 0xFF || tot.byteAt(f.offset + 1) != 3 || tot.byteAt(f.offset + 2) != 0)
 				return false;
 			const MewiloExecFrame &owner = state.frames[i - 1];
-			Common::Array<MewiloSequenceItem> items; uint16 end = 0;
+			Common::Array<MewiloSequenceItem> items;
+			uint16 end = 0;
 			if (owner.kind != MewiloExecFrame::kSequence || !tot.decodeSequence(owner.offset, items, end) ||
 				!owner.index || owner.index > items.size() ||
 				items[owner.index - 1].type != MewiloSequenceItem::kInlineFF ||
-				items[owner.index - 1].offset != f.offset) return false;
+				items[owner.index - 1].offset != f.offset)
+				return false;
 			node = 0;
 		} else {
-			if (f.index || (f.kind != MewiloExecFrame::kMouse && f.kind != MewiloExecFrame::kNumbered)) return false;
-			if (tot.byteAt(node) != (f.kind == MewiloExecFrame::kMouse ? 0x1B : 0x22)) return false;
+			if (f.index || (f.kind != MewiloExecFrame::kMouse && f.kind != MewiloExecFrame::kNumbered))
+				return false;
+			if (tot.byteAt(node) != (f.kind == MewiloExecFrame::kMouse ? 0x1B : 0x22))
+				return false;
 		}
 		if (node) {
 			bool reachable = false;
-			for (uint j = 0; j < nodes.size(); ++j) if (nodes[j] == node) reachable = true;
-			if (!reachable) return false;
+			for (uint j = 0; j < nodes.size(); ++j)
+				if (nodes[j] == node)
+					reachable = true;
+			if (!reachable)
+				return false;
 		}
 	}
 	const byte top = state.frames.back().kind;
@@ -290,20 +333,22 @@ bool MewiloExecutor::validateState(const MewiloTotData &tot, const MewiloExecSta
 }
 
 bool MewiloExecutor::importState(const MewiloTotData &tot, const MewiloExecState &state) {
-	if (!validateState(tot, state)) return false;
+	if (!validateState(tot, state))
+		return false;
 	_tot = &tot;
 	_frames = state.frames;
-	for (uint i = 0; i < kMewiloVariableCount; ++i) _variables[i] = state.variables[i];
+	for (uint i = 0; i < kMewiloVariableCount; ++i)
+		_variables[i] = state.variables[i];
 	_atInput = false;
 	_modalDepth = 0;
 	return true;
 }
 
-
 void MewiloExecutor::adoptState(MewiloExecutor &p) {
 	_frames.swap(p._frames);
 	_tot = p._tot;
-	for (uint i = 0; i < kMewiloVariableCount; ++i) _variables[i] = p._variables[i];
+	for (uint i = 0; i < kMewiloVariableCount; ++i)
+		_variables[i] = p._variables[i];
 	_atInput = false;
 	_modalDepth = 0;
 	_dispatchesUntilService = 0;
@@ -311,7 +356,7 @@ void MewiloExecutor::adoptState(MewiloExecutor &p) {
 }
 
 bool MewiloExecutor::parseTextField(uint32 descriptorOffset, MewiloTextField &field,
-		uint32 &nextOffset) const {
+	uint32 &nextOffset) const {
 	if (!_tot || !_tot->has(descriptorOffset, 10))
 		return false;
 	field.xCell = _tot->byteAt(descriptorOffset + 0);
@@ -349,9 +394,9 @@ void MewiloExecutor::normalizeAnswer(Common::Array<byte> &text) {
 		else if (c == 0x1D)
 			c = 'o';
 		else if ((c >= 0x21 && c <= 0x26) || (c >= 0x28 && c <= 0x2A) ||
-				 c == 0x2C || c == 0x2E || c == 0x2F ||
-				 (c >= 0x3A && c <= 0x40) || (c >= 0x5B && c <= 0x60) ||
-				 (c >= 0x7B && c <= 0x7F))
+			c == 0x2C || c == 0x2E || c == 0x2F ||
+			(c >= 0x3A && c <= 0x40) || (c >= 0x5B && c <= 0x60) ||
+			(c >= 0x7B && c <= 0x7F))
 			c = ' ';
 	}
 
@@ -369,7 +414,7 @@ void MewiloExecutor::normalizeAnswer(Common::Array<byte> &text) {
 }
 
 bool MewiloExecutor::answerMatches(const MewiloTextField &field,
-		const Common::Array<byte> &input) const {
+	const Common::Array<byte> &input) const {
 	Common::Array<byte> normalizedInput = input;
 	normalizeAnswer(normalizedInput);
 
@@ -522,7 +567,8 @@ bool MewiloExecutor::executeInlineFF(uint16 offset) {
 		_host.restoreRect();
 		break;
 	case 0x03:
-		if (!_tot->byteAt(offset + 2)) return pushFrame(MewiloExecFrame::kContinue, offset);
+		if (!_tot->byteAt(offset + 2))
+			return pushFrame(MewiloExecFrame::kContinue, offset);
 		_host.waitOrDelayAt(*_tot, offset, _tot->byteAt(offset + 2));
 		break;
 	case 0x04:

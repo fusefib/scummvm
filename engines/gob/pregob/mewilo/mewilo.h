@@ -21,18 +21,20 @@
 #ifndef GOB_PREGOB_MEWILO_MEWILO_H
 #define GOB_PREGOB_MEWILO_MEWILO_H
 
+#include "audio/mixer.h"
+
 #include "gob/pregob/pregob.h"
+#include "gob/sound/sounddesc.h"
+#include "gob/surface.h"
+
 #include "gob/pregob/mewilo/executor.h"
 #include "gob/pregob/mewilo/font.h"
 #include "gob/pregob/mewilo/graphics.h"
-#include "gob/pregob/mewilo/thomson_disk.h"
 #include "gob/pregob/mewilo/presentation.h"
-#include "gob/pregob/mewilo/script_patches.h"
 #include "gob/pregob/mewilo/saveload.h"
+#include "gob/pregob/mewilo/script_patches.h"
+#include "gob/pregob/mewilo/thomson_disk.h"
 #include "gob/pregob/mewilo/translation.h"
-#include "gob/sound/sounddesc.h"
-#include "audio/mixer.h"
-#include "gob/surface.h"
 
 namespace Gob {
 
@@ -48,12 +50,15 @@ public:
 	void run() override;
 	bool canSaveGameState(Common::U32String *msg = nullptr) const override;
 	bool canLoadGameState(Common::U32String *msg = nullptr) const override;
-	Common::Error saveGameStream(Common::WriteStream &stream, bool isAutosave = false) const override;
+	Common::Error saveGameStream(
+		Common::WriteStream &stream, bool isAutosave = false) const override;
 	Common::Error loadGameStream(Common::SeekableReadStream &stream) override;
 	void pauseChanged(bool paused) override;
 	void mousePressed(int16 x, int16 y, MouseButtons buttons) override;
 	bool shouldQuit() const override;
+
 	bool hasError() const override { return _hostFailed; }
+
 	void serviceEvents() override;
 	void drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) override;
 	void drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset) override;
@@ -73,7 +78,8 @@ public:
 	void showRejectMessage(const byte *text, uint length) override;
 	bool translatedAnswer(const MewiloTotData &tot, uint16 node, byte field,
 		const Common::Array<byte> &input, bool &handled) const override;
-	void showRejectMessageAt(const MewiloTotData &tot, uint16 node, const byte *text, uint length) override;
+	void showRejectMessageAt(
+		const MewiloTotData &tot, uint16 node, const byte *text, uint length) override;
 
 private:
 	friend class MewiloHostTestSuite;
@@ -94,6 +100,7 @@ private:
 
 		PreparedModule();
 		~PreparedModule();
+
 	private:
 		PreparedModule(const PreparedModule &);
 		PreparedModule &operator=(const PreparedModule &);
@@ -114,7 +121,8 @@ private:
 	void commitModule(PreparedModule &prepared);
 	bool loadFont();
 	bool loadReplacements();
-	const ReplacementEntry *replacementEntry(const MewiloTotData &tot, uint16 node, byte kind, byte field = 0) const;
+	const ReplacementEntry *replacementEntry(
+		const MewiloTotData &tot, uint16 node, byte kind, byte field = 0) const;
 	bool loadModule(const Common::String &stem);
 	bool executeModule(const Common::String &stem);
 	void unloadModule();
@@ -122,16 +130,19 @@ private:
 	Common::String selectorToModule(uint16 selector) const;
 	void renderFailure(const char *message, uint16 nodeOffset);
 	void markDirty(int16 x, int16 y, int16 width, int16 height);
-	void drawByteString(const byte *text, uint length, int16 x, int16 y, byte color, byte lineAdvance = 8);
+	void drawByteString(
+		const byte *text, uint length, int16 x, int16 y, byte color, byte lineAdvance = 8);
 	void drawScore(uint value, int16 x, int16 y, byte color);
 	void drawInputField(const MewiloTextField &field, const Common::Array<byte> &text, bool cursor);
 	byte translateInputKey(int16 key) const;
-	bool playRawSample(const Common::String &name, uint16 frequency, int16 repetitions = 1, bool music = false);
+	bool playRawSample(
+		const Common::String &name, uint16 frequency, int16 repetitions = 1, bool music = false);
 	void playSample(byte *pcm, uint32 size, uint16 frequency, int16 repetitions, bool music);
 	Common::SeekableReadStream *openAmigaSample(const Common::String &name) const;
 	void selectSampleAudio();
 	bool samplePlaying() const;
-	bool playAmigaSample(const Common::String &name, byte volume, int16 repetitions = 1, bool music = false);
+	bool playAmigaSample(
+		const Common::String &name, byte volume, int16 repetitions = 1, bool music = false);
 	bool playCpcMusic(const Common::String &name);
 	void stopMewiloAudio();
 	void installCrossCursor();

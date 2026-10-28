@@ -40,9 +40,9 @@ struct MewiloCpcSoundEvent {
 	byte initialAmplitudeRaw;
 	uint16 durationCs;
 
-	MewiloCpcSoundEvent() : startCs(0), advanceCs(0), channelStatus(0),
-		amplitudeEnvelope(0), toneEnvelope(0), tonePeriod(0), noisePeriod(0),
-		initialAmplitudeRaw(0), durationCs(0) {}
+	MewiloCpcSoundEvent() :
+		startCs(0), advanceCs(0), channelStatus(0), amplitudeEnvelope(0),
+		toneEnvelope(0), tonePeriod(0), noisePeriod(0), initialAmplitudeRaw(0), durationCs(0) {}
 };
 
 /** Native CPC .MUS channel data.

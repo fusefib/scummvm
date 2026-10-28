@@ -19,8 +19,10 @@
  */
 
 #include "gob/pregob/mewilo/keymaps.h"
+
 #include "backends/keymapper/action.h"
 #include "backends/keymapper/standard-actions.h"
+
 #include "common/translation.h"
 
 namespace Gob {

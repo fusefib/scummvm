@@ -23,8 +23,8 @@
 
 #include "common/md5.h"
 #include "common/memstream.h"
-#include "gob/surface.h"
 #include "gob/pregob/mewilo/graphics.h"
+#include "gob/surface.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -61,7 +61,6 @@ bool MewiloI00Bank::load(Common::SeekableReadStream &stream, bool cpcZeroPrefix)
 		p += framedSize;
 	}
 
-
 	// One known CPC AMSOAD1.I00 has a 128-byte zero prefix where the other
 	// extracted files carry an AMSDOS header. It is not an image record. If
 	// ordinary framing found nothing, recognize that packaging quirk without
@@ -91,7 +90,7 @@ bool MewiloI00Bank::load(Common::SeekableReadStream &stream, bool cpcZeroPrefix)
 }
 
 bool MewiloI00Bank::getRecord(uint index, uint16 &framedSize,
-		const byte *&payload, uint32 &payloadSize) const {
+	const byte *&payload, uint32 &payloadSize) const {
 	framedSize = 0;
 	payload = nullptr;
 	payloadSize = 0;
@@ -109,12 +108,11 @@ bool MewiloI00Bank::getRecord(uint index, uint16 &framedSize,
 }
 
 MewiloPackedDecodeResult::MewiloPackedDecodeResult() :
-	pixelsWritten(0), bytesConsumed(0), runOverhang(0),
-	complete(false), truncated(false) {
+	pixelsWritten(0), bytesConsumed(0), runOverhang(0), complete(false), truncated(false) {
 }
 
 MewiloPackedDecodeResult drawMewiloPacked(const byte *payload, uint32 payloadSize,
-		Surface &dest, int16 x, int16 y, uint16 width, uint16 height, byte scaleX) {
+	Surface &dest, int16 x, int16 y, uint16 width, uint16 height, byte scaleX) {
 	MewiloPackedDecodeResult result;
 	if (!payload || !width || !height || !scaleX)
 		return result;
@@ -165,7 +163,8 @@ MewiloPackedDecodeResult drawMewiloPacked(const byte *payload, uint32 payloadSiz
 }
 
 bool MewiloI00Bank::computeMD5(byte digest[16]) const {
-	if (!valid()) return false;
+	if (!valid())
+		return false;
 	Common::MemoryReadStream owned(_data.data(), _data.size());
 	return Common::computeStreamMD5(owned, digest);
 }

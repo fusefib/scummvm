@@ -18,12 +18,14 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "gob/pregob/mewilo/mewilo.h"
+
 #include "common/system.h"
 #include "common/util.h"
-#include "gob/gob.h"
+
 #include "gob/global.h"
+#include "gob/gob.h"
 #include "gob/util.h"
-#include "gob/pregob/mewilo/mewilo.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -73,10 +75,12 @@ bool PreGob_Mewilo::waitContinueInput() {
 }
 
 bool PreGob_Mewilo::waitInputRelease() {
-	int16 x, y; MouseButtons buttons;
+	int16 x, y;
+	MouseButtons buttons;
 	while (!shouldQuit() && !hasError() && !_pendingRestore) {
 		_vm->_util->getMouseState(&x, &y, &buttons);
-		if (buttons == kMouseButtonsNone) return true;
+		if (buttons == kMouseButtonsNone)
+			return true;
 		serviceEvents();
 	}
 	return false;
@@ -84,7 +88,8 @@ bool PreGob_Mewilo::waitInputRelease() {
 
 void PreGob_Mewilo::waitOrDelay(byte argument) {
 	if (!argument) {
-		if (waitContinueInput()) waitInputRelease();
+		if (waitContinueInput())
+			waitInputRelease();
 	} else {
 		MewiloTimingPlan plan;
 		plan.milliseconds = mewiloNativeDelayMillis(_profile.platform, argument, plan.calibrated);
@@ -97,42 +102,56 @@ void PreGob_Mewilo::waitPresentation(const MewiloTimingPlan &plan, uint16 site) 
 	_presentation.beginStep(start);
 	if (plan.anchor == kMewiloVisibleHold || plan.minimumExposure)
 		_presentation.dirty(plan.region);
-	if (!plan.exposureRegion.isEmpty()) _presentation.dirty(plan.exposureRegion);
-	const uint32 budget = mewiloScaleTime(plan.milliseconds, MAX<int16>(1, _vm->_global->_speedFactor));
+	if (!plan.exposureRegion.isEmpty())
+		_presentation.dirty(plan.exposureRegion);
+	const uint32 budget =
+		mewiloScaleTime(plan.milliseconds, MAX<int16>(1, _vm->_global->_speedFactor));
 	// Submit the finished composition before starting a visible-exposure clock.
 	// No change to native audio duration, input ownership or script state.
 	presentFrame();
 	uint32 elapsed = 0;
 	while (!shouldQuit() && !hasError() && !_pendingRestore) {
 		const uint32 now = activeMillis();
-		elapsed = plan.anchor == kMewiloVisibleHold ? _presentation.visibleAge(plan.region, now) :
-			plan.anchor == kMewiloStepBudget ? _presentation.stepAge(now) : now - start;
-		const uint32 remaining = _presentation.waitRemaining(plan, MAX<int16>(1, _vm->_global->_speedFactor), start, now);
-		if (!remaining) break;
+		elapsed = plan.anchor == kMewiloVisibleHold ? _presentation.visibleAge(plan.region, now)
+			: plan.anchor == kMewiloStepBudget ? _presentation.stepAge(now) : now - start;
+		const uint32 remaining = _presentation.waitRemaining(
+			plan, MAX<int16>(1, _vm->_global->_speedFactor), start, now);
+		if (!remaining)
+			break;
 		serviceEvents();
-		if (shouldQuit() || hasError() || _pendingRestore) break;
+		if (shouldQuit() || hasError() || _pendingRestore)
+			break;
 		// Re-evaluate after event/presentation work (including a modal pause).
 		const uint32 after = activeMillis();
-		g_system->delayMillis(MIN<uint32>(10, _presentation.waitRemaining(plan,
-			MAX<int16>(1, _vm->_global->_speedFactor), start, after)));
+		g_system->delayMillis(MIN<uint32>(10,
+			_presentation.waitRemaining(
+				plan, MAX<int16>(1, _vm->_global->_speedFactor), start, after)));
 	}
-	debugC(4, kDebugGameFlow, "MEWILO_PRESENT wait module=%s site=%04X rule=%s anchor=%u calibrated=%u budget=%u elapsed=%u minimum=%u visible=%u aborted=%u t=%u frame=%u rect=%d,%d,%d,%d",
+	debugC(4, kDebugGameFlow,
+		"MEWILO_PRESENT wait module=%s site=%04X rule=%s anchor=%u calibrated=%u budget=%u elapsed=%u minimum=%u visible=%u aborted=%u t=%u frame=%u rect=%d,%d,%d,%d",
 		_moduleStem.c_str(), site, plan.rule, (uint)plan.anchor, plan.calibrated, budget, elapsed,
 		mewiloScaleTime(plan.minimumExposure, MAX<int16>(1, _vm->_global->_speedFactor)),
-		_presentation.visibleAge(plan.exposureRegion.isEmpty() ? plan.region : plan.exposureRegion, activeMillis()),
-		shouldQuit() || hasError() || _pendingRestore, activeMillis(), _presentation.frame(), plan.region.left, plan.region.top, plan.region.right, plan.region.bottom);
+		_presentation.visibleAge(
+			plan.exposureRegion.isEmpty() ? plan.region : plan.exposureRegion, activeMillis()),
+		shouldQuit() || hasError() || _pendingRestore, activeMillis(), _presentation.frame(),
+		plan.region.left, plan.region.top, plan.region.right, plan.region.bottom);
 	_presentation.finishStep();
 }
 
 void PreGob_Mewilo::waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte argument) {
-	if (!argument) { waitOrDelay(0); return; }
-	MewiloTimingPlan plan = mewiloTimingPlan(tot, _moduleStem.c_str(),
-		_vm->_language, _profile.platform, site, argument, _normalizeTiming);
-	const ReplacementEntry *text = plan.textNode ? replacementEntry(tot, plan.textNode, kReplacementText) : nullptr;
+	if (!argument) {
+		waitOrDelay(0);
+		return;
+	}
+	MewiloTimingPlan plan = mewiloTimingPlan(tot, _moduleStem.c_str(), _vm->_language,
+		_profile.platform, site, argument, _normalizeTiming);
+	const ReplacementEntry *text =
+		plan.textNode ? replacementEntry(tot, plan.textNode, kReplacementText) : nullptr;
 	if (text) {
 		bool calibrated = false;
-		plan.milliseconds = MAX<uint32>(mewiloNativeDelayMillis(_profile.platform, argument, calibrated),
-			mewiloReadingMillis(text->bytes.data(), text->bytes.size()));
+		plan.milliseconds =
+			MAX<uint32>(mewiloNativeDelayMillis(_profile.platform, argument, calibrated),
+				mewiloReadingMillis(text->bytes.data(), text->bytes.size()));
 	}
 	waitPresentation(plan, site);
 }

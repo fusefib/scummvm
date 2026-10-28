@@ -30,7 +30,7 @@ static const uint32 kMaxNoteCycles = 10000000;
 static const uint32 kMaxMusicCycles = 120000000;
 
 static bool loadNativeMemory(Common::SeekableReadStream &stream,
-		Common::Array<byte> &memory, Common::Array<byte> &present) {
+	Common::Array<byte> &memory, Common::Array<byte> &present) {
 	const int64 fileSize = stream.size();
 	if (fileSize <= 0 || fileSize > 1024 * 1024 || !stream.seek(0))
 		return false;
@@ -64,7 +64,7 @@ static bool loadNativeMemory(Common::SeekableReadStream &stream,
 }
 
 bool readMewiloThomsonMusic(Common::SeekableReadStream &stream, byte command,
-		Common::Array<MewiloThomsonNote> &notes) {
+	Common::Array<MewiloThomsonNote> &notes) {
 	notes.clear();
 	const uint16 address = command == 8 ? 0x8931 : (command == 6 ? 0x897f : 0);
 	if (!address)
@@ -131,8 +131,7 @@ public:
 
 	bool run(MewiloThomsonNoteTrace &out) {
 		static const byte kPeriodCounts[13] = {
-			0, 119, 112, 105, 98, 92, 86, 80, 75, 70, 65, 60, 56
-		};
+			0, 119, 112, 105, 98, 92, 86, 80, 75, 70, 65, 60, 56};
 		byte low = kPeriodCounts[_note.key];
 		byte high = low ? low : 80;
 		bool done = false;
@@ -209,7 +208,7 @@ private:
 };
 
 bool buildMewiloThomsonNote(const MewiloThomsonNote &note, byte phase,
-		MewiloThomsonNoteTrace &trace) {
+	MewiloThomsonNoteTrace &trace) {
 	trace = MewiloThomsonNoteTrace();
 	if (note.key > 12 || !note.tempo || note.tempo > 15 || !note.duration ||
 		note.duration > 191 || note.timbre > 15 ||
@@ -240,7 +239,11 @@ public:
 			}
 		}
 	}
-	void finish() { if (_used) hold(40 - _used, 0); }
+	void finish() {
+		if (_used)
+			hold(40 - _used, 0);
+	}
+
 private:
 	Common::Array<byte> &_pcm;
 	uint32 _used;
@@ -248,7 +251,7 @@ private:
 };
 
 bool renderMewiloThomsonMusic(const Common::Array<MewiloThomsonNote> &notes,
-		Common::Array<byte> &pcm) {
+	Common::Array<byte> &pcm) {
 	pcm.clear();
 	if (notes.empty() || notes.size() > 255)
 		return false;

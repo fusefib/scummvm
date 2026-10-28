@@ -18,10 +18,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/util.h"
+#include "gob/pregob/mewilo/platform.h"
+
 #include "common/endian.h"
 #include "common/memstream.h"
-#include "gob/pregob/mewilo/platform.h"
+#include "common/util.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -29,11 +30,10 @@ namespace Mewilo {
 // CPC stores four source pixels per cell, then doubles them for presentation.
 // The shared script coordinate space remains 40 cells wide on every platform.
 static const MewiloPlatformProfile kProfiles[] = {
-	{ kMewiloPlatformAtariST, "LOAD", 8, 1, true, true, kMewiloAudioAtariSpl },
-	{ kMewiloPlatformAmstradCPC, "AMSOAD", 4, 2, false, false, kMewiloAudioCpcMus },
-	{ kMewiloPlatformAmiga, "LOAD", 8, 1, false, false, kMewiloAudioAmigaSmp },
-	{ kMewiloPlatformThomsonTO, "THLOAD", 8, 1, false, false, kMewiloAudioThomsonNote }
-};
+	{kMewiloPlatformAtariST, "LOAD", 8, 1, true, true, kMewiloAudioAtariSpl},
+	{kMewiloPlatformAmstradCPC, "AMSOAD", 4, 2, false, false, kMewiloAudioCpcMus},
+	{kMewiloPlatformAmiga, "LOAD", 8, 1, false, false, kMewiloAudioAmigaSmp},
+	{kMewiloPlatformThomsonTO, "THLOAD", 8, 1, false, false, kMewiloAudioThomsonNote}};
 
 bool isValidMewiloPlatform(MewiloPlatform platform) {
 	return (uint)platform < ARRAYSIZE(kProfiles);
@@ -57,8 +57,8 @@ const MewiloPlatformProfile &getMewiloPlatformProfile(MewiloPlatform platform) {
 void buildMewiloPalette(MewiloPlatform platform, byte palette[16 * 3]) {
 	if (platform == kMewiloPlatformAmstradCPC) {
 		// LOADER.COM programs firmware inks; colour numbers encode B+3R+9G.
-		static const byte kInks[16] = { 0, 6, 18, 24, 2, 7, 11, 26, 13, 3, 19, 25, 1, 9, 15, 25 };
-		static const byte kLevels[3] = { 0, 128, 255 };
+		static const byte kInks[16] = {0, 6, 18, 24, 2, 7, 11, 26, 13, 3, 19, 25, 1, 9, 15, 25};
+		static const byte kLevels[3] = {0, 128, 255};
 		for (uint i = 0; i < 16; ++i) {
 			palette[i * 3] = kLevels[(kInks[i] / 3) % 3];
 			palette[i * 3 + 1] = kLevels[(kInks[i] / 9) % 3];
@@ -71,12 +71,8 @@ void buildMewiloPalette(MewiloPlatform platform, byte palette[16 * 3]) {
 		// launcher executes RESTORE 10000 and PALETTE I,ZZ for I=0..15 before
 		// entering PARTIE4.BIN. Thomson BASIC encodes these 12-bit colours as
 		// 0xBGR (low nibble red, middle green, high blue).
-		static const uint16 kThomsonNativePalette[16] = {
-			0x000, 0x00F, 0x0F0, 0x0FF,
-			0xF00, 0x62F, 0xFF0, 0xFFF,
-			0x777, 0x116, 0x060, 0x36C,
-			0xA33, 0x030, 0x02B, 0x08C
-		};
+		static const uint16 kThomsonNativePalette[16] = {0x000, 0x00F, 0x0F0, 0x0FF, 0xF00, 0x62F,
+			0xFF0, 0xFFF, 0x777, 0x116, 0x060, 0x36C, 0xA33, 0x030, 0x02B, 0x08C};
 		for (uint i = 0; i < 16; ++i) {
 			const uint16 color = kThomsonNativePalette[i];
 			const byte red = color & 0x0F;
@@ -89,10 +85,8 @@ void buildMewiloPalette(MewiloPlatform platform, byte palette[16 * 3]) {
 		return;
 	}
 
-	static const uint16 kColors[16] = {
-		0x000, 0x600, 0x260, 0x670, 0x027, 0x724, 0x076, 0x777,
-		0x444, 0x511, 0x140, 0x753, 0x335, 0x030, 0x730, 0x541
-	};
+	static const uint16 kColors[16] = {0x000, 0x600, 0x260, 0x670, 0x027, 0x724, 0x076, 0x777,
+		0x444, 0x511, 0x140, 0x753, 0x335, 0x030, 0x730, 0x541};
 	for (uint i = 0; i < 16; ++i) {
 		if (platform == kMewiloPlatformAmiga) {
 			for (uint c = 0; c < 3; ++c)
@@ -111,8 +105,7 @@ void buildMewiloDisplayPalette(MewiloPlatform platform, byte palette[16 * 3]) {
 		return;
 
 	static const byte kThomsonDisplayLevels[16] = {
-		0, 96, 124, 143, 159, 172, 183, 194, 203, 212, 220, 228, 235, 242, 248, 255
-	};
+		0, 96, 124, 143, 159, 172, 183, 194, 203, 212, 220, 228, 235, 242, 248, 255};
 	for (uint i = 0; i < 16 * 3; ++i)
 		palette[i] = kThomsonDisplayLevels[palette[i] / 17];
 }
@@ -143,7 +136,8 @@ Common::SeekableReadStream *normalizeMewiloCpcResource(Common::SeekableReadStrea
 		for (uint i = 0; i < 67; ++i)
 			checksum += raw[i];
 		const uint16 storedChecksum = READ_LE_UINT16(raw + 67);
-		const uint32 realLength = (uint32)raw[64] | ((uint32)raw[65] << 8) | ((uint32)raw[66] << 16);
+		const uint32 realLength =
+			(uint32)raw[64] | ((uint32)raw[65] << 8) | ((uint32)raw[66] << 16);
 
 		// A nonzero real length avoids treating the 128 zero bytes before the
 		// known AMSOAD1.I00 stream as a checksum-valid AMSDOS header. Do not
@@ -195,7 +189,7 @@ uint32 mewiloNativeDelayMillis(MewiloPlatform platform, byte operand, bool &cali
 	}
 }
 
-static const char *const kModuleSuffixes[9] = { "", "0", "1", "2", "3", "4", "5", "7", "8" };
+static const char *const kModuleSuffixes[9] = {"", "0", "1", "2", "3", "4", "5", "7", "8"};
 
 int mewiloModuleIndex(const Common::String &stem, const char *prefix) {
 	for (uint i = 0; i < ARRAYSIZE(kModuleSuffixes); ++i) {
@@ -206,7 +200,8 @@ int mewiloModuleIndex(const Common::String &stem, const char *prefix) {
 }
 
 Common::String mewiloModuleStem(uint index, const char *prefix) {
-	return index < ARRAYSIZE(kModuleSuffixes) ? Common::String(prefix) + kModuleSuffixes[index] : Common::String();
+	return index < ARRAYSIZE(kModuleSuffixes) ? Common::String(prefix) + kModuleSuffixes[index]
+		: Common::String();
 }
 
 } // End of namespace Mewilo

@@ -18,12 +18,14 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "gob/pregob/mewilo/mewilo.h"
+
+#include "common/util.h"
+
 #include "gob/draw.h"
 #include "gob/gob.h"
 #include "gob/util.h"
 #include "gob/video.h"
-#include "common/util.h"
-#include "gob/pregob/mewilo/mewilo.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -53,20 +55,26 @@ byte PreGob_Mewilo::translateInputKey(int16 key) const {
 	// Gob's keyboard translator returns DOS CP850 for these Atari/French
 	// characters.  Convert the subset proven by the native Mewilo input table.
 	switch ((uint16)key) {
-	case 0x82: return 0x16; // e acute
-	case 0x8A: return 0x17; // e grave
-	case 0x85: return 0x18; // a grave
-	case 0x97: return 0x19; // u grave
-	case 0x87: return 0x1A; // c cedilla
-	default: return 0;
+	case 0x82:
+		return 0x16; // e acute
+	case 0x8A:
+		return 0x17; // e grave
+	case 0x85:
+		return 0x18; // a grave
+	case 0x97:
+		return 0x19; // u grave
+	case 0x87:
+		return 0x1A; // c cedilla
+	default:
+		return 0;
 	}
 }
 
 bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 	presentFrame();
 	_presentation.finishStep();
-	debugC(4, kDebugGameFlow, "MEWILO_PRESENT input module=%s t=%u frame=%u",
-		_moduleStem.c_str(), activeMillis(), _presentation.frame());
+	debugC(4, kDebugGameFlow, "MEWILO_PRESENT input module=%s t=%u frame=%u", _moduleStem.c_str(),
+		activeMillis(), _presentation.frame());
 	event = MewiloInputEvent();
 	_acceptMousePresses = true;
 	while (!shouldQuit() && !hasError() && !_pendingRestore) {
@@ -101,12 +109,24 @@ bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 		event.y = mouseY;
 		event.mouseButtons = (uint8)buttons;
 		switch (key) {
-		case kKeySpace: event.key = ' '; break;
-		case kKeyEscape: event.key = kMewiloKeyEscape; break;
-		case kKeyReturn: event.key = kMewiloKeyReturn; break;
-		case kKeyBackspace: event.key = kMewiloKeyBackspace; break;
-		case kKeyDelete: event.key = kMewiloKeyDelete; break;
-		default: event.key = translateInputKey(key); break;
+		case kKeySpace:
+			event.key = ' ';
+			break;
+		case kKeyEscape:
+			event.key = kMewiloKeyEscape;
+			break;
+		case kKeyReturn:
+			event.key = kMewiloKeyReturn;
+			break;
+		case kKeyBackspace:
+			event.key = kMewiloKeyBackspace;
+			break;
+		case kKeyDelete:
+			event.key = kMewiloKeyDelete;
+			break;
+		default:
+			event.key = translateInputKey(key);
+			break;
 		}
 		_acceptMousePresses = false;
 		return true;
@@ -115,8 +135,8 @@ bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 	return false;
 }
 
-void PreGob_Mewilo::drawInputField(const MewiloTextField &field,
-		const Common::Array<byte> &text, bool cursor) {
+void PreGob_Mewilo::drawInputField(
+	const MewiloTextField &field, const Common::Array<byte> &text, bool cursor) {
 	if (!_vm->_draw->_backSurface) {
 		renderFailure("missing input surface", 0);
 		return;

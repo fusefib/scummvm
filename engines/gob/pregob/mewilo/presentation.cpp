@@ -19,14 +19,18 @@
  */
 
 #include "gob/pregob/mewilo/presentation.h"
-#include "gob/pregob/mewilo/tot.h"
+
 #include "common/util.h"
+
+#include "gob/pregob/mewilo/tot.h"
 
 namespace Gob {
 namespace Mewilo {
 
-MewiloTimingPlan::MewiloTimingPlan() : anchor(kMewiloElapsedWait), milliseconds(0),
-	minimumExposure(0), region(0, 0, 320, 200), rule("native-wait"), calibrated(false), textNode(0) {}
+MewiloTimingPlan::MewiloTimingPlan() :
+	anchor(kMewiloElapsedWait), milliseconds(0), minimumExposure(0), region(0, 0, 320, 200),
+	rule("native-wait"), calibrated(false), textNode(0) {
+}
 
 uint32 mewiloScaleTime(uint32 milliseconds, uint speedFactor) {
 	// Scale ONCE, round up so a nonzero visibility budget cannot vanish.
@@ -60,7 +64,6 @@ struct TimingSite {
 // Known script locations, checked locally when reached. An unrelated edit to
 // the resource does not disable scene pacing. A mismatching instruction or focus
 // node simply uses the native wait. This table never writes to a TOT.
-// BEGIN REVIEWED SITES
 static const TimingSite kTimingSites[] = {
 	{"LOAD0", Common::DE_DEU, 5, 0x045F, 0x0B90, 50, 0x41, kMewiloStepBudget, 120, "map-animation", 0x0000},
 	{"LOAD0", Common::DE_DEU, 5, 0x0466, 0x0C33, 50, 0x41, kMewiloStepBudget, 120, "map-animation", 0x0000},
@@ -257,11 +260,9 @@ static const TimingSite kTimingSites[] = {
 	{"THLOAD8", Common::FR_FRA, 8, 0x0273, 0x1615, 100, 0x41, kMewiloStepBudget, 120, "authored-image-step", 0x0000},
 	{"THLOAD8", Common::FR_FRA, 8, 0x0278, 0x1749, 100, 0x41, kMewiloStepBudget, 120, "authored-image-step", 0x0000},
 };
-// END REVIEWED SITES
 
-MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot,
-	const char *module, Common::Language language,
-	MewiloPlatform platform, uint16 site, byte operand, bool normalize) {
+MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
+	Common::Language language, MewiloPlatform platform, uint16 site, byte operand, bool normalize) {
 	MewiloTimingPlan plan;
 	plan.milliseconds = mewiloNativeDelayMillis(platform, operand, plan.calibrated);
 	if (!normalize || !operand || !module || (uint)platform > kMewiloPlatformThomsonTO ||
@@ -271,18 +272,20 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot,
 	for (uint i = 0; i < ARRAYSIZE(kTimingSites); ++i) {
 		const TimingSite &r = kTimingSites[i];
 		if (r.site != site || r.operand != operand || !(r.platforms & (1 << platform)) ||
-			r.language != language || strcmp(r.module, module) || !tot.has(r.focus, r.focusType == 0x1D ? 10 : 7) ||
-			tot.byteAt(r.focus) != r.focusType)
+			r.language != language || strcmp(r.module, module) ||
+			!tot.has(r.focus, r.focusType == 0x1D ? 10 : 7) || tot.byteAt(r.focus) != r.focusType)
 			continue;
-		if (r.exposureFocus && (!tot.has(r.exposureFocus, 7) ||
-			(tot.byteAt(r.exposureFocus) != 0x41 && tot.byteAt(r.exposureFocus) != 0x60)))
+		if (r.exposureFocus &&
+			(!tot.has(r.exposureFocus, 7) ||
+				(tot.byteAt(r.exposureFocus) != 0x41 && tot.byteAt(r.exposureFocus) != 0x60)))
 			continue;
 		plan.anchor = r.anchor;
 		plan.minimumExposure = r.anchor == kMewiloStepBudget ? 20 : 0;
 		plan.rule = r.name;
 		plan.textNode = !r.minimum && r.focusType == 0x1D ? r.focus : 0;
-		const uint32 floor = r.minimum ? r.minimum :
-			mewiloReadingMillis(tot.dataAt(r.focus + 10), tot.size() - r.focus - 10);
+		const uint32 floor = r.minimum
+			? r.minimum
+			: mewiloReadingMillis(tot.dataAt(r.focus + 10), tot.size() - r.focus - 10);
 		plan.milliseconds = MAX<uint32>(plan.milliseconds, floor);
 		// Common script coordinates; CPC is already expressed in output cells.
 		const uint coords = r.focusType == 0x1D ? 1 : 3;
@@ -295,7 +298,8 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot,
 		if (r.exposureFocus) {
 			const uint16 focus = r.exposureFocus;
 			const int ix = tot.byteAt(focus + 3) * 8, iy = tot.byteAt(focus + 4);
-			plan.exposureRegion = Common::Rect(ix, iy, ix + tot.byteAt(focus + 5) * 8, iy + tot.byteAt(focus + 6));
+			plan.exposureRegion =
+				Common::Rect(ix, iy, ix + tot.byteAt(focus + 5) * 8, iy + tot.byteAt(focus + 6));
 			plan.exposureRegion.clip(Common::Rect(0, 0, 320, 200));
 			plan.minimumExposure = 120; // Last image retains its own concurrent floor.
 		}
@@ -308,7 +312,9 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot,
 	return plan;
 }
 
-MewiloPresentation::MewiloPresentation() { reset(); }
+MewiloPresentation::MewiloPresentation() {
+	reset();
+}
 
 void MewiloPresentation::reset() {
 	memset(_tiles, 0, sizeof(_tiles));
@@ -325,7 +331,9 @@ void MewiloPresentation::beginStep(uint32 activeTime) {
 	}
 }
 
-void MewiloPresentation::finishStep() { _stepActive = false; }
+void MewiloPresentation::finishStep() {
+	_stepActive = false;
+}
 
 void MewiloPresentation::dirty(const Common::Rect &region) {
 	Common::Rect clipped(region);
@@ -338,8 +346,8 @@ void MewiloPresentation::dirty(const Common::Rect &region) {
 		_dirty.extend(clipped);
 }
 
-bool MewiloPresentation::submitted(const byte *pixels, uint pitch, uint32 activeTime,
-		Common::Rect &changed) {
+bool MewiloPresentation::submitted(
+	const byte *pixels, uint pitch, uint32 activeTime, Common::Rect &changed) {
 	changed = Common::Rect();
 	if (!pixels || pitch < 320 || _dirty.isEmpty())
 		return false;
@@ -358,7 +366,10 @@ bool MewiloPresentation::submitted(const byte *pixels, uint pitch, uint32 active
 				tile.since = activeTime;
 				tile.known = true;
 				const Common::Rect r(tx * 8, ty * 8, tx * 8 + 8, ty * 8 + 8);
-				if (changed.isEmpty()) changed = r; else changed.extend(r);
+				if (changed.isEmpty())
+					changed = r;
+				else
+					changed.extend(r);
 			}
 		}
 	}
@@ -372,12 +383,14 @@ bool MewiloPresentation::submitted(const byte *pixels, uint pitch, uint32 active
 uint32 MewiloPresentation::visibleAge(const Common::Rect &region, uint32 activeTime) const {
 	Common::Rect r(region);
 	r.clip(Common::Rect(0, 0, 320, 200));
-	if (r.isEmpty()) return 0;
+	if (r.isEmpty())
+		return 0;
 	uint32 age = 0xFFFFFFFFU;
 	for (int y = r.top / 8; y <= (r.bottom - 1) / 8; ++y)
 		for (int x = r.left / 8; x <= (r.right - 1) / 8; ++x) {
 			const Tile &tile = _tiles[y * kColumns + x];
-			if (!tile.known) return 0;
+			if (!tile.known)
+				return 0;
 			age = MIN(age, activeTime - tile.since); // wrap-safe active-time age
 		}
 	return age;
@@ -387,16 +400,19 @@ uint32 MewiloPresentation::stepAge(uint32 activeTime) const {
 	return _stepActive ? activeTime - _stepStart : 0;
 }
 
-uint32 MewiloPresentation::waitRemaining(const MewiloTimingPlan &plan, uint speed,
-		uint32 waitStart, uint32 activeTime) const {
-	const uint32 age = plan.anchor == kMewiloVisibleHold ? visibleAge(plan.region, activeTime) :
-		plan.anchor == kMewiloStepBudget ? stepAge(activeTime) : activeTime - waitStart;
+uint32 MewiloPresentation::waitRemaining(
+	const MewiloTimingPlan &plan, uint speed, uint32 waitStart, uint32 activeTime) const {
+	const uint32 age = plan.anchor == kMewiloVisibleHold ? visibleAge(plan.region, activeTime)
+		: plan.anchor == kMewiloStepBudget               ? stepAge(activeTime)
+														 : activeTime - waitStart;
 	const uint32 budgetLeft = remaining(mewiloScaleTime(plan.milliseconds, speed), age);
 	// These constraints run concurrently, never as two sequential sleeps. Even
 	// an over-budget animation step gets a bounded opportunity to be displayed.
-	const uint32 exposureLeft = plan.minimumExposure ? remaining(
-		mewiloScaleTime(plan.minimumExposure, speed), visibleAge(
-		plan.exposureRegion.isEmpty() ? plan.region : plan.exposureRegion, activeTime)) : 0;
+	const uint32 exposureLeft = plan.minimumExposure
+		? remaining(mewiloScaleTime(plan.minimumExposure, speed),
+			  visibleAge(
+				  plan.exposureRegion.isEmpty() ? plan.region : plan.exposureRegion, activeTime))
+		: 0;
 	return MAX(budgetLeft, exposureLeft);
 }
 
@@ -404,5 +420,5 @@ uint32 MewiloPresentation::remaining(uint32 budget, uint32 elapsed) {
 	return elapsed >= budget ? 0 : budget - elapsed;
 }
 
-} // namespace Mewilo
-} // namespace Gob
+} // End of namespace Mewilo
+} // End of namespace Gob

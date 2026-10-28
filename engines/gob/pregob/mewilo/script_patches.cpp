@@ -18,12 +18,12 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "gob/pregob/mewilo/script_patches.h"
 #include "common/endian.h"
 #include "common/md5.h"
 #include "common/memstream.h"
 #include "common/textconsole.h"
 #include "common/util.h"
-#include "gob/pregob/mewilo/script_patches.h"
 #include "gob/pregob/mewilo/tot.h"
 
 namespace Gob {
@@ -36,7 +36,18 @@ MewiloScriptPatchReport::MewiloScriptPatchReport() {
 
 namespace {
 
-enum ResourceId { kUnknownResource, kGermanTown, kGermanHouse, kGermanHen, kGermanEnd, kFrenchHen, kGermanMap, kCpcMap, kThomsonMap, kFrenchMap };
+enum ResourceId {
+	kUnknownResource,
+	kGermanTown,
+	kGermanHouse,
+	kGermanHen,
+	kGermanEnd,
+	kFrenchHen,
+	kGermanMap,
+	kCpcMap,
+	kThomsonMap,
+	kFrenchMap
+};
 
 struct ResourceIdentity {
 	ResourceId id;
@@ -53,27 +64,27 @@ static const uint32 k68kPlatforms = (1U << kMewiloPlatformAmiga) |
 	(1U << kMewiloPlatformAtariST);
 
 static const ResourceIdentity kResources[] = {
-	{ kGermanTown, "LOAD1", 18657, "92145781364cb2fc96b5634e2e9b2405",
-		k68kPlatforms, Common::DE_DEU },
-	{ kGermanHouse, "LOAD2", 14272, "9ce785b84f4412b91f666903b852e473",
-		k68kPlatforms, Common::DE_DEU },
-	{ kGermanHen, "LOAD5", 18760, "2d68722a92c25d9499f3fb7a553505db",
-		k68kPlatforms, Common::DE_DEU },
-	{ kGermanEnd, "LOAD8", 17114, "e8046f82c18ff92f5fce83c7e46f6f8b",
-		k68kPlatforms, Common::DE_DEU },
-	{ kFrenchHen, "LOAD5", 18798, "069b5f0e5dc077d9032331cce2731212",
-		k68kPlatforms, Common::FR_FRA },
-	{ kGermanMap, "LOAD0", 3966, "ce7ffa5b587e9ec6bf43f228aa384d69",
-		k68kPlatforms, Common::DE_DEU },
-	{ kCpcMap, "AMSOAD0", 4884, "9fcf3642e2594e6bf85a11fda5fe2204",
-		(1U << kMewiloPlatformAmstradCPC), Common::FR_FRA },
-	{ kThomsonMap, "THLOAD0", 25606, "6dea5e03f37d87f22a118bcce54bf296",
-		(1U << kMewiloPlatformThomsonTO), Common::FR_FRA },
+	{kGermanTown, "LOAD1", 18657, "92145781364cb2fc96b5634e2e9b2405",
+	 k68kPlatforms, Common::DE_DEU},
+	{kGermanHouse, "LOAD2", 14272, "9ce785b84f4412b91f666903b852e473",
+	 k68kPlatforms, Common::DE_DEU},
+	{kGermanHen, "LOAD5", 18760, "2d68722a92c25d9499f3fb7a553505db",
+	 k68kPlatforms, Common::DE_DEU},
+	{kGermanEnd, "LOAD8", 17114, "e8046f82c18ff92f5fce83c7e46f6f8b",
+	 k68kPlatforms, Common::DE_DEU},
+	{kFrenchHen, "LOAD5", 18798, "069b5f0e5dc077d9032331cce2731212",
+	 k68kPlatforms, Common::FR_FRA},
+	{kGermanMap, "LOAD0", 3966, "ce7ffa5b587e9ec6bf43f228aa384d69",
+	 k68kPlatforms, Common::DE_DEU},
+	{kCpcMap, "AMSOAD0", 4884, "9fcf3642e2594e6bf85a11fda5fe2204",
+	 (1U << kMewiloPlatformAmstradCPC), Common::FR_FRA},
+	{kThomsonMap, "THLOAD0", 25606, "6dea5e03f37d87f22a118bcce54bf296",
+	 (1U << kMewiloPlatformThomsonTO), Common::FR_FRA},
 	// Verified full French resources, identical recipes under Atari and Amiga.
 	// Exact source guards remain mandatory. THLOAD5 shares bytes with LOAD5,
 	// but the reduced Thomson flow must NOT acquire the full-family hen fix.
-	{ kFrenchMap, "LOAD0", 2456, "7409c969da053c1d51f8ea7a0737043b",
-		k68kPlatforms, Common::FR_FRA },
+	{kFrenchMap, "LOAD0", 2456, "7409c969da053c1d51f8ea7a0737043b",
+	 k68kPlatforms, Common::FR_FRA},
 };
 
 static bool contains(const Common::Array<byte> &data, uint32 at, uint32 count) {
@@ -106,7 +117,7 @@ static bool validate(const Common::Array<byte> &data, MewiloPlatform platform) {
 }
 
 static ResourceId identify(const char *stem, uint32 size, const char *md5,
-		MewiloPlatform platform, Common::Language language) {
+	MewiloPlatform platform, Common::Language language) {
 	if ((uint)platform > (uint)kMewiloPlatformThomsonTO)
 		return kUnknownResource;
 	for (uint i = 0; i < ARRAYSIZE(kResources); ++i) {
@@ -122,8 +133,6 @@ static ResourceId identify(const char *stem, uint32 size, const char *md5,
 // position. Correct the relation "named BY Arnaud", not the MEWILO answer.
 static const byte kLetterOriginal[] = "\035\005\010\036 \010\000\003\000\000 DAMIT ICH IHN DIR GEBE,MUSST@DU ERST DEN NAMEN EINES OPFERS@NENNEN,DAS ALS ARNAUD DE RONAN@        BEKANNT IST.\000";
 static const char kLetterCorrected[] = "NENNE DEN NAMEN DES OPFERS, @DAS ARNAUD DE RONAN IN      @SEINEM BRIEF NENNT. DANN    @BEKOMMST DU DEN BRIEF.   ";
-
-
 
 static bool correctLetter(const Common::Array<byte> &source, Common::Array<byte> &target) {
 	if (sizeof(kLetterOriginal) - 1 != 10 + sizeof(kLetterCorrected) ||
@@ -151,58 +160,58 @@ struct InputCorrection {
 // The four one-attempt messages are also translated, although their retry text
 // is not normally displayed by the current executor.
 static const InputCorrection kInputs[] = {
-	{ kGermanTown, 0x1632, 87,
-		"Non c'est pas \032\030\000", 17,
-		"gombo/gombos/ein gombo/das gombos/das gombo\000", 44, "", "Falsch!" },
-	{ kGermanTown, 0x1984, 74,
-		"c'est pas \032\030\000", 13,
-		"M\026wilo/MEWILO/m\026wilo/mewilo/Mewilo\000", 35, "", "Falsch!" },
-	{ kGermanHouse, 0x133B, 53,
-		"faux!\000", 6,
-		"ARNAUD/arnaud/Arnaud\000", 21, "", "Nein!" },
-	{ kGermanHen, 0x07CA, 83,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"die tuer/eine tuer/tueren\000", 26, "tuer", "Falsch!" },
-	{ kGermanHen, 0x081D, 99,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"die glocke/die glocken/eine glocke/glocke\000", 42, "", "Falsch!" },
-	{ kGermanHen, 0x0880, 91,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"die nadel/eine nadel/nadeln/nadel\000", 34, "", "Falsch!" },
-	{ kGermanHen, 0x08DB, 87,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"der fuss/fuesse/ein fuss/fuss\000", 30, "", "Falsch!" },
-	{ kGermanHen, 0x0932, 92,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"der schatten/ein schatten/schatten\000", 35, "", "Falsch!" },
-	{ kGermanHen, 0x098E, 86,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"das auge/augen/ein auge/auge\000", 29, "", "Falsch!" },
-	{ kGermanHen, 0x0A35, 90,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"der nagel/ein nagel/naegel/nagel\000", 33, "", "Falsch!" },
-	{ kGermanHen, 0x0A8F, 97,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"die schere/ein schere/schere/die schere\000", 40, "", "Falsch!" },
-	{ kGermanHen, 0x0AF0, 91,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"der fluss/ein fluss/fluesse/fluss\000", 34, "", "Falsch!" },
-	{ kGermanHen, 0x0B4B, 99,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"die briefmarke/ein briefmarke/briefmarken\000", 42, "briefmarke", "Falsch!" },
-	{ kGermanHen, 0x0BAE, 114,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"ein kartenspiel/das kartenspiel/kartenspiele/kartenspiel\000", 57, "", "Falsch!" },
-	{ kGermanHen, 0x0C20, 95,
-		"         C'est pas \032\030, pi\027ce !\000", 31,
-		"eine pfeife/pfeife/pfeifen/die pfeife\000", 38, "", "Falsch!" },
-	{ kGermanEnd, 0x02A9, 87,
-		"       pas de chance\000", 21,
-		"anselme und echevin/echevin und anselme\000", 40, "", "Falsch!" },
+	{kGermanTown, 0x1632, 87,
+	 "Non c'est pas \032\030\000", 17,
+	 "gombo/gombos/ein gombo/das gombos/das gombo\000", 44, "", "Falsch!"},
+	{kGermanTown, 0x1984, 74,
+	 "c'est pas \032\030\000", 13,
+	 "M\026wilo/MEWILO/m\026wilo/mewilo/Mewilo\000", 35, "", "Falsch!"},
+	{kGermanHouse, 0x133B, 53,
+	 "faux!\000", 6,
+	 "ARNAUD/arnaud/Arnaud\000", 21, "", "Nein!"},
+	{kGermanHen, 0x07CA, 83,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "die tuer/eine tuer/tueren\000", 26, "tuer", "Falsch!"},
+	{kGermanHen, 0x081D, 99,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "die glocke/die glocken/eine glocke/glocke\000", 42, "", "Falsch!"},
+	{kGermanHen, 0x0880, 91,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "die nadel/eine nadel/nadeln/nadel\000", 34, "", "Falsch!"},
+	{kGermanHen, 0x08DB, 87,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "der fuss/fuesse/ein fuss/fuss\000", 30, "", "Falsch!"},
+	{kGermanHen, 0x0932, 92,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "der schatten/ein schatten/schatten\000", 35, "", "Falsch!"},
+	{kGermanHen, 0x098E, 86,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "das auge/augen/ein auge/auge\000", 29, "", "Falsch!"},
+	{kGermanHen, 0x0A35, 90,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "der nagel/ein nagel/naegel/nagel\000", 33, "", "Falsch!"},
+	{kGermanHen, 0x0A8F, 97,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "die schere/ein schere/schere/die schere\000", 40, "", "Falsch!"},
+	{kGermanHen, 0x0AF0, 91,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "der fluss/ein fluss/fluesse/fluss\000", 34, "", "Falsch!"},
+	{kGermanHen, 0x0B4B, 99,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "die briefmarke/ein briefmarke/briefmarken\000", 42, "briefmarke", "Falsch!"},
+	{kGermanHen, 0x0BAE, 114,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "ein kartenspiel/das kartenspiel/kartenspiele/kartenspiel\000", 57, "", "Falsch!"},
+	{kGermanHen, 0x0C20, 95,
+	 "         C'est pas \032\030, pi\027ce !\000", 31,
+	 "eine pfeife/pfeife/pfeifen/die pfeife\000", 38, "", "Falsch!"},
+	{kGermanEnd, 0x02A9, 87,
+	 "       pas de chance\000", 21,
+	 "anselme und echevin/echevin und anselme\000", 40, "", "Falsch!"},
 };
 
 static bool correctInput(const Common::Array<byte> &source, Common::Array<byte> &target,
-		const InputCorrection &r) {
+	const InputCorrection &r) {
 	const uint32 at = r.offset;
 	if (!contains(source, at, r.nodeSize) || source[at] != 0x12)
 		return false;
@@ -245,7 +254,7 @@ static bool correctInput(const Common::Array<byte> &source, Common::Array<byte> 
 		memcpy(target.data() + newAnswers + textEnd + 1, r.alias, extra - 1);
 	}
 	memcpy(target.data() + newAnswers + textEnd + extra,
-		source.data() + answers + textEnd, oldAnswerSize - textEnd);
+		   source.data() + answers + textEnd, oldAnswerSize - textEnd);
 	return true;
 }
 
@@ -253,15 +262,20 @@ static bool correctInput(const Common::Array<byte> &source, Common::Array<byte> 
 // code is not reused as scratch. Stay below 0xFF00: an FF-leading pointer is an
 // inline-command marker inside a sequence. Bounds and size checks are explicit.
 static bool appendCondition(Common::Array<byte> &data, byte var, byte value,
-		uint16 yes, uint16 no, uint16 &offset) {
+	uint16 yes, uint16 no, uint16 &offset) {
 	if (data.size() < 16 || data.size() + 10 >= 0xFF00)
 		return false;
 	offset = (uint16)data.size();
 	data.resize(data.size() + 10);
 	byte *p = data.data() + offset;
-	p[0] = 0x21; p[1] = 1; p[2] = var; p[3] = value; // var.word0 != immediate
-	p[4] = 1; WRITE_BE_UINT16(p + 5, yes);
-	p[7] = 1; WRITE_BE_UINT16(p + 8, no);
+	p[0] = 0x21;
+	p[1] = 1;
+	p[2] = var;
+	p[3] = value; // var.word0 != immediate
+	p[4] = 1;
+	WRITE_BE_UINT16(p + 5, yes);
+	p[7] = 1;
+	WRITE_BE_UINT16(p + 8, no);
 	WRITE_BE_UINT16(data.data(), data.size());
 	return true;
 }
@@ -272,24 +286,28 @@ static bool appendCondition(Common::Array<byte> &data, byte var, byte value,
 // Basket present / no mongoose rejoins the entire original dispatcher, including
 // introduction and real historical-loss/replacement handling.
 static bool correctHenProtection(ResourceId id, const Common::Array<byte> &source,
-		Common::Array<byte> &target) {
+	Common::Array<byte> &target) {
 	uint16 entryAt, refusalAt, dispatcher;
-	static const byte germanEntry[] = { 0x1C, 4, 0x23, 0xC8, 0xFF, 3, 0x32, 7, 0x89, 0x0D, 0x1F };
-	static const byte frenchEntry[] = { 0x1C, 4, 0x23, 0xEE, 0xFF, 3, 0x32, 7, 0xD1, 0x0D, 0x45 };
+	static const byte germanEntry[] = {0x1C, 4, 0x23, 0xC8, 0xFF, 3, 0x32, 7, 0x89, 0x0D, 0x1F};
+	static const byte frenchEntry[] = {0x1C, 4, 0x23, 0xEE, 0xFF, 3, 0x32, 7, 0xD1, 0x0D, 0x45};
 	const byte *entry;
 	switch (id) {
 	case kGermanHen:
-		entryAt = 0x0D29; refusalAt = 0x0CE5; dispatcher = 0x0D1F;
+		entryAt = 0x0D29;
+		refusalAt = 0x0CE5;
+		dispatcher = 0x0D1F;
 		entry = germanEntry;
 		break;
 	case kFrenchHen:
-		entryAt = 0x0D4F; refusalAt = 0x0D0B; dispatcher = 0x0D45;
+		entryAt = 0x0D4F;
+		refusalAt = 0x0D0B;
+		dispatcher = 0x0D45;
 		entry = frenchEntry;
 		break;
 	default:
 		return false;
 	}
-	static const byte refusal[] = { 0x1C, 6, 0xFF, 1, 5, 8, 0x1E, 0x20 };
+	static const byte refusal[] = {0x1C, 6, 0xFF, 1, 5, 8, 0x1E, 0x20};
 	if (!expect(source, entryAt, entry, sizeof(germanEntry)) ||
 		!expect(source, refusalAt, refusal, sizeof(refusal)))
 		return false;
@@ -309,16 +327,33 @@ static bool correctHenProtection(ResourceId id, const Common::Array<byte> &sourc
 // V25==1 gate also require V16==0 (the successfully answered/closed question).
 // No flag is reinterpreted or repaired; other progression requirements remain.
 static bool requireCeceAnswer(ResourceId id, const Common::Array<byte> &source,
-		Common::Array<byte> &target) {
+	Common::Array<byte> &target) {
 	uint16 at, blocked, next;
 	switch (id) {
-	case kGermanMap: at = 0x0AB9; blocked = 0x0A63; next = 0x0AC3; break;
-	case kCpcMap: at = 0x095F; blocked = 0x0909; next = 0x0969; break;
-	case kThomsonMap: at = 0x0982; blocked = 0x092C; next = 0x098C; break;
-	case kFrenchMap: at = 0x04C3; blocked = 0x046D; next = 0x04CD; break;
-	default: return false;
+	case kGermanMap:
+		at = 0x0AB9;
+		blocked = 0x0A63;
+		next = 0x0AC3;
+		break;
+	case kCpcMap:
+		at = 0x095F;
+		blocked = 0x0909;
+		next = 0x0969;
+		break;
+	case kThomsonMap:
+		at = 0x0982;
+		blocked = 0x092C;
+		next = 0x098C;
+		break;
+	case kFrenchMap:
+		at = 0x04C3;
+		blocked = 0x046D;
+		next = 0x04CD;
+		break;
+	default:
+		return false;
 	}
-	byte expected[] = { 0x21, 1, 0x25, 1, 1, 0, 0, 1, 0, 0 };
+	byte expected[] = {0x21, 1, 0x25, 1, 1, 0, 0, 1, 0, 0};
 	WRITE_BE_UINT16(expected + 5, blocked);
 	WRITE_BE_UINT16(expected + 8, next);
 	if (!expect(source, at, expected, sizeof(expected)))
@@ -333,8 +368,8 @@ static bool requireCeceAnswer(ResourceId id, const Common::Array<byte> &source,
 } // End of anonymous namespace
 
 bool prepareMewiloScript(Common::SeekableReadStream &normalizedStream,
-		const char *moduleStem, MewiloPlatform platform, Common::Language language,
-		uint32 policy, Common::Array<byte> &output, MewiloScriptPatchReport &report) {
+	const char *moduleStem, MewiloPlatform platform, Common::Language language,
+	uint32 policy, Common::Array<byte> &output, MewiloScriptPatchReport &report) {
 	output.clear();
 	report = MewiloScriptPatchReport();
 	if (!moduleStem || (policy & ~kMewiloKnownScriptPatchPolicies))

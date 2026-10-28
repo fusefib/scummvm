@@ -21,9 +21,9 @@
 #ifndef GOB_PREGOB_MEWILO_PLATFORM_H
 #define GOB_PREGOB_MEWILO_PLATFORM_H
 
+#include "common/platform.h"
 #include "common/scummsys.h"
 #include "common/str.h"
-#include "common/platform.h"
 #include "common/stream.h"
 
 namespace Gob {

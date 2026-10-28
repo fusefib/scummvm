@@ -18,21 +18,23 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "gob/pregob/mewilo/mewilo.h"
+
 #include "common/textconsole.h"
 #include "common/util.h"
+
 #include "gob/draw.h"
 #include "gob/gob.h"
-#include "gob/video.h"
-#include "gob/pregob/mewilo/mewilo.h"
 #include "gob/pregob/mewilo/text.h"
+#include "gob/video.h"
 
 namespace Gob {
 namespace Mewilo {
 
 void PreGob_Mewilo::renderFailure(const char *message, uint16 nodeOffset) {
 	_hostFailed = true;
-	warning("Mewilo: host operation failed in %s.TOT at 0x%04X: %s",
-		_moduleStem.c_str(), nodeOffset, message);
+	warning("Mewilo: host operation failed in %s.TOT at 0x%04X: %s", _moduleStem.c_str(),
+		nodeOffset, message);
 }
 
 void PreGob_Mewilo::markDirty(int16 x, int16 y, int16 width, int16 height) {
@@ -48,8 +50,8 @@ void PreGob_Mewilo::markDirty(int16 x, int16 y, int16 width, int16 height) {
 	}
 }
 
-void PreGob_Mewilo::drawByteString(const byte *text, uint length, int16 x, int16 y,
-		byte color, byte lineAdvance) {
+void PreGob_Mewilo::drawByteString(
+	const byte *text, uint length, int16 x, int16 y, byte color, byte lineAdvance) {
 	if (!text)
 		return;
 	const int16 startX = x;
@@ -87,7 +89,8 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 		return;
 
 	if (width > 0 && height > 0)
-		_vm->_draw->_backSurface->fillRect(left, top, left + width - 1, top + height - 1, background);
+		_vm->_draw->_backSurface->fillRect(
+			left, top, left + width - 1, top + height - 1, background);
 
 	const uint32 textOffset = nodeOffset + 10;
 	if (!tot.has(textOffset))
@@ -105,8 +108,8 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 
 	while (!finished && sourceOffset < textSize) {
 		MewiloTextLine line;
-		if (!extractMewiloTextLine(text + sourceOffset, textSize - sourceOffset,
-				widthCell, line) || !line.consumed) {
+		if (!extractMewiloTextLine(text + sourceOffset, textSize - sourceOffset, widthCell, line) ||
+			!line.consumed) {
 			renderFailure("malformed text stream", nodeOffset);
 			break;
 		}
@@ -115,11 +118,20 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 		for (uint i = 0; i < line.bytes.size(); ++i) {
 			const byte c = line.bytes[i];
 			switch (c) {
-			case '[': color = highlight; continue;
-			case ']': color = normal; continue;
-			case '{': strike = true; continue;
-			case '}': strike = false; continue;
-			default: break;
+			case '[':
+				color = highlight;
+				continue;
+			case ']':
+				color = normal;
+				continue;
+			case '{':
+				strike = true;
+				continue;
+			case '}':
+				strike = false;
+				continue;
+			default:
+				break;
 			}
 
 			_font.drawChar(*_vm->_draw->_backSurface, c, x, y, color);
@@ -144,7 +156,8 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 	// presentation matches what was actually written to the back surface.
 	if (dirtyBottom >= top) {
 		markDirty(left, top, width, dirtyBottom - top + 1);
-		tracePresentationDraw("text", nodeOffset, Common::Rect(left, top, left + width, dirtyBottom + 1));
+		tracePresentationDraw(
+			"text", nodeOffset, Common::Rect(left, top, left + width, dirtyBottom + 1));
 	}
 }
 
@@ -159,14 +172,15 @@ void PreGob_Mewilo::drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset)
 		renderFailure("invalid inline image extent", nodeOffset);
 		return;
 	}
-	const int16 x = tot.byteAt(nodeOffset + 3) * _profile.packedPixelsPerCell * _profile.packedOutputScaleX;
+	const int16 x =
+		tot.byteAt(nodeOffset + 3) * _profile.packedPixelsPerCell * _profile.packedOutputScaleX;
 	const int16 y = tot.byteAt(nodeOffset + 4);
 	const uint16 sourceWidth = tot.byteAt(nodeOffset + 5) * _profile.packedPixelsPerCell;
 	const uint16 outputWidth = sourceWidth * _profile.packedOutputScaleX;
 	const uint16 height = tot.byteAt(nodeOffset + 6);
-	const MewiloPackedDecodeResult result = drawMewiloPacked(tot.dataAt(nodeOffset + 7),
-		recordSize - 7, *_vm->_draw->_backSurface, x, y, sourceWidth, height,
-		_profile.packedOutputScaleX);
+	const MewiloPackedDecodeResult result =
+		drawMewiloPacked(tot.dataAt(nodeOffset + 7), recordSize - 7, *_vm->_draw->_backSurface, x,
+			y, sourceWidth, height, _profile.packedOutputScaleX);
 	if (!result.complete)
 		renderFailure("incomplete inline image", nodeOffset);
 	// Native decoding (including persistent Atari scratch writes) comes first.
@@ -195,7 +209,8 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 	}
 
 	const uint16 descriptorSize = tot.uint16BEAt(nodeOffset + 1);
-	const int16 x = tot.byteAt(nodeOffset + 3) * _profile.packedPixelsPerCell * _profile.packedOutputScaleX;
+	const int16 x =
+		tot.byteAt(nodeOffset + 3) * _profile.packedPixelsPerCell * _profile.packedOutputScaleX;
 	const int16 y = tot.byteAt(nodeOffset + 4);
 	const uint16 sourceWidth = tot.byteAt(nodeOffset + 5) * _profile.packedPixelsPerCell;
 	const uint16 outputWidth = sourceWidth * _profile.packedOutputScaleX;
@@ -210,7 +225,8 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 		return;
 	}
 	if (descriptorSize != framedSize)
-		warning("Mewilo: I00 size mismatch at 0x%04X (%u != %u)", nodeOffset, descriptorSize, framedSize);
+		warning("Mewilo: I00 size mismatch at 0x%04X (%u != %u)", nodeOffset, descriptorSize,
+			framedSize);
 	debugC(4, kDebugGraphics, "Mewilo: draw %s.I00[%u] at %d,%d (%ux%u, %u payload bytes)",
 		_moduleStem.c_str(), recordIndex, x, y, outputWidth, height, payloadSize);
 
@@ -230,9 +246,8 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 		decodePayload = _i00Scratch.data();
 		decodeSize = _i00Scratch.size();
 	}
-	const MewiloPackedDecodeResult result = drawMewiloPacked(decodePayload,
-		decodeSize, *_vm->_draw->_backSurface, x, y, sourceWidth, height,
-		_profile.packedOutputScaleX);
+	const MewiloPackedDecodeResult result = drawMewiloPacked(decodePayload, decodeSize,
+		*_vm->_draw->_backSurface, x, y, sourceWidth, height, _profile.packedOutputScaleX);
 	if (!result.complete)
 		renderFailure("incomplete external image", nodeOffset);
 	// Native decoding (including persistent Atari scratch writes) comes first.
@@ -293,7 +308,7 @@ void PreGob_Mewilo::drawScore(uint value, int16 x, int16 y, byte color) {
 		return;
 	}
 	value = MIN<uint>(99, value);
-	const byte digits[2] = { (byte)('0' + value / 10), (byte)('0' + value % 10) };
+	const byte digits[2] = {(byte)('0' + value / 10), (byte)('0' + value % 10)};
 	drawByteString(digits, 2, x, y, color, 8);
 	markDirty(x, y, 16, 8);
 }
@@ -309,17 +324,20 @@ void PreGob_Mewilo::installCrossCursor() {
 	setCursor(*_crossCursor, 7, 7);
 }
 
-void PreGob_Mewilo::tracePresentationDraw(const char *kind, uint16 site, const Common::Rect &region) {
-	debugC(4, kDebugGameFlow, "MEWILO_PRESENT draw module=%s site=%04X kind=%s t=%u frame=%u rect=%d,%d,%d,%d",
-		_moduleStem.c_str(), site, kind, activeMillis(), _presentation.frame(),
-		region.left, region.top, region.right, region.bottom);
+void PreGob_Mewilo::tracePresentationDraw(
+	const char *kind, uint16 site, const Common::Rect &region) {
+	debugC(4, kDebugGameFlow,
+		"MEWILO_PRESENT draw module=%s site=%04X kind=%s t=%u frame=%u rect=%d,%d,%d,%d",
+		_moduleStem.c_str(), site, kind, activeMillis(), _presentation.frame(), region.left,
+		region.top, region.right, region.bottom);
 }
 
 void PreGob_Mewilo::presentFrame() {
 	if (shouldQuit() || hasError())
 		return;
 	const SurfacePtr &surface = _vm->_draw->_backSurface;
-	if (!surface || surface->getWidth() != 320 || surface->getHeight() != 200 || surface->getBPP() != 1) {
+	if (!surface || surface->getWidth() != 320 || surface->getHeight() != 200 ||
+		surface->getBPP() != 1) {
 		renderFailure("invalid presentation surface", 0);
 		return;
 	}
@@ -327,10 +345,12 @@ void PreGob_Mewilo::presentFrame() {
 	_vm->_video->retrace();
 	if (_presentation.pending()) {
 		Common::Rect changed;
-		const bool different = _presentation.submitted(surface->getData(), 320, activeMillis(), changed);
-		debugC(4, kDebugGameFlow, "MEWILO_PRESENT submit module=%s t=%u frame=%u changed=%u rect=%d,%d,%d,%d",
-			_moduleStem.c_str(), activeMillis(), _presentation.frame(), different,
-			changed.left, changed.top, changed.right, changed.bottom);
+		const bool different =
+			_presentation.submitted(surface->getData(), 320, activeMillis(), changed);
+		debugC(4, kDebugGameFlow,
+			"MEWILO_PRESENT submit module=%s t=%u frame=%u changed=%u rect=%d,%d,%d,%d",
+			_moduleStem.c_str(), activeMillis(), _presentation.frame(), different, changed.left,
+			changed.top, changed.right, changed.bottom);
 	}
 }
 

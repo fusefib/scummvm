@@ -20,13 +20,24 @@
 
 #ifndef GOB_PREGOB_MEWILO_OPTIONS_H
 #define GOB_PREGOB_MEWILO_OPTIONS_H
+
 #include "gob/pregob/mewilo/platform.h"
 #include "gob/pregob/mewilo/translation.h"
-namespace GUI { class GuiObject; class OptionsContainerWidget; }
-namespace Gob { namespace Mewilo {
+
+namespace GUI {
+class GuiObject;
+class OptionsContainerWidget;
+} // End of namespace GUI
+
+namespace Gob {
+namespace Mewilo {
+
 MewiloOutputMode mewiloOutputMode(const Common::String &domain = Common::String());
 MewiloPlatform mewiloPresentationPlatform(Common::Platform detected, bool thomsonTO);
-GUI::OptionsContainerWidget *createMewiloOptions(GUI::GuiObject *boss,
-	const Common::String &name, const Common::String &target);
-} }
-#endif
+GUI::OptionsContainerWidget *createMewiloOptions(
+	GUI::GuiObject *boss, const Common::String &name, const Common::String &target);
+
+} // End of namespace Mewilo
+} // End of namespace Gob
+
+#endif // GOB_PREGOB_MEWILO_OPTIONS_H

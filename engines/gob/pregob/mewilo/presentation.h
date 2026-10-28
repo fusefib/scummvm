@@ -21,8 +21,9 @@
 #ifndef GOB_PREGOB_MEWILO_PRESENTATION_H
 #define GOB_PREGOB_MEWILO_PRESENTATION_H
 
-#include "common/rect.h"
 #include "common/language.h"
+#include "common/rect.h"
+
 #include "gob/pregob/mewilo/platform.h"
 
 namespace Gob {
@@ -31,9 +32,9 @@ namespace Mewilo {
 class MewiloTotData;
 
 enum MewiloTimeAnchor {
-	kMewiloElapsedWait,    ///< Budget begins on entering the delay instruction.
-	kMewiloVisibleHold,    ///< Minimum exposure of the specified output region.
-	kMewiloStepBudget      ///< Decode, composition and already elapsed work count.
+	kMewiloElapsedWait, ///< Budget begins on entering the delay instruction.
+	kMewiloVisibleHold, ///< Minimum exposure of the specified output region.
+	kMewiloStepBudget   ///< Decode, composition and already elapsed work count.
 };
 
 struct MewiloTimingPlan {
@@ -44,17 +45,15 @@ struct MewiloTimingPlan {
 	Common::Rect exposureRegion; ///< Optional separate image floor under dialogue.
 	const char *rule;
 	bool calibrated;
-	uint16 textNode; ///< Nonzero only for a reading-time floor; lets the host use displayed language.
+	uint16 textNode; ///< Reading floor uses the displayed language when nonzero.
 	MewiloTimingPlan();
 };
 
-// Zero is input, never a timing request. Atari remains an explicitly labelled
-// estimate; CPC uses the nominal millisecond argument of its Pascal delay.
 uint32 mewiloScaleTime(uint32 milliseconds, uint speedFactor);
 uint32 mewiloReadingMillis(const byte *text, uint length);
-MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot,
-	const char *module, Common::Language language,
-	MewiloPlatform platform, uint16 site, byte operand, bool normalize);
+// Zero remains input. Native delay estimates and optional reading floors are separate.
+MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
+	Common::Language language, MewiloPlatform platform, uint16 site, byte operand, bool normalize);
 
 /** Mewilo-only presentation clock, not an interpreter or a frame scheduler.
  *
@@ -70,17 +69,28 @@ public:
 	void beginStep(uint32 activeTime);
 	void finishStep();
 	void dirty(const Common::Rect &region);
+
 	bool pending() const { return !_dirty.isEmpty(); }
+
 	// Called AFTER the back buffer has actually been submitted to the backend.
 	bool submitted(const byte *pixels, uint pitch, uint32 activeTime, Common::Rect &changed);
 	uint32 visibleAge(const Common::Rect &region, uint32 activeTime) const;
 	uint32 stepAge(uint32 activeTime) const;
+
 	uint32 frame() const { return _frame; }
-	uint32 waitRemaining(const MewiloTimingPlan &plan, uint speed, uint32 waitStart, uint32 activeTime) const;
+
+	uint32 waitRemaining(
+		const MewiloTimingPlan &plan, uint speed, uint32 waitStart, uint32 activeTime) const;
 	static uint32 remaining(uint32 budget, uint32 elapsed);
+
 private:
 	enum { kTileSize = 8, kColumns = 40, kRows = 25, kTiles = kColumns * kRows };
-	struct Tile { uint32 since; bool known; };
+
+	struct Tile {
+		uint32 since;
+		bool known;
+	};
+
 	byte _pixels[320 * 200]; ///< Last submitted image, not another render buffer.
 	Tile _tiles[kTiles];
 	Common::Rect _dirty;
@@ -88,7 +98,7 @@ private:
 	bool _stepActive;
 };
 
-} // namespace Mewilo
-} // namespace Gob
+} // End of namespace Mewilo
+} // End of namespace Gob
 
-#endif
+#endif // GOB_PREGOB_MEWILO_PRESENTATION_H

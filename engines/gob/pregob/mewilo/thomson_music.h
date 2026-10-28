@@ -39,6 +39,7 @@ struct MewiloThomsonNote {
 struct MewiloThomsonDacWrite {
 	uint32 cycle;
 	byte level;
+
 	MewiloThomsonDacWrite(uint32 c, byte v) : cycle(c), level(v) {}
 };
 
@@ -46,6 +47,7 @@ struct MewiloThomsonNoteTrace {
 	Common::Array<MewiloThomsonDacWrite> writes;
 	uint32 cycles;
 	byte phase;
+
 	MewiloThomsonNoteTrace() : cycles(0), phase(0) {}
 };
 
@@ -69,4 +71,4 @@ bool renderMewiloThomsonMusic(const Common::Array<MewiloThomsonNote> &notes,
 } // End of namespace Mewilo
 } // End of namespace Gob
 
-#endif
+#endif // GOB_PREGOB_MEWILO_THOMSON_MUSIC_H

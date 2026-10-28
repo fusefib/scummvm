@@ -47,7 +47,7 @@ enum MewiloInputKey {
 struct MewiloInputEvent {
 	int16 x;
 	int16 y;
-	uint16 key;       ///< printable internal byte or MewiloInputKey
+	uint16 key; ///< printable internal byte or MewiloInputKey
 	uint8 mouseButtons;
 
 	MewiloInputEvent() : x(0), y(0), key(kMewiloKeyNone), mouseButtons(0) {}
@@ -90,13 +90,23 @@ public:
 	virtual bool editTextField(const MewiloTextField &field, Common::Array<byte> &text) = 0;
 	virtual void showRejectMessage(const byte *text, uint length) = 0;
 	virtual bool translatedAnswer(const MewiloTotData &, uint16, byte,
-		const Common::Array<byte> &, bool &handled) const { handled = false; return false; }
+		const Common::Array<byte> &, bool &handled) const {
+		handled = false;
+		return false;
+	}
 	virtual void showRejectMessageAt(const MewiloTotData &, uint16, const byte *text, uint length) { showRejectMessage(text, length); }
 };
 
 // Continuations contain script offsets, never native pointers or C++ frames.
 struct MewiloExecFrame {
-	enum Kind { kTarget, kSequence, kMouse, kNumbered, kContinue };
+	enum Kind {
+		kTarget,
+		kSequence,
+		kMouse,
+		kNumbered,
+		kContinue
+	};
+
 	byte kind;
 	uint16 offset;
 	uint16 index;

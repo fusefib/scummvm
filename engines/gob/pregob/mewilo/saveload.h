@@ -21,8 +21,9 @@
 #ifndef GOB_PREGOB_MEWILO_SAVELOAD_H
 #define GOB_PREGOB_MEWILO_SAVELOAD_H
 
-#include "common/stream.h"
 #include "common/str.h"
+#include "common/stream.h"
+
 #include "gob/pregob/mewilo/executor.h"
 #include "gob/pregob/mewilo/script_patches.h"
 
@@ -30,38 +31,47 @@ namespace Gob {
 namespace Mewilo {
 
 struct MewiloSavedRegion {
-	int16 x, y;
-	uint16 width, height;
+	int16 x;
+	int16 y;
+	uint16 width;
+	uint16 height;
 	Common::Array<byte> pixels;
+
 	MewiloSavedRegion() : x(0), y(0), width(0), height(0) {}
 };
 
-/** One forward-only wire format; explicit platform and resource-set identity.
- * No serialized C++ layout, filenames supplied by the save, or raw pointers.
- */
+/** Current MEWS state, including its platform and complete resource identity. */
 struct MewiloSaveState {
-	byte platform, language, module; // language: 0 French, 1 German; module: indices into intro,map,1..5,7,8; intro allowed at explicit continue prompts
-	bool exactImages, cursorVisible;
-	uint32 policy, randomSeed;
+	byte platform;
+	byte language; ///< 0: French, 1: German.
+	byte module;   ///< Index into intro, map, 1..5, 7, 8.
+	bool exactImages;
+	bool cursorVisible;
+	uint32 policy;
+	uint32 randomSeed;
 	uint16 recipeRevision;
 	byte releaseMd5[16];
-	char sourceMd5[33], effectiveMd5[33];
-	uint32 sourceSize, effectiveSize;
+	char sourceMd5[33];
+	char effectiveMd5[33];
+	uint32 sourceSize;
+	uint32 effectiveSize;
 	MewiloExecState executor;
 	Common::Array<byte> framebuffer; // 320 x 200 indexed pixels; destination palette remains native
 	Common::Array<byte> scratch;     // native Atari persistent packed-image scratch, or empty
 	Common::Array<MewiloSavedRegion> regions;
+
 	MewiloSaveState();
 };
 
-/** Run-wide identity, computed from all nine effective scripts, banks and font.
- * These reports describe resident/prepared bytes, never a later substitute.
+/** Session identity from all nine prepared scripts, banks, font and replacements.
+ * Resource reopening must not relabel bytes already loaded by the host.
  */
 struct MewiloReleaseIdentity {
 	byte digest[16];
 	MewiloScriptPatchReport scripts[9]; // intro, map, 1..5,7,8
 	byte banks[9][16];
 	bool exactImages;
+
 	MewiloReleaseIdentity();
 };
 
@@ -71,6 +81,7 @@ bool decodeMewiloSave(Common::SeekableReadStream &stream, MewiloSaveState &state
 bool mewiloSaveCompatible(const MewiloSaveState &state, MewiloPlatform platform,
 	byte language, uint32 policy, const MewiloReleaseIdentity &release, Common::String &reason);
 
-} // namespace Mewilo
-} // namespace Gob
-#endif
+} // End of namespace Mewilo
+} // End of namespace Gob
+
+#endif // GOB_PREGOB_MEWILO_SAVELOAD_H

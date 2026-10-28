@@ -18,35 +18,43 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/system.h"
-#include "common/memstream.h"
+#include "gob/pregob/mewilo/mewilo.h"
+
 #include "common/config-manager.h"
+#include "common/memstream.h"
+#include "common/system.h"
 #include "common/textconsole.h"
 
 #include "gob/dataio.h"
 #include "gob/gob.h"
-#include "gob/util.h"
-#include "gob/sound/soundmixer.h"
-#include "gob/pregob/mewilo/mewilo.h"
 #include "gob/pregob/mewilo/options.h"
+#include "gob/sound/soundmixer.h"
+#include "gob/util.h"
 
 namespace Gob {
 namespace Mewilo {
 
 static const uint32 kExternalScratchSize = 32000;
 
-PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : PreGob(vm),
+PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) :
+	PreGob(vm),
 	_profile(getMewiloPlatformProfile(mewiloPresentationPlatform(vm->getPlatform(), thomsonTO))),
-	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false), _executor(*this),
-	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
-	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false),
-	_normalizeTiming(ConfMan.hasKey("mewilo_presentation_timing") && ConfMan.getBool("mewilo_presentation_timing")),
-	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_script_fixes") || ConfMan.getBool("mewilo_script_fixes") ? kMewiloPatchGermanText | kMewiloPatchHenProtection : 0),
-	_saveReady(false), _startupLoad(false), _pendingRestore(nullptr), _effectToneUntil(0), _outputMode(mewiloOutputMode()) {
+	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false),
+	_executor(*this), _tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
+	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0),
+	_hostFailed(false), _normalizeTiming(ConfMan.hasKey("mewilo_presentation_timing") &&
+		ConfMan.getBool("mewilo_presentation_timing")),
+	_scriptPatchPolicy(
+		!ConfMan.hasKey("mewilo_script_fixes") || ConfMan.getBool("mewilo_script_fixes")
+			? kMewiloPatchGermanText | kMewiloPatchHenProtection
+			: 0),
+	_saveReady(false), _startupLoad(false), _pendingRestore(nullptr), _effectToneUntil(0),
+	_outputMode(mewiloOutputMode()) {
 	memset(_fontMd5, 0, sizeof(_fontMd5));
 	_effectToneUntil = activeMillis();
 	// Freeze the optional enhancement independently of the known corrections.
-	if (ConfMan.hasKey("mewilo_require_cece_answer") && ConfMan.getBool("mewilo_require_cece_answer"))
+	if (ConfMan.hasKey("mewilo_require_cece_answer") &&
+		ConfMan.getBool("mewilo_require_cece_answer"))
 		_scriptPatchPolicy |= kMewiloPatchRequireCeceAnswer;
 	_music = new SoundMixer(*g_system->getMixer(), Audio::Mixer::kMusicSoundType);
 	if (_profile.persistentI00Scratch) {
@@ -165,13 +173,16 @@ bool PreGob_Mewilo::initResources() {
 		selectSampleAudio();
 		return true;
 	}
-	if (_profile.platform != kMewiloPlatformThomsonTO) return false;
-	if (!_thomsonDisk.empty()) return true; // one immutable media snapshot per session
+	if (_profile.platform != kMewiloPlatformThomsonTO)
+		return false;
+	if (!_thomsonDisk.empty())
+		return true; // one immutable media snapshot per session
 	Common::SeekableReadStream *disk = _vm->_dataIO->getFile("mewilo.fd");
 	Common::String reason;
 	const bool ok = disk && _thomsonDisk.load(*disk, reason);
 	delete disk;
-	if (!ok) warning("Mewilo: cannot open mewilo.fd (%s)", reason.c_str());
+	if (!ok)
+		warning("Mewilo: cannot open mewilo.fd (%s)", reason.c_str());
 	return ok;
 }
 
@@ -180,7 +191,8 @@ Common::SeekableReadStream *PreGob_Mewilo::openResource(const Common::String &na
 	if (_useThomsonDisk)
 		return _thomsonDisk.openFile(name);
 	Common::SeekableReadStream *stream = _vm->_dataIO->getFile(name);
-	return _profile.platform == kMewiloPlatformAmstradCPC ? normalizeMewiloCpcResource(stream) : stream;
+	return _profile.platform == kMewiloPlatformAmstradCPC ? normalizeMewiloCpcResource(stream)
+		: stream;
 }
 
 bool PreGob_Mewilo::loadFont() {
@@ -208,8 +220,8 @@ bool PreGob_Mewilo::prepareModule(const Common::String &stem, PreparedModule &ou
 	// Semantic corrections prepare a private copy of normalized resident bytes.
 	// Presentation recipes use local guards separately from these fingerprints.
 	Common::Array<byte> script;
-	const bool ok = prepareMewiloScript(*stream, upper.c_str(), _profile.platform,
-		_vm->_language, _scriptPatchPolicy, script, out.scriptPatchReport);
+	const bool ok = prepareMewiloScript(*stream, upper.c_str(), _profile.platform, _vm->_language,
+		_scriptPatchPolicy, script, out.scriptPatchReport);
 	delete stream;
 	if (!ok)
 		return false;
@@ -224,7 +236,8 @@ bool PreGob_Mewilo::prepareModule(const Common::String &stem, PreparedModule &ou
 		const int index = mewiloModuleIndex(upper, _profile.modulePrefix);
 		Common::String reason;
 		if (index < 0 || !_replacements.validateModule(*out.tot, index, reason)) {
-			warning("Mewilo: incompatible output replacements for %s (%s)", upper.c_str(), reason.c_str());
+			warning("Mewilo: incompatible output replacements for %s (%s)", upper.c_str(),
+				reason.c_str());
 			return false;
 		}
 	}
@@ -239,7 +252,8 @@ bool PreGob_Mewilo::prepareModule(const Common::String &stem, PreparedModule &ou
 	}
 	if (out.i00 && !out.i00->computeMD5(out.bankMd5))
 		return false;
-	if (stats.requiredI00Records && (!out.i00 || out.i00->recordCount() < stats.requiredI00Records)) {
+	if (stats.requiredI00Records &&
+		(!out.i00 || out.i00->recordCount() < stats.requiredI00Records)) {
 		warning("Mewilo: %s.TOT requires unavailable I00 records", upper.c_str());
 		return false;
 	}
@@ -296,8 +310,10 @@ bool PreGob_Mewilo::loadModule(const Common::String &stem) {
 			return false;
 		const MewiloScriptPatchReport &expected = _releaseIdentity.scripts[index];
 		const MewiloScriptPatchReport &actual = prepared.scriptPatchReport;
-		if (strcmp(expected.sourceMd5, actual.sourceMd5) || strcmp(expected.effectiveMd5, actual.effectiveMd5) ||
-			expected.sourceSize != actual.sourceSize || expected.effectiveSize != actual.effectiveSize)
+		if (strcmp(expected.sourceMd5, actual.sourceMd5) ||
+			strcmp(expected.effectiveMd5, actual.effectiveMd5) ||
+			expected.sourceSize != actual.sourceSize ||
+			expected.effectiveSize != actual.effectiveSize)
 			return false;
 	}
 	commitModule(prepared);
@@ -313,15 +329,35 @@ bool PreGob_Mewilo::executeModule(const Common::String &stem) {
 Common::String PreGob_Mewilo::selectorToModule(uint16 selector) const {
 	int module = -1;
 	switch (selector) {
-	case 0: case 1: case 2: case 3: module = 0; break;
-	case 4: module = 1; break;
-	case 5: module = 2; break;
-	case 6: module = 4; break;
-	case 7: module = 7; break;
-	case 8: module = 8; break;
-	case 9: module = 5; break;
-	case 10: module = 3; break;
-	default: return Common::String();
+	case 0:
+	case 1:
+	case 2:
+	case 3:
+		module = 0;
+		break;
+	case 4:
+		module = 1;
+		break;
+	case 5:
+		module = 2;
+		break;
+	case 6:
+		module = 4;
+		break;
+	case 7:
+		module = 7;
+		break;
+	case 8:
+		module = 8;
+		break;
+	case 9:
+		module = 5;
+		break;
+	case 10:
+		module = 3;
+		break;
+	default:
+		return Common::String();
 	}
 	return Common::String::format("%s%d", _profile.modulePrefix, module);
 }

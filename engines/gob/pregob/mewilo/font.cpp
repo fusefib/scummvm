@@ -18,11 +18,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "gob/pregob/mewilo/font.h"
 #include "common/endian.h"
 #include "common/md5.h"
 #include "common/memstream.h"
 #include "gob/surface.h"
-#include "gob/pregob/mewilo/font.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -57,7 +57,8 @@ bool MewiloFont::load(Common::SeekableReadStream &stream, bool thomsonWrapper) {
 }
 
 bool MewiloFont::replaceGlyph(uint code, const byte *rows, uint length) {
-	if (!valid() || code >= 128 || !rows || length != 8) return false;
+	if (!valid() || code >= 128 || !rows || length != 8)
+		return false;
 	memcpy(_data.data() + code * 8, rows, 8);
 	return true;
 }
@@ -82,7 +83,8 @@ void MewiloFont::drawChar(Surface &dest, byte c, int16 x, int16 y, byte color) c
 }
 
 bool MewiloFont::computeMD5(byte digest[16]) const {
-	if (!valid()) return false;
+	if (!valid())
+		return false;
 	Common::MemoryReadStream owned(_data.data(), _data.size());
 	return Common::computeStreamMD5(owned, digest);
 }

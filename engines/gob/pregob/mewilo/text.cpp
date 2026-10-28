@@ -37,7 +37,7 @@ uint16 countMewiloVisibleTextCells(const Common::Array<byte> &line) {
 }
 
 bool extractMewiloTextLine(const byte *source, uint32 sourceSize,
-		uint16 visibleWidth, MewiloTextLine &line) {
+	uint16 visibleWidth, MewiloTextLine &line) {
 	line.bytes.clear();
 	line.consumed = 0;
 	line.endOfText = false;

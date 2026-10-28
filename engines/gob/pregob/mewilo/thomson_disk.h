@@ -39,7 +39,9 @@ class MewiloThomsonDisk {
 public:
 	struct File {
 		Common::String name;
-		byte type, format, firstBlock;
+		byte type;
+		byte format;
+		byte firstBlock;
 		uint16 finalSectorBytes;
 		Common::Array<byte> blocks;
 		Common::Array<byte> data;
@@ -50,6 +52,7 @@ public:
 	bool empty() const { return _files.empty(); }
 	uint fileCount() const { return _files.size(); }
 	const File &file(uint index) const { return _files[index]; }
+
 	/** Caller owns the stream. It owns a copy and outlives clear()/destruction. */
 	Common::SeekableReadStream *openFile(const Common::String &name) const;
 
@@ -57,6 +60,7 @@ private:
 	Common::Array<File> _files;
 };
 
-} // namespace Mewilo
-} // namespace Gob
-#endif
+} // End of namespace Mewilo
+} // End of namespace Gob
+
+#endif // GOB_PREGOB_MEWILO_THOMSON_DISK_H
