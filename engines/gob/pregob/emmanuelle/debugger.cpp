@@ -194,12 +194,24 @@ bool GobConsole::cmd_emmaVars(int argc, const char **argv) {
 	if (argc == 1)
 		debugPrintf("Showing known used slots and nonzero values; use emmaVars 0 %u for all slots.\n",
 			(uint)state.variables.size());
+	uint columns = 0;
 	for (uint i = (uint)start; i < end; ++i) {
 		// Keep unexpected nonzero state visible even outside the known ranges.
 		if (argc == 1 && !emmanuelleVariableUsed(i) && state.variables[i] == 0)
 			continue;
-		debugPrintf("v[%u]=%u\n", i, (uint)state.variables[i]);
+		if (argc == 1) {
+			const Common::String cell = Common::String::format("v[%u]=%u", i, (uint)state.variables[i]);
+			debugPrintf("%-13s", cell.c_str());
+			if (++columns == 6) {
+				debugPrintf("\n");
+				columns = 0;
+			}
+		} else {
+			debugPrintf("v[%u]=%u\n", i, (uint)state.variables[i]);
+		}
 	}
+	if (columns)
+		debugPrintf("\n");
 	_emmanuellePreviousVariables = state.variables;
 	return true;
 }
