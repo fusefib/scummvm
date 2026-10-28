@@ -19,6 +19,8 @@
  */
 
 #include "common/endian.h"
+#include "common/md5.h"
+#include "common/memstream.h"
 #include "gob/surface.h"
 #include "gob/pregob/mewilo/font.h"
 
@@ -71,6 +73,12 @@ void MewiloFont::drawChar(Surface &dest, byte c, int16 x, int16 y, byte color) c
 				dest.putPixel(px, py, color);
 		}
 	}
+}
+
+bool MewiloFont::computeMD5(byte digest[16]) const {
+	if (!valid()) return false;
+	Common::MemoryReadStream owned(_data.data(), _data.size());
+	return Common::computeStreamMD5(owned, digest);
 }
 
 } // End of namespace Mewilo

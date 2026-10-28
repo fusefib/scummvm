@@ -58,10 +58,10 @@ void PreGob_Mewilo::waitMilliseconds(uint32 durationMs) {
 	// Active time excludes modal pauses, just as mixer playback does. Rendering
 	// and event processing still count, and subtraction is wrap-safe.
 	const uint32 start = activeMillis();
-	while (!shouldQuit() && !hasError()) {
+	while (!shouldQuit() && !hasError() && !_pendingRestore) {
 		serviceEvents();
 		const uint32 elapsed = activeMillis() - start;
-		if (shouldQuit() || hasError() || elapsed >= durationMs)
+		if (shouldQuit() || hasError() || _pendingRestore || elapsed >= durationMs)
 			break;
 		g_system->delayMillis(MIN<uint32>(10, durationMs - elapsed));
 	}
@@ -74,7 +74,7 @@ bool PreGob_Mewilo::waitContinueInput() {
 
 bool PreGob_Mewilo::waitInputRelease() {
 	int16 x, y; MouseButtons buttons;
-	while (!shouldQuit() && !hasError()) {
+	while (!shouldQuit() && !hasError() && !_pendingRestore) {
 		_vm->_util->getMouseState(&x, &y, &buttons);
 		if (buttons == kMouseButtonsNone) return true;
 		serviceEvents();
@@ -103,14 +103,14 @@ void PreGob_Mewilo::waitPresentation(const MewiloTimingPlan &plan, uint16 site) 
 	// No change to native audio duration, input ownership or script state.
 	presentFrame();
 	uint32 elapsed = 0;
-	while (!shouldQuit() && !hasError()) {
+	while (!shouldQuit() && !hasError() && !_pendingRestore) {
 		const uint32 now = activeMillis();
 		elapsed = plan.anchor == kMewiloVisibleHold ? _presentation.visibleAge(plan.region, now) :
 			plan.anchor == kMewiloStepBudget ? _presentation.stepAge(now) : now - start;
 		const uint32 remaining = _presentation.waitRemaining(plan, MAX<int16>(1, _vm->_global->_speedFactor), start, now);
 		if (!remaining) break;
 		serviceEvents();
-		if (shouldQuit() || hasError()) break;
+		if (shouldQuit() || hasError() || _pendingRestore) break;
 		// Re-evaluate after event/presentation work (including a modal pause).
 		const uint32 after = activeMillis();
 		g_system->delayMillis(MIN<uint32>(10, _presentation.waitRemaining(plan,
@@ -120,7 +120,7 @@ void PreGob_Mewilo::waitPresentation(const MewiloTimingPlan &plan, uint16 site) 
 		_moduleStem.c_str(), site, plan.rule, (uint)plan.anchor, plan.calibrated, budget, elapsed,
 		mewiloScaleTime(plan.minimumExposure, MAX<int16>(1, _vm->_global->_speedFactor)),
 		_presentation.visibleAge(plan.exposureRegion.isEmpty() ? plan.region : plan.exposureRegion, activeMillis()),
-		shouldQuit() || hasError(), activeMillis(), _presentation.frame(), plan.region.left, plan.region.top, plan.region.right, plan.region.bottom);
+		shouldQuit() || hasError() || _pendingRestore, activeMillis(), _presentation.frame(), plan.region.left, plan.region.top, plan.region.right, plan.region.bottom);
 	_presentation.finishStep();
 }
 

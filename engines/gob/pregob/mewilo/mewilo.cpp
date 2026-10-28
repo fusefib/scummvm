@@ -40,7 +40,10 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : Pr
 	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false),
 	_normalizeTiming(ConfMan.hasKey("mewilo_presentation_timing") && ConfMan.getBool("mewilo_presentation_timing")),
-	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_script_fixes") || ConfMan.getBool("mewilo_script_fixes") ? kMewiloPatchGermanText | kMewiloPatchHenProtection : 0) {
+	_scriptPatchPolicy(!ConfMan.hasKey("mewilo_script_fixes") || ConfMan.getBool("mewilo_script_fixes") ? kMewiloPatchGermanText | kMewiloPatchHenProtection : 0),
+	_saveReady(false), _startupLoad(false), _pendingRestore(nullptr), _effectToneUntil(0) {
+	memset(_fontMd5, 0, sizeof(_fontMd5));
+	_effectToneUntil = activeMillis();
 	// Freeze the optional enhancement independently of the known corrections.
 	if (ConfMan.hasKey("mewilo_require_cece_answer") && ConfMan.getBool("mewilo_require_cece_answer"))
 		_scriptPatchPolicy |= kMewiloPatchRequireCeceAnswer;
@@ -52,6 +55,7 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : Pr
 }
 
 PreGob_Mewilo::~PreGob_Mewilo() {
+	discardRestore();
 	stopMewiloAudio();
 	delete _music;
 	unloadModule();
@@ -75,12 +79,10 @@ void PreGob_Mewilo::run() {
 		warning("Mewilo: unable to load LETTRES.BIN");
 		return;
 	}
-	for (uint i = 0; i < 9; ++i) {
-		PreparedModule candidate;
-		if (!prepareModule(mewiloModuleStem(i, _profile.modulePrefix), candidate)) {
-			warning("Mewilo: incomplete or invalid game resources");
-			return;
-		}
+	_saveReady = buildReleaseIdentity(_releaseIdentity);
+	if (!_saveReady) {
+		warning("Mewilo: incomplete or changed game resources; startup aborted");
+		return;
 	}
 	Common::String initialModule = _vm->_startTot;
 	if (initialModule.hasSuffixIgnoreCase(".TOT"))
@@ -92,8 +94,22 @@ void PreGob_Mewilo::run() {
 	showCursor();
 	fadeIn();
 	_executor.reset();
-	bool ok = executeModule(initialModule);
+	bool ok = true;
+	if (ConfMan.hasKey("save_slot") && ConfMan.getInt("save_slot") >= 0) {
+		_startupLoad = true;
+		ok = _vm->loadGameState(ConfMan.getInt("save_slot")).getCode() == Common::kNoError;
+		_startupLoad = false;
+	} else {
+		ok = executeModule(initialModule);
+	}
 	while (!shouldQuit()) {
+		// The requesting input callback has now unwound. No old module pointer
+		// or C++ execution frame can survive the prepared-state commit.
+		if (_pendingRestore) {
+			commitRestore();
+			ok = _executor.resume();
+			continue;
+		}
 		if (!ok) {
 			warning("Mewilo: module execution failed");
 			break;
@@ -123,6 +139,7 @@ void PreGob_Mewilo::run() {
 
 void PreGob_Mewilo::resetForRestart() {
 	_hostFailed = false;
+	discardRestore();
 	_presentation.reset();
 	stopMewiloAudio();
 	_sample.free();
@@ -167,10 +184,11 @@ bool PreGob_Mewilo::loadFont() {
 	Common::SeekableReadStream *stream = openResource("LETTRES.BIN");
 	const bool ok = stream && _font.load(*stream, _profile.platform == kMewiloPlatformThomsonTO);
 	delete stream;
-	return ok;
+	return ok && _font.computeMD5(_fontMd5);
 }
 
 PreGob_Mewilo::PreparedModule::PreparedModule() : tot(nullptr), i00(nullptr) {
+	memset(bankMd5, 0, sizeof(bankMd5));
 }
 
 PreGob_Mewilo::PreparedModule::~PreparedModule() {
@@ -208,6 +226,8 @@ bool PreGob_Mewilo::prepareModule(const Common::String &stem, PreparedModule &ou
 			out.i00 = nullptr;
 		}
 	}
+	if (out.i00 && !out.i00->computeMD5(out.bankMd5))
+		return false;
 	if (stats.requiredI00Records && (!out.i00 || out.i00->recordCount() < stats.requiredI00Records)) {
 		warning("Mewilo: %s.TOT requires unavailable I00 records", upper.c_str());
 		return false;
@@ -231,6 +251,7 @@ bool PreGob_Mewilo::prepareModule(const Common::String &stem, PreparedModule &ou
 }
 
 void PreGob_Mewilo::unloadModule() {
+	_presentation.reset();
 	_executor.detachModule();
 	_acceptMousePresses = false;
 	_mousePresses.clear();
@@ -258,6 +279,16 @@ bool PreGob_Mewilo::loadModule(const Common::String &stem) {
 	PreparedModule prepared;
 	if (!prepareModule(stem, prepared))
 		return false;
+	if (_saveReady) {
+		const int index = mewiloModuleIndex(prepared.stem, _profile.modulePrefix);
+		if (index < 0 || memcmp(prepared.bankMd5, _releaseIdentity.banks[index], 16))
+			return false;
+		const MewiloScriptPatchReport &expected = _releaseIdentity.scripts[index];
+		const MewiloScriptPatchReport &actual = prepared.scriptPatchReport;
+		if (strcmp(expected.sourceMd5, actual.sourceMd5) || strcmp(expected.effectiveMd5, actual.effectiveMd5) ||
+			expected.sourceSize != actual.sourceSize || expected.effectiveSize != actual.effectiveSize)
+			return false;
+	}
 	commitModule(prepared);
 	return true;
 }

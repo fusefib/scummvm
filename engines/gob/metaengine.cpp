@@ -77,6 +77,10 @@ public:
 	bool hasFeature(MetaEngineFeature f) const override;
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const Gob::GOBGameDescription *desc) const override;
+	SaveStateList listSaves(const char *target) const override;
+	bool removeSaveState(const char *target, int slot) const override;
+	SaveStateDescriptor querySaveMetaInfos(const char *target, int slot) const override;
+	Common::String getSavegameFile(int saveGameIdx, const char *target = nullptr) const override;
 	Common::KeymapArray initKeymaps(const char *target) const override;
 
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
@@ -85,7 +89,44 @@ public:
 };
 
 bool GobMetaEngine::hasFeature(MetaEngineFeature f) const {
-	return false;
+	return f == kSupportsListSaves ||
+		f == kSupportsLoadingDuringStartup ||
+		f == kSupportsDeleteSave ||
+		f == kSavesSupportMetaInfo ||
+		f == kSavesSupportThumbnail ||
+		f == kSavesSupportCreationDate ||
+		f == kSavesSupportPlayTime ||
+		f == kSimpleSavesNames ||
+		f == kSavesUseExtendedFormat;
+}
+
+SaveStateList GobMetaEngine::listSaves(const char *target) const {
+	if (!target || getGameId(target) != "mewilo")
+		return SaveStateList();
+	return MetaEngine::listSaves(target);
+}
+
+bool GobMetaEngine::removeSaveState(const char *target, int slot) const {
+	return target && getGameId(target) == "mewilo" &&
+		MetaEngine::removeSaveState(target, slot);
+}
+
+SaveStateDescriptor GobMetaEngine::querySaveMetaInfos(
+		const char *target, int slot) const {
+	if (!target || getGameId(target) != "mewilo")
+		return SaveStateDescriptor();
+	return MetaEngine::querySaveMetaInfos(target, slot);
+}
+
+Common::String GobMetaEngine::getSavegameFile(int saveGameIdx,
+		const char *target) const {
+	if (target && getGameId(target) == "mewilo")
+		return MetaEngine::getSavegameFile(saveGameIdx, target);
+	if (!target)
+		target = getName();
+	return saveGameIdx == kSavegameFilePattern
+		? Common::String::format("%s.s##", target)
+		: Common::String::format("%s.s%02d", target, saveGameIdx);
 }
 
 Common::KeymapArray GobMetaEngine::initKeymaps(const char *target) const {
@@ -96,7 +137,8 @@ Common::KeymapArray GobMetaEngine::initKeymaps(const char *target) const {
 
 bool Gob::GobEngine::hasFeature(EngineFeature f) const {
 	return
-		(f == kSupportsReturnToLauncher);
+		(f == kSupportsReturnToLauncher) ||
+		(_gameType == kGameTypeMewilo && (f == kSupportsLoadingDuringRuntime || f == kSupportsSavingDuringRuntime));
 }
 
 Common::Error GobMetaEngine::createInstance(OSystem *syst, Engine **engine, const Gob::GOBGameDescription *gd) const {

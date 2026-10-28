@@ -28,6 +28,7 @@
 #include "gob/pregob/mewilo/thomson_disk.h"
 #include "gob/pregob/mewilo/presentation.h"
 #include "gob/pregob/mewilo/script_patches.h"
+#include "gob/pregob/mewilo/saveload.h"
 #include "gob/sound/sounddesc.h"
 #include "audio/mixer.h"
 #include "gob/surface.h"
@@ -44,6 +45,10 @@ public:
 	~PreGob_Mewilo() override;
 
 	void run() override;
+	bool canSaveGameState(Common::U32String *msg = nullptr) const override;
+	bool canLoadGameState(Common::U32String *msg = nullptr) const override;
+	Common::Error saveGameStream(Common::WriteStream &stream, bool isAutosave = false) const override;
+	Common::Error loadGameStream(Common::SeekableReadStream &stream) override;
 	void pauseChanged(bool paused) override;
 	void mousePressed(int16 x, int16 y, MouseButtons buttons) override;
 	bool shouldQuit() const override;
@@ -81,6 +86,7 @@ private:
 		Common::Array<byte> i01;
 		Common::String stem;
 		MewiloScriptPatchReport scriptPatchReport;
+		byte bankMd5[16];
 
 		PreparedModule();
 		~PreparedModule();
@@ -89,6 +95,13 @@ private:
 		PreparedModule &operator=(const PreparedModule &);
 	};
 
+	struct PreparedRestore;
+	bool buildReleaseIdentity(MewiloReleaseIdentity &out) const;
+	bool exportSaveState(MewiloSaveState &out) const;
+	void commitRestore();
+	void discardRestore();
+	bool audioIdle() const;
+	void playEffectTone(int16 frequency, int32 duration);
 	bool initResources();
 	bool playThomsonMusic(byte command);
 	bool playMusicPcm(const Common::Array<byte> &pcm);
@@ -151,6 +164,11 @@ private:
 	uint32 _scriptPatchPolicy;
 	MewiloScriptPatchReport _scriptPatchReport;
 	MewiloPresentation _presentation;
+	byte _fontMd5[16];
+	bool _saveReady, _startupLoad;
+	PreparedRestore *_pendingRestore;
+	uint32 _effectToneUntil;
+	MewiloReleaseIdentity _releaseIdentity;
 };
 
 } // End of namespace Mewilo

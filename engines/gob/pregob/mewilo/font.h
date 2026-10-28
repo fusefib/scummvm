@@ -36,6 +36,7 @@ public:
 	MewiloFont();
 
 	bool load(Common::SeekableReadStream &stream, bool thomsonWrapper = false);
+	bool computeMD5(byte digest[16]) const;
 	bool valid() const { return _data.size() == 1024; }
 
 	/** Draw one 8x8 direct-index glyph. Rows are stored bottom-first on disk. */

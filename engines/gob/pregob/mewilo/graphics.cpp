@@ -21,6 +21,8 @@
 #include "common/endian.h"
 #include "common/util.h"
 
+#include "common/md5.h"
+#include "common/memstream.h"
 #include "gob/surface.h"
 #include "gob/pregob/mewilo/graphics.h"
 
@@ -160,6 +162,12 @@ MewiloPackedDecodeResult drawMewiloPacked(const byte *payload, uint32 payloadSiz
 	result.bytesConsumed = p;
 	result.complete = result.pixelsWritten == targetPixels;
 	return result;
+}
+
+bool MewiloI00Bank::computeMD5(byte digest[16]) const {
+	if (!valid()) return false;
+	Common::MemoryReadStream owned(_data.data(), _data.size());
+	return Common::computeStreamMD5(owned, digest);
 }
 
 } // End of namespace Mewilo

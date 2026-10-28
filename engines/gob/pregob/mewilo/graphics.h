@@ -37,6 +37,7 @@ public:
 	explicit MewiloI00Bank(Common::SeekableReadStream &stream, bool cpcZeroPrefix = false);
 
 	bool load(Common::SeekableReadStream &stream, bool cpcZeroPrefix = false);
+	bool computeMD5(byte digest[16]) const;
 	bool valid() const { return !_records.empty(); }
 	uint recordCount() const { return _records.size(); }
 	uint32 tailOffset() const { return _tailOffset; }

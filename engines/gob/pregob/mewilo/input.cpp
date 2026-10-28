@@ -69,7 +69,7 @@ bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 		_moduleStem.c_str(), activeMillis(), _presentation.frame());
 	event = MewiloInputEvent();
 	_acceptMousePresses = true;
-	while (!shouldQuit() && !hasError()) {
+	while (!shouldQuit() && !hasError() && !_pendingRestore) {
 		int16 mouseX = 0, mouseY = 0;
 		MouseButtons buttons = kMouseButtonsNone;
 		int16 key = 0;
@@ -83,7 +83,7 @@ bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 			_vm->_util->getMouseState(&mouseX, &mouseY, &buttons);
 			key = _vm->_util->checkKey();
 		}
-		if (shouldQuit())
+		if (shouldQuit() || _pendingRestore)
 			break;
 		// Held-button state is not a press event: it both loses short clicks
 		// and can repeat held ones. The shared event owner supplied each DOWN.
@@ -139,7 +139,7 @@ void PreGob_Mewilo::drawInputField(const MewiloTextField &field,
 bool PreGob_Mewilo::editTextField(const MewiloTextField &field, Common::Array<byte> &text) {
 	text.clear();
 	drawInputField(field, text, true);
-	while (!shouldQuit() && !hasError()) {
+	while (!shouldQuit() && !hasError() && !_pendingRestore) {
 		MewiloInputEvent event;
 		if (!waitInput(event))
 			return false;

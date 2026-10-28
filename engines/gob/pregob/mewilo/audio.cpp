@@ -156,6 +156,7 @@ void PreGob_Mewilo::playSample(byte *pcm, uint32 size, uint16 frequency,
 }
 
 void PreGob_Mewilo::stopMewiloAudio() {
+	_effectToneUntil = activeMillis();
 	g_system->getMixer()->stopHandle(_sampleHandle);
 	_vm->_sound->blasterStop(0, &_sample);
 	_vm->_sound->speakerOff();
@@ -319,7 +320,7 @@ void PreGob_Mewilo::choiceFeedback(byte value) {
 	if (_audioBackend == kMewiloAudioCpcMus) {
 		static const uint16 kPeriods[3] = { 120, 478, 239 };
 		static const int32 kLengths[3] = { 250, 350, 250 };
-		beep(mewiloCpcTonePeriodToHz(kPeriods[value]), kLengths[value]);
+		playEffectTone(mewiloCpcTonePeriodToHz(kPeriods[value]), kLengths[value]);
 		return;
 	}
 
@@ -336,7 +337,7 @@ void PreGob_Mewilo::choiceFeedback(byte value) {
 	// Native Atari feedback tones.
 	static const int16 kFrequencies[3] = { 131, 261, 521 };
 	static const int32 kLengths[3] = { 150, 100, 100 };
-	beep(kFrequencies[value], kLengths[value]);
+	playEffectTone(kFrequencies[value], kLengths[value]);
 }
 
 } // End of namespace Mewilo

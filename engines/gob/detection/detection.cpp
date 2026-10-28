@@ -76,6 +76,7 @@ public:
 	}
 
 	ADDetectedGame fallbackDetect(const FileMap &allFiles, const Common::FSList &fslist, ADDetectedGameExtraInfo **extra) const override;
+	DetectedGame toDetectedGame(const ADDetectedGame &adGame, ADDetectedGameExtraInfo *extraInfo) const override;
 
 private:
 	/**
@@ -87,7 +88,15 @@ private:
 GobMetaEngineDetection::GobMetaEngineDetection() :
 	AdvancedMetaEngineDetection(Gob::gameDescriptions, gobGames) {
 
-	_guiOptions = GUIO2(GUIO_NOLAUNCHLOAD, GAMEOPTION_TTS);
+	_guiOptions = GUIO0();
+}
+
+DetectedGame GobMetaEngineDetection::toDetectedGame(const ADDetectedGame &adGame,
+		ADDetectedGameExtraInfo *extraInfo) const {
+	DetectedGame game = AdvancedMetaEngineDetection::toDetectedGame(adGame, extraInfo);
+	if (!adGame.desc || strcmp(adGame.desc->gameId, "mewilo"))
+		game.appendGUIOptions(GUIO2(GUIO_NOLAUNCHLOAD, GAMEOPTION_TTS));
+	return game;
 }
 
 ADDetectedGame GobMetaEngineDetection::fallbackDetect(const FileMap &allFiles, const Common::FSList &fslist, ADDetectedGameExtraInfo **extra) const {

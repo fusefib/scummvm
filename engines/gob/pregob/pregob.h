@@ -29,6 +29,8 @@
 #define GOB_PREGOB_PREGOB_H
 
 #include "common/str.h"
+#include "common/error.h"
+#include "common/ustr.h"
 #include "common/array.h"
 
 #include "gob/util.h"
@@ -51,6 +53,10 @@ public:
 	virtual ~PreGob();
 
 	virtual void run() = 0;
+	virtual bool canSaveGameState(Common::U32String *msg = nullptr) const { return false; }
+	virtual bool canLoadGameState(Common::U32String *msg = nullptr) const { return false; }
+	virtual Common::Error saveGameStream(Common::WriteStream &stream, bool isAutosave = false) const { return Common::kWritingFailed; }
+	virtual Common::Error loadGameStream(Common::SeekableReadStream &stream) { return Common::kReadingFailed; }
 	/** Notify game-owned clocks at the existing engine pause boundary. */
 	virtual void pauseChanged(bool paused) {}
 	/** Retain the original mouse-down coordinates before held state changes. */
