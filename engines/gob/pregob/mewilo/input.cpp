@@ -64,6 +64,9 @@ byte PreGob_Mewilo::translateInputKey(int16 key) const {
 
 bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 	presentFrame();
+	_presentation.finishStep();
+	debugC(4, kDebugGameFlow, "MEWILO_PRESENT input module=%s t=%u frame=%u",
+		_moduleStem.c_str(), activeMillis(), _presentation.frame());
 	event = MewiloInputEvent();
 	_acceptMousePresses = true;
 	while (!shouldQuit() && !hasError()) {
@@ -173,8 +176,12 @@ void PreGob_Mewilo::showRejectMessage(const byte *text, uint length) {
 	_vm->_draw->_backSurface->fillRect(0, y, 319, 199, 0);
 	drawByteString(text, length, 0, y, 1, 8);
 	markDirty(0, y, 320, 8);
-	presentFrame();
-	waitMilliseconds(250);
+	MewiloTimingPlan plan;
+	plan.anchor = kMewiloVisibleHold;
+	plan.rule = "reject-message";
+	plan.region = Common::Rect(0, y, 320, 200);
+	plan.milliseconds = _normalizeTiming ? mewiloReadingMillis(text, length) : 250;
+	waitPresentation(plan, 0);
 }
 
 } // End of namespace Mewilo

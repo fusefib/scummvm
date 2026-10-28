@@ -42,8 +42,10 @@ void PreGob_Mewilo::markDirty(int16 x, int16 y, int16 width, int16 height) {
 	const int16 top = MAX<int16>(0, y);
 	const int16 right = MIN<int16>(319, x + width - 1);
 	const int16 bottom = MIN<int16>(199, y + height - 1);
-	if (left <= right && top <= bottom)
+	if (left <= right && top <= bottom) {
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
+		_presentation.dirty(Common::Rect(left, top, right + 1, bottom + 1));
+	}
 }
 
 void PreGob_Mewilo::drawByteString(const byte *text, uint length, int16 x, int16 y,
@@ -66,6 +68,7 @@ void PreGob_Mewilo::drawByteString(const byte *text, uint length, int16 x, int16
 }
 
 void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
+	_presentation.beginStep(activeMillis());
 	if (!tot.has(nodeOffset, 10) || !_vm->_draw->_backSurface) {
 		renderFailure("invalid text header or missing surface", nodeOffset);
 		return;
@@ -140,10 +143,12 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 	// presentation matches what was actually written to the back surface.
 	if (dirtyBottom >= top) {
 		markDirty(left, top, width, dirtyBottom - top + 1);
+		tracePresentationDraw("text", nodeOffset, Common::Rect(left, top, left + width, dirtyBottom + 1));
 	}
 }
 
 void PreGob_Mewilo::drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset) {
+	_presentation.beginStep(activeMillis());
 	if (!tot.has(nodeOffset, 7) || !_vm->_draw->_backSurface) {
 		renderFailure("invalid inline image header or missing surface", nodeOffset);
 		return;
@@ -164,9 +169,11 @@ void PreGob_Mewilo::drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset)
 	if (!result.complete)
 		renderFailure("incomplete inline image", nodeOffset);
 	markDirty(x, y, outputWidth, height);
+	tracePresentationDraw("image", nodeOffset, Common::Rect(x, y, x + outputWidth, y + height));
 }
 
 void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffset) {
+	_presentation.beginStep(activeMillis());
 	if (!tot.has(nodeOffset, 8) || !_vm->_draw->_backSurface) {
 		renderFailure("invalid external image header or missing surface", nodeOffset);
 		return;
@@ -224,6 +231,7 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 	if (!result.complete)
 		renderFailure("incomplete external image", nodeOffset);
 	markDirty(x, y, outputWidth, height);
+	tracePresentationDraw("image", nodeOffset, Common::Rect(x, y, x + outputWidth, y + height));
 }
 
 void PreGob_Mewilo::saveRect(byte xCell, byte y, byte widthCell, byte height) {
@@ -260,6 +268,7 @@ void PreGob_Mewilo::restoreRect() {
 }
 
 void PreGob_Mewilo::fillScreen(byte color) {
+	_presentation.beginStep(activeMillis());
 	if (!_vm->_draw->_backSurface) {
 		renderFailure("missing fill surface", 0);
 		return;
@@ -269,6 +278,7 @@ void PreGob_Mewilo::fillScreen(byte color) {
 }
 
 void PreGob_Mewilo::drawScore(uint value, int16 x, int16 y, byte color) {
+	_presentation.beginStep(activeMillis());
 	if (!_vm->_draw->_backSurface) {
 		renderFailure("missing score surface", 0);
 		return;
@@ -290,6 +300,12 @@ void PreGob_Mewilo::installCrossCursor() {
 	setCursor(*_crossCursor, 7, 7);
 }
 
+void PreGob_Mewilo::tracePresentationDraw(const char *kind, uint16 site, const Common::Rect &region) {
+	debugC(4, kDebugGameFlow, "MEWILO_PRESENT draw module=%s site=%04X kind=%s t=%u frame=%u rect=%d,%d,%d,%d",
+		_moduleStem.c_str(), site, kind, activeMillis(), _presentation.frame(),
+		region.left, region.top, region.right, region.bottom);
+}
+
 void PreGob_Mewilo::presentFrame() {
 	if (shouldQuit() || hasError())
 		return;
@@ -300,6 +316,13 @@ void PreGob_Mewilo::presentFrame() {
 	}
 	_vm->_draw->blitInvalidated();
 	_vm->_video->retrace();
+	if (_presentation.pending()) {
+		Common::Rect changed;
+		const bool different = _presentation.submitted(surface->getData(), 320, activeMillis(), changed);
+		debugC(4, kDebugGameFlow, "MEWILO_PRESENT submit module=%s t=%u frame=%u changed=%u rect=%d,%d,%d,%d",
+			_moduleStem.c_str(), activeMillis(), _presentation.frame(), different,
+			changed.left, changed.top, changed.right, changed.bottom);
+	}
 }
 
 } // End of namespace Mewilo

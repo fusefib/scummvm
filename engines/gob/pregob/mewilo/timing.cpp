@@ -84,16 +84,51 @@ bool PreGob_Mewilo::waitInputRelease() {
 
 void PreGob_Mewilo::waitOrDelay(byte argument) {
 	if (!argument) {
-		if (waitContinueInput())
-			waitInputRelease();
-		return;
+		if (waitContinueInput()) waitInputRelease();
+	} else {
+		MewiloTimingPlan plan;
+		plan.milliseconds = mewiloNativeDelayMillis(_profile.platform, argument, plan.calibrated);
+		waitPresentation(plan, 0);
 	}
-	// Retain the explicit Atari compatibility estimate until its CPU loop is
-	// calibrated. Other platforms must supply their own native conversion.
-	const uint speed = MAX<int16>(1, _vm->_global->_speedFactor);
-	bool calibrated;
-	const uint32 nativeMs = mewiloNativeDelayMillis(_profile.platform, argument, calibrated);
-	waitMilliseconds((nativeMs + speed - 1) / speed);
+}
+
+void PreGob_Mewilo::waitPresentation(const MewiloTimingPlan &plan, uint16 site) {
+	const uint32 start = activeMillis();
+	_presentation.beginStep(start);
+	if (plan.anchor == kMewiloVisibleHold || plan.minimumExposure)
+		_presentation.dirty(plan.region);
+	if (!plan.exposureRegion.isEmpty()) _presentation.dirty(plan.exposureRegion);
+	const uint32 budget = mewiloScaleTime(plan.milliseconds, MAX<int16>(1, _vm->_global->_speedFactor));
+	// Submit the finished composition before starting a visible-exposure clock.
+	// No change to native audio duration, input ownership or script state.
+	presentFrame();
+	uint32 elapsed = 0;
+	while (!shouldQuit() && !hasError()) {
+		const uint32 now = activeMillis();
+		elapsed = plan.anchor == kMewiloVisibleHold ? _presentation.visibleAge(plan.region, now) :
+			plan.anchor == kMewiloStepBudget ? _presentation.stepAge(now) : now - start;
+		const uint32 remaining = _presentation.waitRemaining(plan, MAX<int16>(1, _vm->_global->_speedFactor), start, now);
+		if (!remaining) break;
+		serviceEvents();
+		if (shouldQuit() || hasError()) break;
+		// Re-evaluate after event/presentation work (including a modal pause).
+		const uint32 after = activeMillis();
+		g_system->delayMillis(MIN<uint32>(10, _presentation.waitRemaining(plan,
+			MAX<int16>(1, _vm->_global->_speedFactor), start, after)));
+	}
+	debugC(4, kDebugGameFlow, "MEWILO_PRESENT wait module=%s site=%04X rule=%s anchor=%u calibrated=%u budget=%u elapsed=%u minimum=%u visible=%u aborted=%u t=%u frame=%u rect=%d,%d,%d,%d",
+		_moduleStem.c_str(), site, plan.rule, (uint)plan.anchor, plan.calibrated, budget, elapsed,
+		mewiloScaleTime(plan.minimumExposure, MAX<int16>(1, _vm->_global->_speedFactor)),
+		_presentation.visibleAge(plan.exposureRegion.isEmpty() ? plan.region : plan.exposureRegion, activeMillis()),
+		shouldQuit() || hasError(), activeMillis(), _presentation.frame(), plan.region.left, plan.region.top, plan.region.right, plan.region.bottom);
+	_presentation.finishStep();
+}
+
+void PreGob_Mewilo::waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte argument) {
+	if (!argument) { waitOrDelay(0); return; }
+	MewiloTimingPlan plan = mewiloTimingPlan(tot, _moduleStem.c_str(),
+		_vm->_language, _profile.platform, site, argument, _normalizeTiming);
+	waitPresentation(plan, site);
 }
 
 } // End of namespace Mewilo

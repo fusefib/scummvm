@@ -19,6 +19,7 @@
  */
 
 #include "common/system.h"
+#include "common/config-manager.h"
 #include "common/textconsole.h"
 
 #include "gob/dataio.h"
@@ -36,7 +37,8 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) : Pr
 	_profile(getMewiloPlatformProfile(mewiloPlatformFromCommon(vm->getPlatform(), thomsonTO))),
 	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false), _executor(*this),
 	_tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
-	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false) {
+	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0), _hostFailed(false),
+	_normalizeTiming(ConfMan.hasKey("mewilo_normalize_timing") && ConfMan.getBool("mewilo_normalize_timing")) {
 	_music = new SoundMixer(*g_system->getMixer(), Audio::Mixer::kMusicSoundType);
 	if (_profile.persistentI00Scratch) {
 		_i00Scratch.resize(kExternalScratchSize);
@@ -116,6 +118,7 @@ void PreGob_Mewilo::run() {
 
 void PreGob_Mewilo::resetForRestart() {
 	_hostFailed = false;
+	_presentation.reset();
 	stopMewiloAudio();
 	_sample.free();
 	_musicSample.free();

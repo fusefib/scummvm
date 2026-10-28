@@ -26,6 +26,7 @@
 #include "gob/pregob/mewilo/font.h"
 #include "gob/pregob/mewilo/graphics.h"
 #include "gob/pregob/mewilo/thomson_disk.h"
+#include "gob/pregob/mewilo/presentation.h"
 #include "gob/sound/sounddesc.h"
 #include "audio/mixer.h"
 #include "gob/surface.h"
@@ -53,6 +54,7 @@ public:
 	void saveRect(byte xCell, byte y, byte widthCell, byte height) override;
 	void restoreRect() override;
 	void waitOrDelay(byte argument) override;
+	void waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte argument) override;
 	bool waitContinueInput() override;
 	bool waitInputRelease() override;
 	void fillScreen(byte color) override;
@@ -114,6 +116,8 @@ private:
 	void installCrossCursor();
 	void waitMilliseconds(uint32 durationMs);
 	void presentFrame();
+	void tracePresentationDraw(const char *kind, uint16 site, const Common::Rect &region);
+	void waitPresentation(const MewiloTimingPlan &plan, uint16 site);
 	uint32 activeMillis() const;
 
 	const MewiloPlatformProfile &_profile;
@@ -141,6 +145,8 @@ private:
 	uint32 _pausedMillis;
 	uint _pauseDepth;
 	bool _hostFailed;
+	bool _normalizeTiming;
+	MewiloPresentation _presentation;
 };
 
 } // End of namespace Mewilo

@@ -97,6 +97,7 @@ MODULE_OBJS := \
 	pregob/mewilo/renderer.o \
 	pregob/mewilo/input.o \
 	pregob/mewilo/timing.o \
+	pregob/mewilo/presentation.o \
 	pregob/mewilo/audio.o \
 	pregob/mewilo/music.o \
 	pregob/mewilo/thomson_disk.o \
