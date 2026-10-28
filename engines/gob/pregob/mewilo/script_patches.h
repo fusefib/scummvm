@@ -32,13 +32,15 @@ namespace Mewilo {
 // Stable policy bits. Freeze at game start; do not change while a game is running.
 // Original behavior is policy 0. Timing is deliberately NOT one of these flags.
 enum MewiloScriptPatchPolicy {
-	kMewiloPatchGermanText = 1 << 0,   // S04: victim-name wording
+	kMewiloPatchGermanText = 1 << 0,   // S04/S05/S07: wording, aliases and rejection text
 	kMewiloKnownScriptPatchPolicies = 1
 };
 
 // Stable recipe IDs, not an indication that every recipe applies to every module.
 enum MewiloScriptPatchId {
-	kMewiloFixLetterWording = 1 << 0
+	kMewiloFixLetterWording = 1 << 0,
+	kMewiloFixGermanAliases = 1 << 1,
+	kMewiloFixGermanRejections = 1 << 2
 };
 
 /** Identity of the bytes actually prepared, NOT a later reopening of the file.
