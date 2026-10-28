@@ -30,10 +30,10 @@ namespace Mewilo {
 // CPC stores four source pixels per cell, then doubles them for presentation.
 // The shared script coordinate space remains 40 cells wide on every platform.
 static const MewiloPlatformProfile kProfiles[] = {
-	{kMewiloPlatformAtariST, "LOAD", 8, 1, true, true, kMewiloAudioAtariSpl},
-	{kMewiloPlatformAmstradCPC, "AMSOAD", 4, 2, false, false, kMewiloAudioCpcMus},
-	{kMewiloPlatformAmiga, "LOAD", 8, 1, false, false, kMewiloAudioAmigaSmp},
-	{kMewiloPlatformThomsonTO, "THLOAD", 8, 1, false, false, kMewiloAudioThomsonNote}};
+	{kMewiloPlatformAtariST, "LOAD", 8, 1, true, kMewiloAudioAtariSpl},
+	{kMewiloPlatformAmstradCPC, "AMSOAD", 4, 2, false, kMewiloAudioCpcMus},
+	{kMewiloPlatformAmiga, "LOAD", 8, 1, false, kMewiloAudioAmigaSmp},
+	{kMewiloPlatformThomsonTO, "THLOAD", 8, 1, false, kMewiloAudioThomsonNote}};
 
 bool isValidMewiloPlatform(MewiloPlatform platform) {
 	return (uint)platform < ARRAYSIZE(kProfiles);

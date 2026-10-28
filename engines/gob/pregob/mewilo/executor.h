@@ -143,7 +143,6 @@ private:
 	bool executeInlineFF(uint16 offset);
 	bool conditionTrue(uint16 offset) const;
 	bool executeTarget(uint16 offset, uint depth);
-	bool executeBranch(const MewiloBranch &branch, uint depth, bool &tailTaken, uint16 &tailTarget);
 	bool stepInput(const MewiloExecFrame &frame);
 	bool executeFreeText(uint16 offset, uint depth, uint16 &tailTarget);
 	bool answerMatches(const MewiloTextField &field, const Common::Array<byte> &input) const;

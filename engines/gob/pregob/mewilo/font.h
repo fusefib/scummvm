@@ -33,8 +33,6 @@ namespace Mewilo {
 
 class MewiloFont {
 public:
-	MewiloFont();
-
 	bool load(Common::SeekableReadStream &stream, bool thomsonWrapper = false);
 	bool computeMD5(byte digest[16]) const;
 	bool replaceGlyph(uint code, const byte *rows, uint length);

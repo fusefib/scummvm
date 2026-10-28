@@ -52,20 +52,11 @@ bool MewiloI00Bank::load(Common::SeekableReadStream &stream, bool cpcZeroPrefix)
 		return false;
 	}
 
-	uint32 p = 0;
-	while (p + 2 <= _data.size()) {
-		const uint16 framedSize = READ_BE_UINT16(&_data[p]);
-		if (framedSize < 2 || p + framedSize > _data.size())
-			break;
-		_records.push_back(Record(p, framedSize));
-		p += framedSize;
-	}
-
 	// One known CPC AMSOAD1.I00 has a 128-byte zero prefix where the other
 	// extracted files carry an AMSDOS header. It is not an image record. If
-	// ordinary framing found nothing, recognize that packaging quirk without
-	// weakening the framed-stream parser itself.
-	if (cpcZeroPrefix && _records.empty() && _data.size() > 130) {
+	// the first frame size is zero, check that prefix before ordinary framing.
+	uint32 p = 0;
+	if (cpcZeroPrefix && _data.size() > 130 && !_data[0] && !_data[1]) {
 		bool zeroPrefix = true;
 		for (uint i = 0; i < 128; ++i) {
 			if (_data[i]) {
@@ -73,16 +64,15 @@ bool MewiloI00Bank::load(Common::SeekableReadStream &stream, bool cpcZeroPrefix)
 				break;
 			}
 		}
-		if (zeroPrefix) {
+		if (zeroPrefix)
 			p = 128;
-			while (p + 2 <= _data.size()) {
-				const uint16 framedSize = READ_BE_UINT16(&_data[p]);
-				if (framedSize < 2 || p + framedSize > _data.size())
-					break;
-				_records.push_back(Record(p, framedSize));
-				p += framedSize;
-			}
-		}
+	}
+	while (p + 2 <= _data.size()) {
+		const uint16 framedSize = READ_BE_UINT16(&_data[p]);
+		if (framedSize < 2 || p + framedSize > _data.size())
+			break;
+		_records.push_back(Record(p, framedSize));
+		p += framedSize;
 	}
 
 	_tailOffset = p;

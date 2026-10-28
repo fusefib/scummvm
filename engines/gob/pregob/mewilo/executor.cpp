@@ -204,13 +204,6 @@ bool MewiloExecutor::executeTarget(uint16 offset, uint depth) {
 	return depth <= kMaxExecDepth && pushFrame(MewiloExecFrame::kTarget, offset) && runFrames(base);
 }
 
-bool MewiloExecutor::executeBranch(const MewiloBranch &branch, uint depth,
-								   bool &tailTaken, uint16 &tailTarget) {
-	tailTaken = branch.target && branch.kind == 1;
-	tailTarget = tailTaken ? branch.target : 0;
-	return !branch.target || tailTaken || executeTarget(branch.target, depth + 1);
-}
-
 bool MewiloExecutor::stepInput(const MewiloExecFrame &frame) {
 	const uint16 offset = frame.offset;
 	const bool mouse = frame.kind == MewiloExecFrame::kMouse;
@@ -523,8 +516,11 @@ bool MewiloExecutor::executeFreeText(uint16 offset, uint depth, uint16 &tailTarg
 	if (_host.shouldQuit() || _host.hasError())
 		return false;
 	const MewiloBranch &branch = acceptedFields >= successThreshold ? success : failure;
-	bool tailTaken = false;
-	return executeBranch(branch, depth, tailTaken, tailTarget);
+	if (branch.kind == 1) {
+		tailTarget = branch.target;
+		return true;
+	}
+	return executeTarget(branch.target, depth + 1);
 }
 
 bool MewiloExecutor::conditionTrue(uint16 offset) const {

@@ -27,9 +27,6 @@
 namespace Gob {
 namespace Mewilo {
 
-MewiloFont::MewiloFont() {
-}
-
 bool MewiloFont::load(Common::SeekableReadStream &stream, bool thomsonWrapper) {
 	_data.clear();
 	if (stream.size() != (thomsonWrapper ? 1034 : 1024) || !stream.seek(0))

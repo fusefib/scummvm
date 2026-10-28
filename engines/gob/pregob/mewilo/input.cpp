@@ -79,7 +79,6 @@ bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 	_acceptMousePresses = true;
 	while (!shouldQuit() && !hasError() && !_pendingRestore) {
 		int16 mouseX = 0, mouseY = 0;
-		MouseButtons buttons = kMouseButtonsNone;
 		int16 key = 0;
 		if (_pendingKey) {
 			key = _pendingKey;
@@ -88,26 +87,24 @@ bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 			endFrame(true);
 			// Do not use PreGob::checkInput: it clears held state, which the
 			// FF03 input-release wait still needs. Presses have their own queue.
-			_vm->_util->getMouseState(&mouseX, &mouseY, &buttons);
+			_vm->_util->getMouseState(&mouseX, &mouseY, nullptr);
 			key = _vm->_util->checkKey();
 		}
 		if (shouldQuit() || _pendingRestore)
 			break;
 		// Held-button state is not a press event: it both loses short clicks
 		// and can repeat held ones. The shared event owner supplied each DOWN.
-		buttons = kMouseButtonsNone;
 		if (!key && !_mousePresses.empty()) {
 			event = _mousePresses[0];
 			_mousePresses.remove_at(0);
 			_acceptMousePresses = false;
 			return true;
 		}
-		if (!key && buttons == kMouseButtonsNone)
+		if (!key)
 			continue;
 
 		event.x = mouseX;
 		event.y = mouseY;
-		event.mouseButtons = (uint8)buttons;
 		switch (key) {
 		case kKeySpace:
 			event.key = ' ';

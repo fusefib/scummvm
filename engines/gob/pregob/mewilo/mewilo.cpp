@@ -257,20 +257,6 @@ bool PreGob_Mewilo::prepareModule(const Common::String &stem, PreparedModule &ou
 		warning("Mewilo: %s.TOT requires unavailable I00 records", upper.c_str());
 		return false;
 	}
-	// The optional Atari bank is loaded by native code but never drawn.
-	stream = _profile.loadOptionalI01 ? openResource(upper + ".I01") : nullptr;
-	if (stream) {
-		const int64 size = stream->size();
-		if (size > 0 && size <= 0x7FFFFFFF) {
-			out.i01.resize((uint32)size);
-			stream->seek(0);
-			if (stream->read(out.i01.data(), out.i01.size()) != out.i01.size()) {
-				delete stream;
-				return false;
-			}
-		}
-		delete stream;
-	}
 	out.stem = upper;
 	return true;
 }
@@ -284,7 +270,6 @@ void PreGob_Mewilo::unloadModule() {
 	_tot = nullptr;
 	delete _i00;
 	_i00 = nullptr;
-	_i01.clear();
 	_moduleStem.clear();
 	_scriptPatchReport = MewiloScriptPatchReport();
 }
@@ -295,7 +280,6 @@ void PreGob_Mewilo::commitModule(PreparedModule &prepared) {
 	prepared.tot = nullptr;
 	_i00 = prepared.i00;
 	prepared.i00 = nullptr;
-	_i01.swap(prepared.i01);
 	_moduleStem = prepared.stem;
 	_scriptPatchReport = prepared.scriptPatchReport;
 }

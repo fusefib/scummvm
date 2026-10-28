@@ -49,7 +49,6 @@ struct MewiloPlatformProfile {
 	byte packedPixelsPerCell;
 	byte packedOutputScaleX;
 	bool persistentI00Scratch;
-	bool loadOptionalI01;
 	MewiloAudioBackend audioBackend;
 };
 

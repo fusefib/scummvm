@@ -93,7 +93,6 @@ private:
 	struct PreparedModule {
 		MewiloTotData *tot;
 		MewiloI00Bank *i00;
-		Common::Array<byte> i01;
 		Common::String stem;
 		MewiloScriptPatchReport scriptPatchReport;
 		byte bankMd5[16];
@@ -161,7 +160,6 @@ private:
 	MewiloExecutor _executor;
 	MewiloTotData *_tot;
 	MewiloI00Bank *_i00;
-	Common::Array<byte> _i01;
 	Common::Array<byte> _i00Scratch;
 	MewiloFont _font;
 	SoundDesc _sample;
