@@ -57,6 +57,7 @@
 #include "gob/save/saveload.h"
 
 #include "gob/pregob/pregob.h"
+#include "gob/pregob/mewilo/mewilo.h"
 #include "gob/pregob/onceupon/abracadabra.h"
 #include "gob/pregob/onceupon/babayaga.h"
 
@@ -424,6 +425,8 @@ Common::Error GobEngine::run() {
 }
 
 void GobEngine::pauseEngineIntern(bool pause) {
+	if (_preGob)
+		_preGob->pauseChanged(pause);
 	if (pause) {
 		_pauseStart = _system->getMillis();
 	} else {
@@ -728,6 +731,17 @@ Common::Error GobEngine::initGameParts() {
 		_goblin   = new Goblin_v2(this);
 		_scenery  = new Scenery_v2(this);
 		_preGob   = new OnceUpon::BabaYaga(this);
+		break;
+
+	case kGameTypeMewilo:
+		_init     = new Init_v2(this);
+		_video    = new Video_v2(this);
+		_mult     = new Mult_v2(this);
+		_draw     = new Draw_v2(this);
+		_map      = new Map_v2(this);
+		_goblin   = new Goblin_v2(this);
+		_scenery  = new Scenery_v2(this);
+		_preGob   = new Mewilo::PreGob_Mewilo(this);
 		break;
 
 	default:

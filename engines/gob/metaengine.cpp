@@ -34,6 +34,7 @@
 
 #include "gob/gameidtotype.h"
 #include "gob/gob.h"
+#include "gob/pregob/mewilo/keymaps.h"
 
 // For struct GOBGameDescription.
 #include "gob/detection/detection.h"
@@ -76,6 +77,7 @@ public:
 	bool hasFeature(MetaEngineFeature f) const override;
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const Gob::GOBGameDescription *desc) const override;
+	Common::KeymapArray initKeymaps(const char *target) const override;
 
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
 		return optionsList;
@@ -84,6 +86,12 @@ public:
 
 bool GobMetaEngine::hasFeature(MetaEngineFeature f) const {
 	return false;
+}
+
+Common::KeymapArray GobMetaEngine::initKeymaps(const char *target) const {
+	if (target && getGameId(target) == "mewilo")
+		return Gob::Mewilo::createMewiloKeymaps();
+	return MetaEngine::initKeymaps(target);
 }
 
 bool Gob::GobEngine::hasFeature(EngineFeature f) const {

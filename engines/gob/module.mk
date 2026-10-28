@@ -93,6 +93,12 @@ MODULE_OBJS := \
 	pregob/mewilo/font.o \
 	pregob/mewilo/text.o \
 	pregob/mewilo/graphics.o \
+	pregob/mewilo/mewilo.o \
+	pregob/mewilo/renderer.o \
+	pregob/mewilo/input.o \
+	pregob/mewilo/timing.o \
+	pregob/mewilo/audio.o \
+	pregob/mewilo/keymaps.o \
 	pregob/onceupon/onceupon.o \
 	pregob/onceupon/abracadabra.o \
 	pregob/onceupon/babayaga.o \

@@ -22,6 +22,7 @@
 #define GOB_PREGOB_MEWILO_PLATFORM_H
 
 #include "common/scummsys.h"
+#include "common/str.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -44,6 +45,9 @@ struct MewiloPlatformProfile {
 
 bool isValidMewiloPlatform(MewiloPlatform platform);
 const MewiloPlatformProfile &getMewiloPlatformProfile(MewiloPlatform platform);
+void buildMewiloAtariPalette(byte palette[16 * 3]);
+int mewiloModuleIndex(const Common::String &stem, const char *prefix);
+Common::String mewiloModuleStem(uint index, const char *prefix);
 
 } // End of namespace Mewilo
 } // End of namespace Gob

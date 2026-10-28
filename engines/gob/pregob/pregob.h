@@ -51,6 +51,10 @@ public:
 	virtual ~PreGob();
 
 	virtual void run() = 0;
+	/** Notify game-owned clocks at the existing engine pause boundary. */
+	virtual void pauseChanged(bool paused) {}
+	/** Retain the original mouse-down coordinates before held state changes. */
+	virtual void mousePressed(int16 x, int16 y, MouseButtons buttons) {}
 
 	struct AnimProperties {
 		uint16 animation;

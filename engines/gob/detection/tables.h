@@ -68,6 +68,7 @@ static const PlainGameDescriptor gobGames[] = {
 	{"bambou", "Playtoons Limited Edition - Bambou le sauveur de la jungle"},
 	{"fascination", "Fascination"},
 	{"geisha", "Geisha"},
+	{"mewilo", "Mewilo"},
 	{"adi1", "ADI 1"},
 	{"adi2", "ADI 2"},
 	{"adi4", "ADI 4"},
@@ -151,6 +152,7 @@ static const GOBGameDescription gameDescriptions[] = {
 	#include "gob/detection/tables_adiboupresente.h"	// Adibou présente series
 	#include "gob/detection/tables_adiboudchou.h"		// Adiboud'chou / Addy Buschu series
 	#include "gob/detection/tables_crousti.h"   // Croustibat
+	#include "gob/detection/tables_mewilo.h"
 
 	{ AD_TABLE_END_MARKER, kFeaturesNone, 0, 0, 0}
 };

@@ -36,6 +36,37 @@ struct MewiloVar {
 	MewiloVar() : word0(0), word1(0) {}
 };
 
+enum MewiloInputKey {
+	kMewiloKeyNone = 0,
+	kMewiloKeyEscape = 0x100,
+	kMewiloKeyReturn,
+	kMewiloKeyBackspace,
+	kMewiloKeyDelete
+};
+
+struct MewiloInputEvent {
+	int16 x;
+	int16 y;
+	uint16 key;       ///< printable internal byte or MewiloInputKey
+	uint8 mouseButtons;
+
+	MewiloInputEvent() : x(0), y(0), key(kMewiloKeyNone), mouseButtons(0) {}
+};
+
+struct MewiloTextField {
+	byte xCell;
+	byte y;
+	byte maxChars;
+	byte serializedHeight;
+	byte lineAdvance;
+	byte colorBase;
+	byte colorInput;
+	byte colorAlt;
+	byte reserved;
+	byte answerLength;
+	uint16 answerOffset;
+};
+
 class MewiloExecHost {
 public:
 	virtual ~MewiloExecHost() {}
@@ -54,11 +85,15 @@ public:
 	virtual void fillScreen(byte color) = 0;
 	virtual void specialCommand(byte command, const MewiloVar *variables, uint count) = 0;
 	virtual uint16 randomModulo(uint16 count) = 0;
+	virtual void choiceFeedback(byte value) = 0;
+	virtual bool waitInput(MewiloInputEvent &event) = 0;
+	virtual bool editTextField(const MewiloTextField &field, Common::Array<byte> &text) = 0;
+	virtual void showRejectMessage(const byte *text, uint length) = 0;
 };
 
 // Continuations contain script offsets, never native pointers or C++ frames.
 struct MewiloExecFrame {
-	enum Kind { kTarget, kSequence, kContinue };
+	enum Kind { kTarget, kSequence, kMouse, kNumbered, kContinue };
 	byte kind;
 	uint16 offset;
 	uint16 index;
@@ -73,6 +108,7 @@ public:
 	void detachModule();
 	bool executeRoot(const MewiloTotData &tot);
 	bool resume();
+	static void normalizeAnswer(Common::Array<byte> &text);
 
 	MewiloVar &variable(uint index) { return _variables[index]; }
 	const MewiloVar &variable(uint index) const { return _variables[index]; }
@@ -83,6 +119,12 @@ private:
 	bool pushFrame(byte kind, uint16 offset, uint16 index = 0);
 	bool executeInlineFF(uint16 offset);
 	bool conditionTrue(uint16 offset) const;
+	bool executeTarget(uint16 offset, uint depth);
+	bool executeBranch(const MewiloBranch &branch, uint depth, bool &tailTaken, uint16 &tailTarget);
+	bool stepInput(const MewiloExecFrame &frame);
+	bool executeFreeText(uint16 offset, uint depth, uint16 &tailTarget);
+	bool answerMatches(const MewiloTextField &field, const Common::Array<byte> &input) const;
+	bool parseTextField(uint32 offset, MewiloTextField &field, uint32 &nextOffset) const;
 
 	MewiloExecHost &_host;
 	const MewiloTotData *_tot;

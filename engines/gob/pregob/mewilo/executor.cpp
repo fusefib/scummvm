@@ -18,8 +18,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/util.h"
-
 #include "gob/pregob/mewilo/executor.h"
 
 namespace Gob {
@@ -86,6 +84,11 @@ bool MewiloExecutor::runFrames(uint baseDepth) {
 		if (!serviceHost())
 			return false;
 		const MewiloExecFrame frame = _frames.back(); // callbacks may grow/reallocate the stack
+		if (frame.kind == MewiloExecFrame::kMouse || frame.kind == MewiloExecFrame::kNumbered) {
+			if (!stepInput(frame))
+				return false;
+			continue;
+		}
 		if (frame.kind == MewiloExecFrame::kContinue) {
 			const bool input = _host.waitContinueInput();
 			if (!input || _host.shouldQuit() || _host.hasError() || !_host.waitInputRelease())
@@ -141,10 +144,258 @@ bool MewiloExecutor::runFrames(uint baseDepth) {
 			if (branch.target && !pushFrame(MewiloExecFrame::kTarget, branch.target)) return false;
 			break;
 		}
+		case 0x1B:
+			if (!pushFrame(MewiloExecFrame::kMouse, offset)) return false;
+			break;
+		case 0x22: {
+			if (!_tot->has(offset, 7)) return false;
+			const uint16 setup = _tot->uint16BEAt(offset + 3);
+			if (!pushFrame(MewiloExecFrame::kNumbered, offset)) return false;
+			if (setup && !pushFrame(MewiloExecFrame::kTarget, setup)) return false;
+			break;
+		}
+		case 0x12: {
+			uint16 tail = 0;
+			const bool ok = executeFreeText(offset, _frames.size(), tail);
+			if (!ok || (tail && !pushFrame(MewiloExecFrame::kTarget, tail))) return false;
+			break;
+		}
 		default: return false;
 		}
 	}
 	return !_host.shouldQuit() && !_host.hasError();
+}
+
+bool MewiloExecutor::executeTarget(uint16 offset, uint depth) {
+	if (!offset)
+		return true;
+	const uint base = _frames.size();
+	return depth <= kMaxExecDepth && pushFrame(MewiloExecFrame::kTarget, offset) && runFrames(base);
+}
+
+bool MewiloExecutor::executeBranch(const MewiloBranch &branch, uint depth,
+		bool &tailTaken, uint16 &tailTarget) {
+	tailTaken = branch.target && branch.kind == 1;
+	tailTarget = tailTaken ? branch.target : 0;
+	return !branch.target || tailTaken || executeTarget(branch.target, depth + 1);
+}
+
+bool MewiloExecutor::stepInput(const MewiloExecFrame &frame) {
+	const uint16 offset = frame.offset;
+	const bool mouse = frame.kind == MewiloExecFrame::kMouse;
+	if (!_tot->has(offset, mouse ? 4 : 7)) return false;
+	const byte count = _tot->byteAt(offset + (mouse ? 3 : 6));
+	const uint32 branchBase = mouse ? offset + 4 + uint32(count) * 4 : offset + 7;
+	if (!_tot->has(branchBase, mouse ? uint32(count + 1) * 3 : uint32(count) * 4)) return false;
+	MewiloInputEvent event;
+	const bool gotInput = _host.waitInput(event);
+	if (!gotInput || _host.shouldQuit() || _host.hasError()) return false;
+	if (event.key == kMewiloKeyEscape) {
+		const uint16 callback = _tot->uint16BEAt(offset + 1);
+		return !callback || pushFrame(MewiloExecFrame::kTarget, callback);
+	}
+	MewiloBranch branch;
+	if (mouse) {
+		if (!event.mouseButtons) return true;
+		int selected = -1;
+		for (uint i = 0; i < count; ++i) {
+			const uint32 p = offset + 4 + i * 4;
+			const int left = _tot->byteAt(p) * 8, top = _tot->byteAt(p + 1);
+			if (event.x >= left && event.x < left + _tot->byteAt(p + 2) * 8 &&
+				event.y >= top && event.y < top + _tot->byteAt(p + 3)) selected = i;
+		}
+		branch = _tot->branchAt(branchBase + (selected + 1) * 3);
+	} else {
+		if (event.key < '1' || event.key >= uint16('1' + count)) return true;
+		const uint32 entry = branchBase + (event.key - '1') * 4;
+		const byte value = _tot->byteAt(entry);
+		if (value <= 2)
+			_host.choiceFeedback(value);
+		if (_host.shouldQuit() || _host.hasError())
+			return false;
+		const byte accumulator = _tot->byteAt(offset + 3); // native overlapping access
+		if (accumulator < kMewiloVariableCount) {
+			_variables[accumulator].word0 = int16(uint16(_variables[accumulator].word0) + value);
+			_variables[accumulator].word1 = int16(uint16(_variables[accumulator].word1) + 2);
+		}
+		branch = _tot->branchAt(entry + 1);
+	}
+	if (!branch.target) return true;
+	if (branch.kind == 1) _frames.pop_back();
+	return pushFrame(MewiloExecFrame::kTarget, branch.target);
+}
+
+bool MewiloExecutor::parseTextField(uint32 descriptorOffset, MewiloTextField &field,
+		uint32 &nextOffset) const {
+	if (!_tot || !_tot->has(descriptorOffset, 10))
+		return false;
+	field.xCell = _tot->byteAt(descriptorOffset + 0);
+	field.y = _tot->byteAt(descriptorOffset + 1);
+	field.maxChars = _tot->byteAt(descriptorOffset + 2);
+	field.serializedHeight = _tot->byteAt(descriptorOffset + 3);
+	field.lineAdvance = _tot->byteAt(descriptorOffset + 4);
+	field.colorBase = _tot->byteAt(descriptorOffset + 5);
+	field.colorInput = _tot->byteAt(descriptorOffset + 6);
+	field.colorAlt = _tot->byteAt(descriptorOffset + 7);
+	field.reserved = _tot->byteAt(descriptorOffset + 8);
+	field.answerLength = _tot->byteAt(descriptorOffset + 9);
+	field.answerOffset = descriptorOffset + 10;
+	if (!_tot->has(field.answerOffset, field.answerLength))
+		return false;
+	nextOffset = field.answerOffset + field.answerLength;
+	return true;
+}
+
+void MewiloExecutor::normalizeAnswer(Common::Array<byte> &text) {
+	for (uint i = 0; i < text.size(); ++i) {
+		byte &c = text[i];
+		if (c >= 'A' && c <= 'Z')
+			c += 'a' - 'A';
+		else if (c == 0x16 || c == 0x17 || c == 0x1B || c == 0x82 || c == 0x8A)
+			c = 'e';
+		else if (c == 0x18 || c == 0x1C || c == 0x85)
+			c = 'a';
+		else if (c == 0x19 || c == 0x97)
+			c = 'u';
+		else if (c == 0x1A || c == 0x87)
+			c = 'c';
+		else if (c == 0x1E || c == 0x1F)
+			c = 'i';
+		else if (c == 0x1D)
+			c = 'o';
+		else if ((c >= 0x21 && c <= 0x26) || (c >= 0x28 && c <= 0x2A) ||
+				 c == 0x2C || c == 0x2E || c == 0x2F ||
+				 (c >= 0x3A && c <= 0x40) || (c >= 0x5B && c <= 0x60) ||
+				 (c >= 0x7B && c <= 0x7F))
+			c = ' ';
+	}
+
+	while (!text.empty() && text.front() == ' ')
+		text.remove_at(0);
+	while (!text.empty() && text.back() == ' ')
+		text.remove_at(text.size() - 1);
+
+	for (uint i = 1; i < text.size();) {
+		if (text[i - 1] == ' ' && text[i] == ' ')
+			text.remove_at(i);
+		else
+			++i;
+	}
+}
+
+bool MewiloExecutor::answerMatches(const MewiloTextField &field,
+		const Common::Array<byte> &input) const {
+	Common::Array<byte> normalizedInput = input;
+	normalizeAnswer(normalizedInput);
+
+	if (!_tot || !field.answerLength || !_tot->has(field.answerOffset, field.answerLength))
+		return false;
+
+	Common::Array<byte> candidate;
+	for (uint i = 0; i < field.answerLength; ++i) {
+		const byte c = _tot->byteAt(field.answerOffset + i);
+		if (c == '/' || c == 0) {
+			Common::Array<byte> normalizedCandidate = candidate;
+			normalizeAnswer(normalizedCandidate);
+			if (normalizedCandidate.size() == normalizedInput.size() &&
+				(normalizedInput.empty() || !memcmp(normalizedCandidate.data(), normalizedInput.data(), normalizedInput.size())))
+				return true;
+			candidate.clear();
+			if (c == 0)
+				break;
+		} else {
+			candidate.push_back(c);
+		}
+	}
+	return false;
+}
+
+bool MewiloExecutor::executeFreeText(uint16 offset, uint depth, uint16 &tailTarget) {
+	tailTarget = 0;
+	if (!_tot->has(offset, 15))
+		return false;
+
+	const uint16 escapeCallback = _tot->uint16BEAt(offset + 1);
+	const byte scoreVar = _tot->byteAt(offset + 5);
+	const byte maxAttempts = _tot->byteAt(offset + 6);
+	const byte successThreshold = _tot->byteAt(offset + 7);
+	const MewiloBranch success = _tot->branchAt(offset + 8);
+	const MewiloBranch failure = _tot->branchAt(offset + 11);
+	const byte rejectLength = _tot->byteAt(offset + 14);
+	uint32 p = offset + 15;
+	if (!_tot->has(p, rejectLength))
+		return false;
+	const uint32 rejectOffset = p;
+	p += rejectLength;
+	if (!_tot->has(p))
+		return false;
+	const byte fieldCount = _tot->byteAt(p++);
+
+	Common::Array<MewiloTextField> fields;
+	for (uint i = 0; i < fieldCount; ++i) {
+		MewiloTextField field;
+		uint32 next = 0;
+		if (!parseTextField(p, field, next))
+			return false;
+		fields.push_back(field);
+		p = next;
+	}
+
+	byte attemptsRemaining = maxAttempts;
+	byte acceptedFields = 0;
+	while (attemptsRemaining && !_host.shouldQuit() && !_host.hasError()) {
+		acceptedFields = 0;
+		for (uint i = 0; i < fields.size(); ++i) {
+			Common::Array<byte> input;
+			bool completed = false;
+			while (!completed && !_host.shouldQuit() && !_host.hasError()) {
+				const bool edited = _host.editTextField(fields[i], input);
+				if (_host.shouldQuit() || _host.hasError())
+					return false;
+				if (edited) {
+					completed = true;
+					break;
+				}
+
+				if (escapeCallback) {
+					if (!executeTarget(escapeCallback, depth + 1))
+						return false;
+					// Native Escape callbacks are side calls here; return to the
+					// modal field unless the engine itself is quitting.
+				}
+				input.clear();
+			}
+			if (_host.shouldQuit() || _host.hasError())
+				return false;
+			if (answerMatches(fields[i], input))
+				++acceptedFields;
+		}
+
+		--attemptsRemaining;
+		if (scoreVar < kMewiloVariableCount) {
+			MewiloVar &score = _variables[scoreVar];
+			score.word0 = (int16)((uint16)score.word0 + acceptedFields);
+			score.word1 = (int16)((uint16)score.word1 + fieldCount);
+			if (acceptedFields == fieldCount) {
+				score.word0 = (int16)((uint16)score.word0 + acceptedFields * attemptsRemaining);
+				score.word1 = (int16)((uint16)score.word1 + fieldCount * attemptsRemaining);
+			}
+		}
+
+		if (acceptedFields == fieldCount || attemptsRemaining == 0)
+			break;
+
+		uint rejectChars = rejectLength;
+		if (rejectChars && _tot->byteAt(rejectOffset + rejectChars - 1) == 0)
+			--rejectChars;
+		_host.showRejectMessage(_tot->dataAt(rejectOffset), rejectChars);
+	}
+
+	if (_host.shouldQuit() || _host.hasError())
+		return false;
+	const MewiloBranch &branch = acceptedFields >= successThreshold ? success : failure;
+	bool tailTaken = false;
+	return executeBranch(branch, depth, tailTaken, tailTarget);
 }
 
 bool MewiloExecutor::conditionTrue(uint16 offset) const {
