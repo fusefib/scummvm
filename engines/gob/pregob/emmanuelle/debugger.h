@@ -158,6 +158,7 @@ public:
 	virtual bool queryProtectionHint(ProtectionChallenge &out) const = 0;
 	virtual void setDiagnosticTraceEnabled(bool enabled) = 0;
 	virtual bool diagnosticTraceEnabled() const = 0;
+	virtual bool setDiagnosticVariable(uint16 index, uint16 value, uint16 &previousValue) = 0;
 };
 
 } // End of namespace Emmanuelle

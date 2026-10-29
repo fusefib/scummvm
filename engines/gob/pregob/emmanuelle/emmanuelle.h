@@ -134,6 +134,7 @@ public:
 	bool queryProtectionHint(ProtectionChallenge &out) const override;
 	void setDiagnosticTraceEnabled(bool enabled) override;
 	bool diagnosticTraceEnabled() const override { return _diagnosticTraceEnabled; }
+	bool setDiagnosticVariable(uint16 index, uint16 value, uint16 &previousValue) override;
 
 private:
 	void failHostOperation(const char *operation, uint16 site = 0);

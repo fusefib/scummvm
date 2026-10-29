@@ -76,6 +76,7 @@ private:
 	bool cmd_gobStack(int argc, const char **argv);
 	bool cmd_emmaState(int argc, const char **argv);
 	bool cmd_emmaVars(int argc, const char **argv);
+	bool cmd_emmaVarsSet(int argc, const char **argv);
 	bool cmd_emmaStack(int argc, const char **argv);
 	bool cmd_emmaTrace(int argc, const char **argv);
 	bool cmd_cpSolve(int argc, const char **argv);

@@ -51,6 +51,7 @@ void GobConsole::printEmmanuelleHelp() {
 	debugPrintf("----------\n");
 	debugPrintf(" emmaState - prints old-TOT runtime state\n");
 	debugPrintf(" emmaVars - prints variables; usage: emmaVars (details | changed | start (count))\n");
+	debugPrintf(" emmaVarsSet - changes a variable; usage: emmaVarsSet INDEX VALUE\n");
 	debugPrintf(" emmaStack - prints the explicit old-TOT executor stack\n");
 	debugPrintf(" emmaTrace - controls parseable tracing; usage: emmaTrace (on | off)\n");
 	debugPrintf(" cpsolve - prints the active copy-protection answers\n");
@@ -558,6 +559,39 @@ bool GobConsole::cmd_emmaVars(int argc, const char **argv) {
 	return true;
 }
 
+static bool parseEmmanuelleVariableNumber(const char *argument, uint32 maximum, uint16 &number) {
+	if (!*argument)
+		return false;
+	uint32 value = 0;
+	for (; *argument; ++argument) {
+		if (*argument < '0' || *argument > '9')
+			return false;
+		const uint digit = *argument - '0';
+		if (value > (maximum - digit) / 10)
+			return false;
+		value = value * 10 + digit;
+	}
+	number = value;
+	return true;
+}
+
+bool GobConsole::cmd_emmaVarsSet(int argc, const char **argv) {
+	if (!_emmanuelleDebugger) {
+		debugPrintf("No Emmanuelle runtime is active.\n");
+		return true;
+	}
+	uint16 index, value, previousValue;
+	if (argc != 3 || !parseEmmanuelleVariableNumber(argv[1], 511, index) ||
+		!parseEmmanuelleVariableNumber(argv[2], 65535, value)) {
+		debugPrintf("Usage: emmaVarsSet INDEX VALUE (index 0-511, value 0-65535)\n");
+	} else if (!_emmanuelleDebugger->setDiagnosticVariable(index, value, previousValue)) {
+		debugPrintf("No Emmanuelle VM is active.\n");
+	} else {
+		debugPrintf("v[%u]: %u -> %u\n", (uint)index, (uint)previousValue, (uint)value);
+	}
+	return true;
+}
+
 bool GobConsole::cmd_emmaStack(int argc, const char **argv) {
 	if (!_emmanuelleDebugger) {
 		debugPrintf("No Emmanuelle runtime is active.\n");
@@ -725,6 +759,14 @@ void PreGob_Emmanuelle::setDiagnosticTraceEnabled(bool enabled) {
 	_diagnosticTraceEnabled = enabled;
 	debugC(1, kDebugGameFlow, "Emmanuelle: diagnostic trace %s",
 		   enabled ? "enabled" : "disabled");
+}
+
+bool PreGob_Emmanuelle::setDiagnosticVariable(uint16 index, uint16 value, uint16 &previousValue) {
+	if (!_scriptVM || index >= ARRAYSIZE(_variables))
+		return false;
+	previousValue = _scriptVM->readVariable(index);
+	_scriptVM->writeVariable(index, value);
+	return true;
 }
 
 } // End of namespace Emmanuelle
