@@ -151,7 +151,9 @@ private:
 	void waitPresentation(const MewiloTimingPlan &plan, uint16 site, bool ownsStep = true);
 	uint32 activeMillis() const;
 
+	// A presentation override must keep native resource and save semantics.
 	const MewiloPlatformProfile &_profile;
+	const MewiloPlatform _presentationPlatform;
 	bool _useThomsonDisk;
 	MewiloThomsonDisk _thomsonDisk;
 	MewiloAudioBackend _audioBackend;

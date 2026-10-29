@@ -38,7 +38,8 @@ static const uint32 kExternalScratchSize = 32000;
 
 PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) :
 	PreGob(vm),
-	_profile(getMewiloPlatformProfile(mewiloPresentationPlatform(vm->getPlatform(), thomsonTO))),
+	_profile(getMewiloPlatformProfile(mewiloPlatformFromCommon(vm->getPlatform(), thomsonTO))),
+	_presentationPlatform(mewiloPresentationPlatform(vm->getPlatform(), thomsonTO)),
 	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false),
 	_executor(*this), _tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0),
@@ -79,7 +80,7 @@ void PreGob_Mewilo::run() {
 	if (!initResources())
 		return;
 	byte palette[16 * 3];
-	buildMewiloDisplayPalette(_profile.platform, palette);
+	buildMewiloDisplayPalette(_presentationPlatform, palette);
 	// Gob's palette fade accepts six-bit staging values, not RGB888.
 	for (uint i = 0; i < sizeof(palette); ++i)
 		palette[i] >>= 2;

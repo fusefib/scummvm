@@ -86,7 +86,7 @@ void PreGob_Mewilo::waitOrDelay(byte argument) {
 			waitInputRelease();
 	} else {
 		MewiloTimingPlan plan;
-		plan.milliseconds = mewiloNativeDelayMillis(_profile.platform, argument, plan.calibrated);
+		plan.milliseconds = mewiloNativeDelayMillis(_presentationPlatform, argument, plan.calibrated);
 		waitPresentation(plan, 0);
 	}
 }
@@ -142,13 +142,13 @@ void PreGob_Mewilo::waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte ar
 		return;
 	}
 	MewiloTimingPlan plan = mewiloTimingPlan(tot, _moduleStem.c_str(), _vm->_language,
-		_profile.platform, site, argument, _normalizeTiming);
+		_presentationPlatform, site, argument, _normalizeTiming);
 	const ReplacementEntry *text =
 		plan.textNode ? replacementEntry(tot, plan.textNode, kReplacementText) : nullptr;
 	if (text) {
 		bool calibrated = false;
 		plan.milliseconds =
-			MAX<uint32>(mewiloNativeDelayMillis(_profile.platform, argument, calibrated),
+			MAX<uint32>(mewiloNativeDelayMillis(_presentationPlatform, argument, calibrated),
 				mewiloReadingMillis(text->bytes.data(), text->bytes.size()));
 	}
 	waitPresentation(plan, site);
