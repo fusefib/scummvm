@@ -221,6 +221,7 @@ struct EmmanuelleSaveState {
 	EmmanuelleRuntimeProfile profile;
 	ModuleId module;
 	Common::String moduleFileStem;
+	// Retain version-1 script metadata; restore checks the saved continuation.
 	uint32 moduleSize;
 	byte moduleMD5[16];
 	uint16 variables[512];

@@ -216,18 +216,10 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 	}
 	const char *extension = _platformTag == kOldTotPlatformAmiga
 		? ".TOA" : ".TOT";
-	byte digest[16];
 	prepared.tot = loadScriptResource(Common::String(stem) + extension,
 		reason);
 	if (!prepared.tot)
 		return false;
-	if (prepared.tot->size() != state.moduleSize ||
-		!prepared.tot->computeMD5(digest) ||
-		memcmp(digest, state.moduleMD5, sizeof(digest)) != 0) {
-		reason = _s("This save uses a different version of the game scripts. "
-			"Try an earlier saved game.");
-		return false;
-	}
 	if (state.executor.suspendedNode >= prepared.tot->size() ||
 		prepared.tot->byteAt(state.executor.suspendedNode) != 0x1B) {
 		reason = "invalid suspended instruction";
