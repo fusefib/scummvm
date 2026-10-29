@@ -82,60 +82,6 @@ bool MewiloCpcMusicData::load(const byte *data, uint32 size) {
 	return true;
 }
 
-void MewiloCpcMusicData::buildNativeEvents(Common::Array<MewiloCpcSoundEvent> &events) const {
-	events.clear();
-	if (!_valid)
-		return;
-
-	for (uint channelIndex = 0; channelIndex < kChannelCount; ++channelIndex) {
-		const Channel &channelData = _channels[channelIndex];
-		uint32 timeCs = 0;
-		for (uint i = 0; i < channelData.count; ++i) {
-			MewiloCpcSoundEvent event;
-			event.startCs = timeCs;
-			event.advanceCs = channelData.second[i];
-
-			switch (channelIndex) {
-			case 0:
-				event.channelStatus = 1;
-				event.tonePeriod = channelData.first[i];
-				event.durationCs = channelData.second[i];
-				event.initialAmplitudeRaw = channelData.third[i];
-				event.amplitudeEnvelope = channelData.third[i] ? 1 : 0;
-				break;
-			case 1:
-				// Native overlay deliberately never reads record 1's third array.
-				event.channelStatus = 2;
-				event.tonePeriod = channelData.first[i];
-				event.durationCs = channelData.second[i];
-				event.initialAmplitudeRaw = 0;
-				break;
-			case 2:
-				event.channelStatus = 4;
-				event.tonePeriod = 0;
-				event.noisePeriod = 1;
-				event.initialAmplitudeRaw = channelData.third[i];
-				event.durationCs = 3;
-				break;
-			default:
-				break;
-			}
-
-			events.push_back(event);
-			timeCs += event.advanceCs;
-		}
-	}
-}
-
-uint32 MewiloCpcMusicData::channelACycleDurationCs() const {
-	if (!_valid)
-		return 0;
-	uint32 duration = 0;
-	for (uint i = 0; i < _channels[0].count; ++i)
-		duration += _channels[0].second[i];
-	return duration;
-}
-
 bool renderMewiloCpcMusic(const MewiloCpcMusicData &music, Common::Array<byte> &pcm) {
 	pcm.clear();
 	if (!music.valid())

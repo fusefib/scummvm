@@ -28,23 +28,6 @@
 namespace Gob {
 namespace Mewilo {
 
-/** One firmware SOUND QUEUE event reconstructed from the native CPC player. */
-struct MewiloCpcSoundEvent {
-	uint32 startCs;
-	uint16 advanceCs;
-	byte channelStatus;
-	byte amplitudeEnvelope;
-	byte toneEnvelope;
-	uint16 tonePeriod;
-	byte noisePeriod;
-	byte initialAmplitudeRaw;
-	uint16 durationCs;
-
-	MewiloCpcSoundEvent() :
-		startCs(0), advanceCs(0), channelStatus(0), amplitudeEnvelope(0),
-		toneEnvelope(0), tonePeriod(0), noisePeriod(0), initialAmplitudeRaw(0), durationCs(0) {}
-};
-
 /** Native CPC .MUS channel data.
  *
  * The CPC loader reads exactly three records. Each record contains a one-byte
@@ -89,15 +72,6 @@ public:
 	bool valid() const { return _valid; }
 	const Channel &channel(uint index) const { return _channels[index]; }
 	uint32 tailSize() const { return _tailSize; }
-
-	/** Translate the serialized records to the exact SOUND QUEUE fields used by
-	 * the native overlay. Events are appended in channel order; startCs is the
-	 * per-channel timeline position.
-	 */
-	void buildNativeEvents(Common::Array<MewiloCpcSoundEvent> &events) const;
-
-	/** Duration of one audible channel-A cycle in centiseconds. */
-	uint32 channelACycleDurationCs() const;
 
 private:
 	Channel _channels[kChannelCount];
