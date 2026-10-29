@@ -24,6 +24,7 @@
 #include "common/util.h"
 
 #include "gob/draw.h"
+#include "gob/global.h"
 #include "gob/gob.h"
 #include "gob/pregob/mewilo/text.h"
 #include "gob/video.h"
@@ -31,10 +32,22 @@
 namespace Gob {
 namespace Mewilo {
 
-void PreGob_Mewilo::renderFailure(const char *message, uint16 nodeOffset) {
-	_hostFailed = true;
-	warning("Mewilo: host operation failed in %s.TOT at 0x%04X: %s", _moduleStem.c_str(),
-		nodeOffset, message);
+void PreGob_Mewilo::initPalette() {
+	byte palette[(kCursorColor + 1) * 3];
+	buildMewiloDisplayPalette(_presentationPlatform, palette);
+	// Gob's palette fade accepts six-bit staging values, not RGB888.
+	for (uint i = 0; i < 16 * 3; ++i)
+		palette[i] >>= 2;
+	// Keep the cursor's hue, using a nearby shade outside the scene's 16 inks.
+	for (uint i = 0; i < 3; ++i) {
+		const byte component = palette[15 * 3 + i];
+		palette[kCursorColor * 3 + i] = component < 60 ? component + 4 : component - 4;
+	}
+	setPalette(palette, kCursorColor + 1);
+	// A 16-color fade does not upload the spare cursor entry.
+	_vm->_video->setPalElem(kCursorColor, palette[kCursorColor * 3],
+		palette[kCursorColor * 3 + 1], palette[kCursorColor * 3 + 2],
+		-1, _vm->_global->_videoMode);
 }
 
 void PreGob_Mewilo::markDirty(int16 x, int16 y, int16 width, int16 height) {
@@ -72,7 +85,7 @@ void PreGob_Mewilo::drawByteString(
 
 void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 	if (!tot.has(nodeOffset, 10) || !_vm->_draw->_backSurface) {
-		renderFailure("invalid text header or missing surface", nodeOffset);
+		hostFailure("invalid text header or missing surface", nodeOffset);
 		return;
 	}
 	const int16 left = tot.byteAt(nodeOffset + 1) * 8;
@@ -110,7 +123,7 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 		MewiloTextLine line;
 		if (!extractMewiloTextLine(text + sourceOffset, textSize - sourceOffset, widthCell, line) ||
 			!line.consumed) {
-			renderFailure("malformed text stream", nodeOffset);
+			hostFailure("malformed text stream", nodeOffset);
 			break;
 		}
 
@@ -164,12 +177,12 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 
 void PreGob_Mewilo::drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset) {
 	if (!tot.has(nodeOffset, 7) || !_vm->_draw->_backSurface) {
-		renderFailure("invalid inline image header or missing surface", nodeOffset);
+		hostFailure("invalid inline image header or missing surface", nodeOffset);
 		return;
 	}
 	const uint16 recordSize = tot.uint16BEAt(nodeOffset + 1);
 	if (recordSize < 7 || !tot.has(nodeOffset, recordSize)) {
-		renderFailure("invalid inline image extent", nodeOffset);
+		hostFailure("invalid inline image extent", nodeOffset);
 		return;
 	}
 	const int16 x =
@@ -182,20 +195,20 @@ void PreGob_Mewilo::drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset)
 		drawMewiloPacked(tot.dataAt(nodeOffset + 7), recordSize - 7, *_vm->_draw->_backSurface, x,
 			y, sourceWidth, height, _profile.packedOutputScaleX);
 	if (!result.complete) {
-		renderFailure("incomplete inline image", nodeOffset);
+		hostFailure("incomplete inline image", nodeOffset);
 		return;
 	}
 	// Native decoding (including persistent Atari scratch writes) comes first.
 	const ReplacementEntry *replacement = replacementEntry(tot, nodeOffset, kReplacementImage);
 	if (replacement && !drawReplacementImage(*replacement, *_vm->_draw->_backSurface, x, y))
-		renderFailure("invalid replacement image", nodeOffset);
+		hostFailure("invalid replacement image", nodeOffset);
 	markDirty(x, y, outputWidth, height);
 	tracePresentationDraw("image", nodeOffset, Common::Rect(x, y, x + outputWidth, y + height));
 }
 
 void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffset) {
 	if (!tot.has(nodeOffset, 8) || !_vm->_draw->_backSurface) {
-		renderFailure("invalid external image header or missing surface", nodeOffset);
+		hostFailure("invalid external image header or missing surface", nodeOffset);
 		return;
 	}
 	const byte masked = tot.byteAt(nodeOffset) & 0x3F;
@@ -205,7 +218,7 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 	if (bank != 0)
 		return; // Atari native code deliberately exits for nonzero banks.
 	if (!_i00) {
-		renderFailure("required I00 bank is missing", nodeOffset);
+		hostFailure("required I00 bank is missing", nodeOffset);
 		return;
 	}
 
@@ -222,7 +235,7 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 	const byte *payload = nullptr;
 	uint32 payloadSize = 0;
 	if (!_i00->getRecord(recordIndex, framedSize, payload, payloadSize)) {
-		renderFailure("required I00 record is missing", nodeOffset);
+		hostFailure("required I00 record is missing", nodeOffset);
 		return;
 	}
 	if (descriptorSize != framedSize)
@@ -235,7 +248,7 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 	uint32 decodeSize = payloadSize;
 	if (_profile.persistentI00Scratch) {
 		if (payloadSize > _i00Scratch.size()) {
-			renderFailure("I00 record exceeds native scratch capacity", nodeOffset);
+			hostFailure("I00 record exceeds native scratch capacity", nodeOffset);
 			return;
 		}
 		// Atari native code overwrites only the freshly loaded prefix and leaves
@@ -250,13 +263,13 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 	const MewiloPackedDecodeResult result = drawMewiloPacked(decodePayload, decodeSize,
 		*_vm->_draw->_backSurface, x, y, sourceWidth, height, _profile.packedOutputScaleX);
 	if (!result.complete) {
-		renderFailure("incomplete external image", nodeOffset);
+		hostFailure("incomplete external image", nodeOffset);
 		return;
 	}
 	// Native decoding (including persistent Atari scratch writes) comes first.
 	const ReplacementEntry *replacement = replacementEntry(tot, nodeOffset, kReplacementImage);
 	if (replacement && !drawReplacementImage(*replacement, *_vm->_draw->_backSurface, x, y))
-		renderFailure("invalid replacement image", nodeOffset);
+		hostFailure("invalid replacement image", nodeOffset);
 	markDirty(x, y, outputWidth, height);
 	tracePresentationDraw("image", nodeOffset, Common::Rect(x, y, x + outputWidth, y + height));
 }
@@ -267,7 +280,7 @@ void PreGob_Mewilo::saveRect(byte xCell, byte y, byte widthCell, byte height) {
 	if (width <= 0 || height <= 0)
 		return;
 	if (!_vm->_draw->_backSurface) {
-		renderFailure("missing capture surface", 0);
+		hostFailure("missing capture surface", 0);
 		return;
 	}
 	SavedRect saved;
@@ -285,7 +298,7 @@ void PreGob_Mewilo::restoreRect() {
 	if (_savedRects.empty())
 		return;
 	if (!_vm->_draw->_backSurface) {
-		renderFailure("missing restore surface", 0);
+		hostFailure("missing restore surface", 0);
 		return;
 	}
 	SavedRect saved = _savedRects.back();
@@ -296,7 +309,7 @@ void PreGob_Mewilo::restoreRect() {
 
 void PreGob_Mewilo::fillScreen(byte color) {
 	if (!_vm->_draw->_backSurface) {
-		renderFailure("missing fill surface", 0);
+		hostFailure("missing fill surface", 0);
 		return;
 	}
 	_vm->_draw->_backSurface->fill(color);
@@ -305,7 +318,7 @@ void PreGob_Mewilo::fillScreen(byte color) {
 
 void PreGob_Mewilo::drawScore(uint value, int16 x, int16 y, byte color, int16 background) {
 	if (!_vm->_draw->_backSurface) {
-		renderFailure("missing score surface", 0);
+		hostFailure("missing score surface", 0);
 		return;
 	}
 	if (background >= 0)
@@ -341,7 +354,7 @@ void PreGob_Mewilo::presentFrame() {
 	const SurfacePtr &surface = _vm->_draw->_backSurface;
 	if (!surface || surface->getWidth() != 320 || surface->getHeight() != 200 ||
 		surface->getBPP() != 1) {
-		renderFailure("invalid presentation surface", 0);
+		hostFailure("invalid presentation surface", 0);
 		return;
 	}
 	_vm->_draw->blitInvalidated();

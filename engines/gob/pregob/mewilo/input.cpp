@@ -43,12 +43,6 @@ void PreGob_Mewilo::mousePressed(int16 x, int16 y, MouseButtons buttons) {
 	_mousePresses.push_back(event);
 }
 
-uint16 PreGob_Mewilo::randomModulo(uint16 count) {
-	if (!count)
-		return 0;
-	return (uint16)(_vm->_rnd.getRandomNumber(0x7FFFFFFF) % count);
-}
-
 byte PreGob_Mewilo::translateInputKey(int16 key) const {
 	if (key >= 32 && key <= 0x7F)
 		return (byte)key;
@@ -131,10 +125,27 @@ bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 	return false;
 }
 
+bool PreGob_Mewilo::waitContinueInput() {
+	MewiloInputEvent event;
+	return waitInput(event);
+}
+
+bool PreGob_Mewilo::waitInputRelease() {
+	int16 x, y;
+	MouseButtons buttons;
+	while (!shouldQuit() && !hasError() && !_pendingRestore) {
+		_vm->_util->getMouseState(&x, &y, &buttons);
+		if (buttons == kMouseButtonsNone)
+			return true;
+		serviceEvents();
+	}
+	return false;
+}
+
 void PreGob_Mewilo::drawInputField(
 	const MewiloTextField &field, const Common::Array<byte> &text, bool cursor) {
 	if (!_vm->_draw->_backSurface) {
-		renderFailure("missing input surface", 0);
+		hostFailure("missing input surface", 0);
 		return;
 	}
 	const int16 x = field.xCell * 8;
@@ -197,7 +208,7 @@ void PreGob_Mewilo::showRejectMessage(const byte *text, uint length) {
 	if (!text || !length)
 		return;
 	if (!_vm->_draw->_backSurface) {
-		renderFailure("missing rejection-message surface", 0);
+		hostFailure("missing rejection-message surface", 0);
 		return;
 	}
 	const int16 y = 192;

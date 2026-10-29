@@ -130,11 +130,16 @@ private:
 	void unloadModule();
 	void resetForRestart();
 	Common::String selectorToModule(uint16 selector) const;
-	void renderFailure(const char *message, uint16 nodeOffset);
+	void hostFailure(const char *message, uint16 nodeOffset);
 	void markDirty(int16 x, int16 y, int16 width, int16 height);
 	void drawByteString(
 		const byte *text, uint length, int16 x, int16 y, byte color, byte lineAdvance = 8);
 	void drawScore(uint value, int16 x, int16 y, byte color, int16 background = -1);
+	void installCrossCursor();
+	void initPalette();
+	void presentFrame();
+	void tracePresentationDraw(const char *kind, uint16 site, const Common::Rect &region);
+
 	void drawInputField(const MewiloTextField &field, const Common::Array<byte> &text, bool cursor);
 	byte translateInputKey(int16 key) const;
 	bool playRawSample(
@@ -149,12 +154,9 @@ private:
 		uint16 rateOffset = 0);
 	bool playNativeCue();
 	bool playCpcMusic(const Common::String &name);
+	void playSoundCommand(byte command);
 	void stopMewiloAudio();
-	void installCrossCursor();
-	void initPalette();
 	void waitMilliseconds(uint32 durationMs);
-	void presentFrame();
-	void tracePresentationDraw(const char *kind, uint16 site, const Common::Rect &region);
 	void waitPresentation(const MewiloTimingPlan &plan, uint16 site);
 	uint32 activeMillis() const;
 

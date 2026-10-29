@@ -89,6 +89,16 @@ void PreGob_Mewilo::selectSampleAudio() {
 			(amiga ? missingSmp : missingSpl).c_str());
 }
 
+void PreGob_Mewilo::playEffectTone(int16 frequency, int32 duration) {
+	_effectToneUntil = activeMillis() + duration;
+	beep(frequency, duration);
+}
+
+bool PreGob_Mewilo::audioIdle() const {
+	return !samplePlaying() && !_music->isPlaying() && !_vm->_sound->blasterPlayingSound() &&
+		int32(activeMillis() - _effectToneUntil) >= 0;
+}
+
 bool PreGob_Mewilo::samplePlaying() const {
 	return g_system->getMixer()->isSoundHandleActive(_sampleHandle);
 }
@@ -101,18 +111,18 @@ bool PreGob_Mewilo::playAmigaSample(
 	const bool valid = stream && readMewiloAmigaSample(*stream, pcm, rate);
 	delete stream;
 	if (!valid || repetitions <= 0) {
-		renderFailure(
+		hostFailure(
 			Common::String::format("missing or invalid Amiga sample %s", name.c_str()).c_str(), 0);
 		return false;
 	}
 	const uint32 effectiveRate = uint32(rate) + rateOffset;
 	if (effectiveRate > 65535) {
-		renderFailure("invalid Amiga sample playback rate", 0);
+		hostFailure("invalid Amiga sample playback rate", 0);
 		return false;
 	}
 	byte *owned = (byte *)malloc(pcm.size());
 	if (!owned) {
-		renderFailure("unable to allocate sample", 0);
+		hostFailure("unable to allocate sample", 0);
 		return false;
 	}
 	memcpy(owned, pcm.data(), pcm.size());
@@ -134,7 +144,7 @@ bool PreGob_Mewilo::playNativeCue() {
 		balance = 127; // Paula channel 0, unlike the file samples on channel 1.
 	} else if (_profile.platform == kMewiloPlatformThomsonTO) {
 		if (!renderMewiloThomsonBell(pcm)) {
-			renderFailure("unable to render Thomson BEL", 0);
+			hostFailure("unable to render Thomson BEL", 0);
 			return false;
 		}
 		rate = kMewiloThomsonSampleRate;
@@ -143,7 +153,7 @@ bool PreGob_Mewilo::playNativeCue() {
 	}
 	byte *owned = (byte *)malloc(pcm.size());
 	if (!owned) {
-		renderFailure("unable to allocate input cue", 0);
+		hostFailure("unable to allocate input cue", 0);
 		return false;
 	}
 	memcpy(owned, pcm.data(), pcm.size());
@@ -163,19 +173,19 @@ bool PreGob_Mewilo::playRawSample(
 	const Common::String &name, uint16 frequency, int16 repetitions, bool music) {
 	Common::SeekableReadStream *stream = openResource(name);
 	if (!stream) {
-		renderFailure(Common::String::format("missing sample %s", name.c_str()).c_str(), 0);
+		hostFailure(Common::String::format("missing sample %s", name.c_str()).c_str(), 0);
 		return false;
 	}
 	const int64 size = stream->size();
 	if (size <= 0 || size > 8 * 1024 * 1024 || repetitions <= 0 || !frequency) {
 		delete stream;
-		renderFailure("invalid sample extent", 0);
+		hostFailure("invalid sample extent", 0);
 		return false;
 	}
 	byte *data = (byte *)malloc((uint32)size);
 	if (!data) {
 		delete stream;
-		renderFailure("unable to allocate sample", 0);
+		hostFailure("unable to allocate sample", 0);
 		return false;
 	}
 	stream->seek(0);
@@ -183,7 +193,7 @@ bool PreGob_Mewilo::playRawSample(
 	delete stream;
 	if (got != (uint32)size) {
 		free(data);
-		renderFailure("unable to read sample", 0);
+		hostFailure("unable to read sample", 0);
 		return false;
 	}
 
@@ -199,7 +209,7 @@ bool PreGob_Mewilo::playSample(byte *pcm, uint32 size, uint16 frequency,
 		Audio::makeRawStream(pcm, size, frequency, 0, DisposeAfterUse::YES);
 	if (!raw) {
 		free(pcm);
-		renderFailure("unable to create sample stream", 0);
+		hostFailure("unable to create sample stream", 0);
 		return false;
 	}
 	Audio::AudioStream *loop = Audio::makeLoopingAudioStream(raw, repetitions);
@@ -286,44 +296,12 @@ bool PreGob_Mewilo::playCpcMusic(const Common::String &name) {
 	return !shouldQuit() && !hasError();
 }
 
-void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uint variableCount) {
-	const uint score = variableCount > 0x17 ? (uint16)variables[0x17].word0 : 0;
-
-	// Presentation/VM-adjacent commands are shared across the native ports.
-	switch (command) {
-	case 0:
-		// CPC glyphs overwrite their paper, so old digit strokes cannot remain.
-		if (_profile.platform == kMewiloPlatformAmstradCPC)
-			drawScore(score, 37 * 8, 184, 0, 2);
-		else
-			drawScore(score, 37 * 8, 184, 7);
-		return;
-	case 2:
-		installCrossCursor();
-		showCursor();
-		// Cue ownership follows the native source, independently of sample files.
-		playNativeCue();
-		return;
-	case 7:
-		return;
-	case 9:
-		if (_profile.platform == kMewiloPlatformAmstradCPC) {
-			drawScore(score, 28 * 8, 56, 0, 3);
-			// The native CPC ending repeats the score below the main line.
-			drawScore(score, 19 * 8, 164, 0, 2);
-		} else {
-			drawScore(score, 28 * 8, 56, 1);
-		}
-		return;
-	default:
-		break;
-	}
-
+void PreGob_Mewilo::playSoundCommand(byte command) {
 	if (_audioBackend == kMewiloAudioCpcMus) {
 		// The resident CPC dispatch only implements music commands 6 and 8.
 		if ((command == 6 && !playCpcMusic("MEWIL2.MUS")) ||
 			(command == 8 && !playCpcMusic("MEWILO.MUS")))
-			renderFailure("unable to play native CPC music", 0);
+			hostFailure("unable to play native CPC music", 0);
 		return;
 	}
 
@@ -374,7 +352,7 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 
 	if (_audioBackend == kMewiloAudioThomsonNote) {
 		if ((command == 6 || command == 8) && !playThomsonMusic(command))
-			renderFailure("unable to replay Thomson NOTE stream", 0);
+			hostFailure("unable to replay Thomson NOTE stream", 0);
 		return;
 	}
 

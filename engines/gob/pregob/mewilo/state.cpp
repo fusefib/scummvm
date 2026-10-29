@@ -28,9 +28,6 @@
 
 #include "gob/draw.h"
 #include "gob/gob.h"
-#include "gob/sound/sound.h"
-#include "gob/sound/soundmixer.h"
-#include "gob/util.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -45,16 +42,6 @@ struct PreGob_Mewilo::PreparedRestore {
 
 	explicit PreparedRestore(MewiloExecHost &host) : executor(host) {}
 };
-
-void PreGob_Mewilo::playEffectTone(int16 frequency, int32 duration) {
-	_effectToneUntil = activeMillis() + duration;
-	beep(frequency, duration);
-}
-
-bool PreGob_Mewilo::audioIdle() const {
-	return !samplePlaying() && !_music->isPlaying() && !_vm->_sound->blasterPlayingSound() &&
-		int32(activeMillis() - _effectToneUntil) >= 0;
-}
 
 bool PreGob_Mewilo::canSaveGameState(Common::U32String *msg) const {
 	bool ready = !hasError() && _saveReady && !_pendingRestore && _tot &&

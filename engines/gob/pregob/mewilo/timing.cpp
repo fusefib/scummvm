@@ -62,23 +62,6 @@ void PreGob_Mewilo::waitMilliseconds(uint32 durationMs) {
 	waitPresentation(plan, 0);
 }
 
-bool PreGob_Mewilo::waitContinueInput() {
-	MewiloInputEvent event;
-	return waitInput(event);
-}
-
-bool PreGob_Mewilo::waitInputRelease() {
-	int16 x, y;
-	MouseButtons buttons;
-	while (!shouldQuit() && !hasError() && !_pendingRestore) {
-		_vm->_util->getMouseState(&x, &y, &buttons);
-		if (buttons == kMouseButtonsNone)
-			return true;
-		serviceEvents();
-	}
-	return false;
-}
-
 void PreGob_Mewilo::waitOrDelay(byte argument) {
 	if (!argument) {
 		if (waitContinueInput())

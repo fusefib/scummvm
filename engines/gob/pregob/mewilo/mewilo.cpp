@@ -26,12 +26,10 @@
 #include "common/textconsole.h"
 
 #include "gob/dataio.h"
-#include "gob/global.h"
 #include "gob/gob.h"
 #include "gob/pregob/mewilo/options.h"
 #include "gob/sound/soundmixer.h"
 #include "gob/util.h"
-#include "gob/video.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -79,22 +77,52 @@ bool PreGob_Mewilo::shouldQuit() const {
 	return _vm->shouldQuit();
 }
 
-void PreGob_Mewilo::initPalette() {
-	byte palette[(kCursorColor + 1) * 3];
-	buildMewiloDisplayPalette(_presentationPlatform, palette);
-	// Gob's palette fade accepts six-bit staging values, not RGB888.
-	for (uint i = 0; i < 16 * 3; ++i)
-		palette[i] >>= 2;
-	// Keep the cursor's hue, using a nearby shade outside the scene's 16 inks.
-	for (uint i = 0; i < 3; ++i) {
-		const byte component = palette[15 * 3 + i];
-		palette[kCursorColor * 3 + i] = component < 60 ? component + 4 : component - 4;
+void PreGob_Mewilo::hostFailure(const char *message, uint16 nodeOffset) {
+	_hostFailed = true;
+	warning("Mewilo: host operation failed in %s.TOT at 0x%04X: %s", _moduleStem.c_str(),
+		nodeOffset, message);
+}
+
+uint16 PreGob_Mewilo::randomModulo(uint16 count) {
+	if (!count)
+		return 0;
+	return (uint16)(_vm->_rnd.getRandomNumber(0x7FFFFFFF) % count);
+}
+
+void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uint variableCount) {
+	const uint score = variableCount > 0x17 ? (uint16)variables[0x17].word0 : 0;
+
+	// Presentation/VM-adjacent commands are shared across the native ports.
+	switch (command) {
+	case 0:
+		// CPC glyphs overwrite their paper, so old digit strokes cannot remain.
+		if (_profile.platform == kMewiloPlatformAmstradCPC)
+			drawScore(score, 37 * 8, 184, 0, 2);
+		else
+			drawScore(score, 37 * 8, 184, 7);
+		return;
+	case 2:
+		installCrossCursor();
+		showCursor();
+		// Cue ownership follows the native source, independently of sample files.
+		playNativeCue();
+		return;
+	case 7:
+		return;
+	case 9:
+		if (_profile.platform == kMewiloPlatformAmstradCPC) {
+			drawScore(score, 28 * 8, 56, 0, 3);
+			// The native CPC ending repeats the score below the main line.
+			drawScore(score, 19 * 8, 164, 0, 2);
+		} else {
+			drawScore(score, 28 * 8, 56, 1);
+		}
+		return;
+	default:
+		break;
 	}
-	setPalette(palette, kCursorColor + 1);
-	// A 16-color fade does not upload the spare cursor entry.
-	_vm->_video->setPalElem(kCursorColor, palette[kCursorColor * 3],
-		palette[kCursorColor * 3 + 1], palette[kCursorColor * 3 + 2],
-		-1, _vm->_global->_videoMode);
+
+	playSoundCommand(command);
 }
 
 void PreGob_Mewilo::run() {
