@@ -31,6 +31,8 @@ class Surface;
 
 namespace Mewilo {
 
+struct ReplacementEntry;
+
 class MewiloI00Bank {
 public:
 	static const uint kMaxRecords = 256;
@@ -82,6 +84,11 @@ struct MewiloPackedDecodeResult {
  */
 MewiloPackedDecodeResult drawMewiloPacked(const byte *payload, uint32 payloadSize,
 	Surface &dest, int16 x, int16 y, uint16 width, uint16 height, byte scaleX = 1);
+
+/** Draw a replacement after native decode/scratch effects and before dirty marking.
+ * This ordering preserves the Atari scratch bytes needed by subsequent images.
+ */
+bool drawReplacementImage(const ReplacementEntry &entry, Surface &dest, int16 x, int16 y);
 
 } // End of namespace Mewilo
 } // End of namespace Gob

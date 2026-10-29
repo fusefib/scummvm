@@ -139,7 +139,6 @@ public:
 	static bool validateState(const MewiloTotData &tot, const MewiloExecState &state);
 	bool importState(const MewiloTotData &tot, const MewiloExecState &state);
 	void adoptState(MewiloExecutor &prepared);
-	static void normalizeAnswer(Common::Array<byte> &text);
 
 	MewiloVar &variable(uint index) { return _variables[index]; }
 	const MewiloVar &variable(uint index) const { return _variables[index]; }

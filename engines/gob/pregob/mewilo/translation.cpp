@@ -22,10 +22,9 @@
 
 #include "common/stream.h"
 
-#include "gob/pregob/mewilo/executor.h"
 #include "gob/pregob/mewilo/font.h"
+#include "gob/pregob/mewilo/text.h"
 #include "gob/pregob/mewilo/tot.h"
-#include "gob/surface.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -214,11 +213,11 @@ bool MewiloReplacements::answerMatches(const MewiloTotData &tot, const Replaceme
 		return false;
 	handled = true;
 	Common::Array<byte> normalized = input, candidate;
-	MewiloExecutor::normalizeAnswer(normalized);
+	normalizeMewiloAnswer(normalized);
 	for (uint i = 0; i < e->bytes.size(); ++i) {
 		const byte c = e->bytes[i];
 		if (c == '/' || !c) {
-			MewiloExecutor::normalizeAnswer(candidate);
+			normalizeMewiloAnswer(candidate);
 			if (!candidate.empty() && normalized.size() == candidate.size() &&
 				!memcmp(normalized.data(), candidate.data(), candidate.size()))
 				return true;
@@ -316,29 +315,6 @@ void MewiloReplacements::writeIdentity(Common::WriteStream &stream) const {
 		stream.writeUint32LE(entry.bytes.size());
 		stream.write(entry.bytes.data(), entry.bytes.size());
 	}
-}
-
-bool drawReplacementImage(const ReplacementEntry &e, Surface &dest, int16 x, int16 y) {
-	if (e.key.kind != kReplacementImage || !e.width || !e.height || e.bytes.size() != uint32(e.width) * e.height)
-		return false;
-	for (uint i = 0; i < e.bytes.size(); ++i)
-		if (e.bytes[i] > 15)
-			return false;
-	const uint scale = e.key.family == kReplacementCpcFrench ? 2 : 1;
-	for (uint sy = 0; sy < e.height; ++sy) {
-		const int dy = int(y) + int(sy);
-		if (dy < 0 || dy >= dest.getHeight())
-			continue;
-		for (uint sx = 0; sx < e.width; ++sx) {
-			const byte pen = e.bytes[sy * e.width + sx];
-			for (uint n = 0; n < scale; ++n) {
-				const int dx = int(x) + int(sx * scale + n);
-				if (dx >= 0 && dx < dest.getWidth())
-					dest.putPixel(dx, dy, pen);
-			}
-		}
-	}
-	return true;
 }
 
 } // namespace Mewilo

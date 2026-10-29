@@ -24,6 +24,7 @@
 #include "common/md5.h"
 #include "common/memstream.h"
 #include "gob/pregob/mewilo/graphics.h"
+#include "gob/pregob/mewilo/translation.h"
 #include "gob/surface.h"
 
 namespace Gob {
@@ -158,6 +159,29 @@ bool MewiloI00Bank::computeMD5(byte digest[16]) const {
 		return false;
 	Common::MemoryReadStream owned(_data.data(), _data.size());
 	return Common::computeStreamMD5(owned, digest);
+}
+
+bool drawReplacementImage(const ReplacementEntry &e, Surface &dest, int16 x, int16 y) {
+	if (e.key.kind != kReplacementImage || !e.width || !e.height || e.bytes.size() != uint32(e.width) * e.height)
+		return false;
+	for (uint i = 0; i < e.bytes.size(); ++i)
+		if (e.bytes[i] > 15)
+			return false;
+	const uint scale = e.key.family == kReplacementCpcFrench ? 2 : 1;
+	for (uint sy = 0; sy < e.height; ++sy) {
+		const int dy = int(y) + int(sy);
+		if (dy < 0 || dy >= dest.getHeight())
+			continue;
+		for (uint sx = 0; sx < e.width; ++sx) {
+			const byte pen = e.bytes[sy * e.width + sx];
+			for (uint n = 0; n < scale; ++n) {
+				const int dx = int(x) + int(sx * scale + n);
+				if (dx >= 0 && dx < dest.getWidth())
+					dest.putPixel(dx, dy, pen);
+			}
+		}
+	}
+	return true;
 }
 
 } // End of namespace Mewilo

@@ -20,6 +20,8 @@
 
 #include "gob/pregob/mewilo/executor.h"
 
+#include "gob/pregob/mewilo/text.h"
+
 namespace Gob {
 namespace Mewilo {
 
@@ -382,47 +384,10 @@ bool MewiloExecutor::parseTextField(uint32 descriptorOffset, MewiloTextField &fi
 	return true;
 }
 
-void MewiloExecutor::normalizeAnswer(Common::Array<byte> &text) {
-	for (uint i = 0; i < text.size(); ++i) {
-		byte &c = text[i];
-		if (c >= 'A' && c <= 'Z')
-			c += 'a' - 'A';
-		else if (c == 0x16 || c == 0x17 || c == 0x1B || c == 0x82 || c == 0x8A)
-			c = 'e';
-		else if (c == 0x18 || c == 0x1C || c == 0x85)
-			c = 'a';
-		else if (c == 0x19 || c == 0x97)
-			c = 'u';
-		else if (c == 0x1A || c == 0x87)
-			c = 'c';
-		else if (c == 0x1E || c == 0x1F)
-			c = 'i';
-		else if (c == 0x1D)
-			c = 'o';
-		else if ((c >= 0x21 && c <= 0x26) || (c >= 0x28 && c <= 0x2A) ||
-			c == 0x2C || c == 0x2E || c == 0x2F ||
-			(c >= 0x3A && c <= 0x40) || (c >= 0x5B && c <= 0x60) ||
-			(c >= 0x7B && c <= 0x7F))
-			c = ' ';
-	}
-
-	while (!text.empty() && text.front() == ' ')
-		text.remove_at(0);
-	while (!text.empty() && text.back() == ' ')
-		text.remove_at(text.size() - 1);
-
-	for (uint i = 1; i < text.size();) {
-		if (text[i - 1] == ' ' && text[i] == ' ')
-			text.remove_at(i);
-		else
-			++i;
-	}
-}
-
 bool MewiloExecutor::answerMatches(const MewiloTextField &field,
 	const Common::Array<byte> &input) const {
 	Common::Array<byte> normalizedInput = input;
-	normalizeAnswer(normalizedInput);
+	normalizeMewiloAnswer(normalizedInput);
 
 	if (!_tot || !field.answerLength || !_tot->has(field.answerOffset, field.answerLength))
 		return false;
@@ -432,7 +397,7 @@ bool MewiloExecutor::answerMatches(const MewiloTextField &field,
 		const byte c = _tot->byteAt(field.answerOffset + i);
 		if (c == '/' || c == 0) {
 			Common::Array<byte> normalizedCandidate = candidate;
-			normalizeAnswer(normalizedCandidate);
+			normalizeMewiloAnswer(normalizedCandidate);
 			if (normalizedCandidate.size() == normalizedInput.size() &&
 				(normalizedInput.empty() || !memcmp(normalizedCandidate.data(), normalizedInput.data(), normalizedInput.size())))
 				return true;

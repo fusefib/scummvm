@@ -31,8 +31,6 @@ class WriteStream;
 
 namespace Gob {
 
-class Surface;
-
 namespace Mewilo {
 
 class MewiloFont;
@@ -101,11 +99,6 @@ private:
 	uint16 _revision;
 	bool _sparseOriginal;
 };
-
-/** Draw a replacement after native decode/scratch effects and before dirty marking.
- * This ordering preserves the Atari scratch bytes needed by subsequent images.
- */
-bool drawReplacementImage(const ReplacementEntry &entry, Surface &dest, int16 x, int16 y);
 
 } // End of namespace Mewilo
 } // End of namespace Gob

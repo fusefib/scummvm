@@ -49,6 +49,9 @@ bool extractMewiloTextLine(const byte *source, uint32 sourceSize,
 /** Count visible glyph cells in an extracted Mewilo line. */
 uint16 countMewiloVisibleTextCells(const Common::Array<byte> &line);
 
+/** Apply Mewilo's native case, accent, punctuation and space normalization. */
+void normalizeMewiloAnswer(Common::Array<byte> &text);
+
 } // End of namespace Mewilo
 } // End of namespace Gob
 
