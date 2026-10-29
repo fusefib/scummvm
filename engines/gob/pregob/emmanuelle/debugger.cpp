@@ -241,6 +241,11 @@ static Common::String emmanuelleVariableDescription(uint index, uint16 value,
 	static const VariableState acceptedStates[] = {
 		{0, "not accepted"}, {1, "accepted"}, {0, nullptr}
 	};
+	// Conversation success precedes the separate payment and intimacy choices.
+	// Resets also write zero, so it does not establish a refused approach.
+	static const VariableState conversationStates[] = {
+		{0, "unset or unsuccessful"}, {1, "successful"}, {0, nullptr}
+	};
 	static const VariableState enabledStates[] = {
 		{0, "disabled"}, {1, "enabled"}, {0, nullptr}
 	};
@@ -249,6 +254,14 @@ static Common::String emmanuelleVariableDescription(uint index, uint16 value,
 	};
 	static const VariableState helicopterStates[] = {
 		{0, "unavailable"}, {1, "available"}, {2, "available"}, {0, nullptr}
+	};
+	static const VariableState hotelViewStates[] = {
+		{0, "lobby"}, {1, "floor 1"}, {2, "floor 2"}, {3, "floor 3"},
+		{4, "floor 4"}, {5, "helicopter view"}, {0, nullptr}
+	};
+	// One bypasses random selection; zero can still lead to confrontation.
+	static const VariableState confrontationStates[] = {
+		{0, "random selection"}, {1, "forced"}, {0, nullptr}
 	};
 	static const VariableState collectedStates[] = {
 		{0, "not collected"}, {1, "already collected"}, {0, nullptr}
@@ -313,9 +326,14 @@ static Common::String emmanuelleVariableDescription(uint index, uint16 value,
 		static const char *const fields[] = {"letter", "box", "color"};
 		description = Common::String::format("Protection prompt %u %s", (index - 1) / 3 + 1,
 			fields[(index - 1) % 3]);
+	} else if (hasDialogue && index == 10) {
+		description = module.equalsIgnoreCase("LOADHOT")
+			? "Door index, reply alternation or encounter sequence"
+			: "Reply alternation or encounter sequence";
+		contextual = true;
 	} else if (hasDialogue && index == 12) {
-		description = "Approach";
-		states = acceptedStates;
+		description = "Conversation result";
+		states = conversationStates;
 		contextual = true;
 	} else if (index >= 80 && index <= 89) {
 		description = Common::String::format("Dialogue topic %u weight", index - 79);
@@ -341,24 +359,25 @@ static Common::String emmanuelleVariableDescription(uint index, uint16 value,
 			const char *description;
 			const VariableState *states;
 		};
-		// LOADHOT stores Emmanuelle's or Mario's room in v15/v16. The selected
-		// door matches when the current floor (v17) equals v15 and v10 equals v16.
+		// LOADHOT reuses v10 for doors, reply alternation and presentation.
+		// Room checks compare v17/v10 with target v15/v16. Wrong looks increment
+		// v99 and request a four-point Energy loss through v39.
 		static const VariableDescription descriptions[] = {
 			{0, nullptr, "Module selector", nullptr},
 			{10, "LOADFAV", "Encounter sequence", sequenceStates},
 			{11, "LOADHOT", "Helicopter", helicopterStates},
-			{13, nullptr, "Encounter character", nullptr},
+			{13, nullptr, "Interaction character ID", nullptr},
 			{14, "LOADCAS", "Offered gift", giftStates},
-			{14, "LOADGAR", "Conversation topic", nullptr},
+			{14, "LOADGAR", "Selected party item", nullptr},
 			{15, "LOADCAS", "Casino man response stage", nullptr},
-			{15, "LOADHOT", "Special room floor", nullptr},
+			{15, "LOADHOT", "Target room floor", nullptr},
 			{16, "LOADCAS", "Casino woman response stage", nullptr},
-			{16, "LOADHOT", "Special room door", nullptr},
-			{17, nullptr, "Current hotel floor", nullptr},
+			{16, "LOADHOT", "Target room door", nullptr},
+			{17, "LOADHOT", "Hotel view", hotelViewStates},
 			{18, nullptr, "Hotel tip contact", availableStates},
 			{19, "LOADCAS", "Predicted roulette number", nullptr},
 			{19, "LOADFAV", "Market warning", shownStates},
-			{19, "LOADGAR", "Reply alternation", nullptr},
+			{19, "LOADGAR", "Wrong-item warning", shownStates},
 			{19, "LOADHOT", "Hotel information contact", availableStates},
 			{20, nullptr, "Game hour", nullptr},
 			{21, nullptr, "Cash (hundreds)", nullptr},
@@ -378,17 +397,24 @@ static Common::String emmanuelleVariableDescription(uint index, uint16 value,
 			{36, nullptr, "Casino number tip", receivedStates},
 			{37, nullptr, "Casino encounter", encounterStates},
 			{38, nullptr, "Casino contact referral", referralStates},
-			{39, nullptr, "Energy budget or fight result", nullptr},
-			{40, nullptr, "Energy gauge remainder", nullptr},
-			{41, nullptr, "Encounter animation variant", nullptr},
-			{42, nullptr, "Beach contact remark", nullptr},
+			{39, "LOADAERO", "Energy-loss budget", nullptr},
+			{39, "LOADCAS", "Energy-loss budget", nullptr},
+			{39, "LOADCHUT", "Energy-loss budget", nullptr},
+			{39, "LOADGAR", "Energy-loss budget", nullptr},
+			{39, "LOADHOT", "Energy-loss budget", nullptr},
+			{39, "LOADPLA", "Energy-loss budget or native fight return", nullptr},
+			// Refill scratch survives the operation; ordinary losses do not refresh it.
+			{40, "LOADHOT", "Energy refill working value", nullptr},
+			{40, "LOADPLA", "Energy refill working value", nullptr},
+			{41, nullptr, "Result animation selector", nullptr},
+			{42, nullptr, "Next beach rebuff", nullptr},
 			{43, nullptr, "Helicopter pilot encounter", completedStates},
 			{44, nullptr, "Location selector", nullptr},
 			{45, nullptr, "Rio beach encounter", asymmetryStates},
 			{46, nullptr, "Waterfall harness", receivedStates},
 			{47, nullptr, "Boatman introduction", shownStates},
 			{48, nullptr, "Governor introduction", shownStates},
-			{49, nullptr, "Favela penalty bypass", enabledStates},
+			{49, nullptr, "Favela confrontation", confrontationStates},
 			{50, nullptr, "Fortifying potion", receivedStates},
 			{51, nullptr, "Rio hotel information reply", nullptr},
 			{52, nullptr, "Salvador hotel information reply", nullptr},
@@ -403,14 +429,14 @@ static Common::String emmanuelleVariableDescription(uint index, uint16 value,
 			{61, nullptr, "Salvador lobby encounter", encounterStates},
 			{62, nullptr, "Garden-party companion state", invitationStates},
 			{63, nullptr, "Initial LOADHOT setup", setupStates},
-			{68, nullptr, "Garden-party middle encounter", numberStates},
+			{68, nullptr, "Garden-party right encounter", numberStates},
 			{69, nullptr, "Iguacu lobby encounter", numberStates},
-			{70, nullptr, "Garden-party right encounter", encounterStates},
+			{70, nullptr, "Garden-party middle encounter", encounterStates},
 			{71, nullptr, "Manaus hotel gossip reply", nullptr},
 			{72, nullptr, "Iguacu hotel gossip reply", nullptr},
 			{73, nullptr, "Manaus hotel introduction", shownStates},
 			{75, nullptr, "Aphrodisiac mission", acceptedStates},
-			{76, nullptr, "Beach contact return screen", nullptr},
+			{76, nullptr, "Beach contact return layout", nullptr},
 			{77, nullptr, "Encounter result count", nullptr},
 			{99, nullptr, "Wrong-room keyhole views", nullptr},
 			{123, nullptr, "Roulette chip X", nullptr},
@@ -437,7 +463,7 @@ static Common::String emmanuelleVariableDescription(uint index, uint16 value,
 		}
 	}
 	if (description.empty() && ((index >= 10 && index <= 12) ||
-		(index >= 14 && index <= 16) || index == 19))
+		(index >= 14 && index <= 17) || index == 19 || index == 39 || index == 40))
 		description = "Shared scene value";
 	if (states) {
 		const char *meaning = "unknown state";
@@ -449,13 +475,8 @@ static Common::String emmanuelleVariableDescription(uint index, uint16 value,
 		}
 		description = Common::String::format("%s: %s", description.c_str(), meaning);
 	}
-	if (contextual) {
-		if ((index >= 14 && index <= 16) || index == 19)
-			return Common::String::format("Shared scene value\n          // Currently: %s / %s",
-				description.c_str(), module.c_str());
-		return Common::String::format("Shared scene value\n          // Currently: %s",
-			description.c_str());
-	}
+	if (contextual)
+		return Common::String::format("%s use: %s", module.c_str(), description.c_str());
 	return description;
 }
 
