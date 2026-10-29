@@ -43,7 +43,8 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) :
 	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false),
 	_executor(*this), _tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0),
-	_hostFailed(false), _normalizeTiming(ConfMan.hasKey("mewilo_presentation_timing") &&
+	_hostFailed(false), _deferPresentation(false),
+	_normalizeTiming(ConfMan.hasKey("mewilo_presentation_timing") &&
 		ConfMan.getBool("mewilo_presentation_timing")),
 	_scriptPatchPolicy(
 		!ConfMan.hasKey("mewilo_script_fixes") || ConfMan.getBool("mewilo_script_fixes")

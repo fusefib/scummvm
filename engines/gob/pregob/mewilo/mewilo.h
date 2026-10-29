@@ -149,7 +149,10 @@ private:
 	void waitMilliseconds(uint32 durationMs);
 	void presentFrame();
 	void tracePresentationDraw(const char *kind, uint16 site, const Common::Rect &region);
-	void waitPresentation(const MewiloTimingPlan &plan, uint16 site, bool ownsStep = true);
+	void waitPresentation(const MewiloTimingPlan &plan, uint16 site, bool ownsStep = true,
+		uint32 elapsedWork = 0);
+	void waitPackedDraw(const MewiloTotData &tot, uint16 site,
+		const MewiloPackedDecodeResult &decoded, uint32 started);
 	uint32 activeMillis() const;
 
 	// A presentation override must keep native resource and save semantics.
@@ -177,6 +180,7 @@ private:
 	uint32 _pausedMillis;
 	uint _pauseDepth;
 	bool _hostFailed;
+	bool _deferPresentation;
 	bool _normalizeTiming;
 	uint32 _scriptPatchPolicy;
 	MewiloScriptPatchReport _scriptPatchReport;

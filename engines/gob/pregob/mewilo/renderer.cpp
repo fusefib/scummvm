@@ -164,7 +164,8 @@ void PreGob_Mewilo::drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) {
 }
 
 void PreGob_Mewilo::drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset) {
-	_presentation.beginStep(activeMillis());
+	const uint32 started = activeMillis();
+	_presentation.beginStep(started);
 	if (!tot.has(nodeOffset, 7) || !_vm->_draw->_backSurface) {
 		renderFailure("invalid inline image header or missing surface", nodeOffset);
 		return;
@@ -193,10 +194,12 @@ void PreGob_Mewilo::drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset)
 		renderFailure("invalid replacement image", nodeOffset);
 	markDirty(x, y, outputWidth, height);
 	tracePresentationDraw("image", nodeOffset, Common::Rect(x, y, x + outputWidth, y + height));
+	waitPackedDraw(tot, nodeOffset, result, started);
 }
 
 void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffset) {
-	_presentation.beginStep(activeMillis());
+	const uint32 started = activeMillis();
+	_presentation.beginStep(started);
 	if (!tot.has(nodeOffset, 8) || !_vm->_draw->_backSurface) {
 		renderFailure("invalid external image header or missing surface", nodeOffset);
 		return;
@@ -262,6 +265,7 @@ void PreGob_Mewilo::drawExternalImage(const MewiloTotData &tot, uint16 nodeOffse
 		renderFailure("invalid replacement image", nodeOffset);
 	markDirty(x, y, outputWidth, height);
 	tracePresentationDraw("image", nodeOffset, Common::Rect(x, y, x + outputWidth, y + height));
+	waitPackedDraw(tot, nodeOffset, result, started);
 }
 
 void PreGob_Mewilo::saveRect(byte xCell, byte y, byte widthCell, byte height) {
@@ -339,7 +343,7 @@ void PreGob_Mewilo::tracePresentationDraw(
 }
 
 void PreGob_Mewilo::presentFrame() {
-	if (shouldQuit() || hasError())
+	if (_deferPresentation || shouldQuit() || hasError())
 		return;
 	const SurfacePtr &surface = _vm->_draw->_backSurface;
 	if (!surface || surface->getWidth() != 320 || surface->getHeight() != 200 ||

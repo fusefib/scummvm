@@ -28,7 +28,7 @@ namespace Gob {
 namespace Mewilo {
 
 MewiloTimingPlan::MewiloTimingPlan() :
-	anchor(kMewiloElapsedWait), milliseconds(0), minimumExposure(0), region(0, 0, 320, 200),
+	anchor(kMewiloElapsedWait), milliseconds(0), minimumDelay(0), minimumExposure(0), region(0, 0, 320, 200),
 	rule("native-wait"), calibrated(false), textNode(0) {
 }
 
@@ -413,7 +413,9 @@ uint32 MewiloPresentation::waitRemaining(
 			  visibleAge(
 				  plan.exposureRegion.isEmpty() ? plan.region : plan.exposureRegion, activeTime))
 		: 0;
-	return MAX(budgetLeft, exposureLeft);
+	const uint32 delayLeft = remaining(
+		mewiloScaleTime(plan.minimumDelay, speed), activeTime - waitStart);
+	return MAX(MAX(budgetLeft, exposureLeft), delayLeft);
 }
 
 uint32 MewiloPresentation::remaining(uint32 budget, uint32 elapsed) {

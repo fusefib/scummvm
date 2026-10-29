@@ -91,8 +91,29 @@ void PreGob_Mewilo::waitOrDelay(byte argument) {
 	}
 }
 
-void PreGob_Mewilo::waitPresentation(const MewiloTimingPlan &plan, uint16 site, bool ownsStep) {
-	const uint32 start = activeMillis();
+void PreGob_Mewilo::waitPackedDraw(const MewiloTotData &tot, uint16 site,
+	const MewiloPackedDecodeResult &decoded, uint32 started) {
+	MewiloTimingPlan plan;
+	plan.milliseconds = mewiloPackedDrawMillis(_presentationPlatform,
+		tot.byteAt(site + 3), tot.byteAt(site + 5), tot.byteAt(site + 6), decoded,
+		(tot.byteAt(site) & 0x3F) >= 0x20);
+	if (!plan.milliseconds)
+		return;
+	plan.rule = "packed-draw-work";
+	// Keep the composition's step open. Its eventual FF03 owns a separate delay;
+	// optional readability budgets can include drawing already accounted here.
+	// Native drawing updates pixels progressively. Retain the preceding frame
+	// until this completed draw is due, rather than holding the new frame for
+	// its own cost (which shifts exposure when successive image sizes differ).
+	_deferPresentation = true;
+	waitPresentation(plan, site, false, activeMillis() - started);
+	_deferPresentation = false;
+	presentFrame();
+}
+
+void PreGob_Mewilo::waitPresentation(
+	const MewiloTimingPlan &plan, uint16 site, bool ownsStep, uint32 elapsedWork) {
+	const uint32 start = activeMillis() - elapsedWork;
 	if (ownsStep)
 		_presentation.beginStep(start);
 	if (plan.anchor == kMewiloVisibleHold || plan.minimumExposure)
@@ -143,12 +164,13 @@ void PreGob_Mewilo::waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte ar
 	}
 	MewiloTimingPlan plan = mewiloTimingPlan(tot, _moduleStem.c_str(), _vm->_language,
 		_presentationPlatform, site, argument, _normalizeTiming);
+	bool calibrated = false;
+	plan.minimumDelay = mewiloNativeDelayMillis(_presentationPlatform, argument, calibrated);
 	const ReplacementEntry *text =
 		plan.textNode ? replacementEntry(tot, plan.textNode, kReplacementText) : nullptr;
 	if (text) {
-		bool calibrated = false;
 		plan.milliseconds =
-			MAX<uint32>(mewiloNativeDelayMillis(_presentationPlatform, argument, calibrated),
+			MAX<uint32>(plan.minimumDelay,
 				mewiloReadingMillis(text->bytes.data(), text->bytes.size()));
 	}
 	waitPresentation(plan, site);

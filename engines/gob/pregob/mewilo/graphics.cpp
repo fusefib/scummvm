@@ -98,7 +98,7 @@ bool MewiloI00Bank::getRecord(uint index, uint16 &framedSize,
 }
 
 MewiloPackedDecodeResult::MewiloPackedDecodeResult() :
-	pixelsWritten(0), bytesConsumed(0), runOverhang(0), complete(false), truncated(false) {
+	pixelsWritten(0), bytesConsumed(0), runsDecoded(0), runOverhang(0), complete(false), truncated(false) {
 }
 
 MewiloPackedDecodeResult drawMewiloPacked(const byte *payload, uint32 payloadSize,
@@ -126,6 +126,7 @@ MewiloPackedDecodeResult drawMewiloPacked(const byte *payload, uint32 payloadSiz
 			run = (run << 8) | payload[p++];
 		}
 		++run;
+		++result.runsDecoded;
 
 		const uint32 remaining = targetPixels - result.pixelsWritten;
 		const uint32 emit = MIN<uint32>(run, remaining);

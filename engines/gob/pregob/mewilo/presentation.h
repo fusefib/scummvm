@@ -40,6 +40,7 @@ enum MewiloTimeAnchor {
 struct MewiloTimingPlan {
 	MewiloTimeAnchor anchor;
 	uint32 milliseconds;
+	uint32 minimumDelay; ///< Native delay also applies under optional step/exposure budgets.
 	uint16 minimumExposure; ///< Concurrent safety floor for a late animation step.
 	Common::Rect region;
 	Common::Rect exposureRegion; ///< Optional separate image floor under dialogue.
