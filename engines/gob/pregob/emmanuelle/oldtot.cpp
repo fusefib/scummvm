@@ -238,9 +238,12 @@ bool OldTotData::decodeDrawDescriptor(uint16 offset, OldTotDrawDescriptor &out) 
 
 	if (out.external())
 		out.resourceIndex = byteAt(offset + 11);
-	else if (out.flags & 0x10)
+	else if (out.flags & 0x10) {
+		// Linked images store a two-byte pointer where external images use an index.
+		if (!has(offset, 13))
+			return false;
 		out.payloadOffset = uint16BEAt(offset + 11);
-	else
+	} else
 		out.payloadOffset = offset + 11;
 
 	return out.external() || out.payloadOffset < _data.size();
