@@ -44,8 +44,8 @@ struct MewiloTimingPlan {
 	Common::Rect region;
 	Common::Rect exposureRegion; ///< Optional separate image floor under dialogue.
 	const char *rule;
-	// True for documented nominal native conversions, not hardware timing.
-	// The Atari estimate and presentation policies leave this false.
+	// True identifies a recovered nominal base conversion, not hardware
+	// calibration or the duration of an optional reading hold.
 	bool calibrated;
 	bool animation;
 	bool reading;
