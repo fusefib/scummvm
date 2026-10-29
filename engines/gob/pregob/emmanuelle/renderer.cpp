@@ -183,21 +183,7 @@ bool prepareOldTotRendererState(const EmmanuelleRendererState &in,
 	prepared.atariPresentationMode = atariPresentationMode;
 	prepared.amigaPresentationMode = in.amigaPresentationMode;
 
-	out.framebuffer = prepared.framebuffer;
-	out.savedRegions.swap(prepared.savedRegions);
-	out.amigaPresentedFrame = prepared.amigaPresentedFrame;
-	for (uint i = 0; i < ARRAYSIZE(out.atariPalette); ++i)
-		out.atariPalette[i] = prepared.atariPalette[i];
-	for (uint i = 0; i < ARRAYSIZE(out.amigaPalette); ++i)
-		out.amigaPalette[i] = prepared.amigaPalette[i];
-	out.atariPaletteValid = prepared.atariPaletteValid;
-	out.atariBlack = prepared.atariBlack;
-	out.amigaPaletteValid = prepared.amigaPaletteValid;
-	out.amigaBlack = prepared.amigaBlack;
-	out.amigaModuleGeneration = prepared.amigaModuleGeneration;
-	out.amigaPresentedGeneration = prepared.amigaPresentedGeneration;
-	out.atariPresentationMode = prepared.atariPresentationMode;
-	out.amigaPresentationMode = prepared.amigaPresentationMode;
+	SWAP(out, prepared);
 	return true;
 }
 

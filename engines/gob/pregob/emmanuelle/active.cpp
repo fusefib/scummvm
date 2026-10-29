@@ -83,7 +83,7 @@ bool ActiveSpriteLayer::importState(
 			state.height != state.background.height))
 			return false;
 	}
-	_slots = slots;
+	_slots.swap(slots);
 	return true;
 }
 

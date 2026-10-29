@@ -685,7 +685,7 @@ bool decodeEmmanuelleSave(Common::SeekableReadStream &stream,
 		reason = "invalid payload state";
 		return false;
 	}
-	state = decoded;
+	SWAP(state, decoded);
 	reason.clear();
 	return true;
 }
