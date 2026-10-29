@@ -5,7 +5,7 @@
 
 {
 	{"mewilo",
-	 "German resources - Atari ST profile",
+	 "",
 	 AD_ENTRY2s(
 		 "LOAD.TOT", "8ceda438ecc01148f0da4c9dd771aa49", 16523,
 		 "LETTRES.BIN", "89daf7e6ab6bd6c5127832a6145c3b31", 1024),
@@ -20,7 +20,7 @@
 
 {
 	{"mewilo",
-	 "French resources - Atari ST profile",
+	 "",
 	 AD_ENTRY2s(
 		 "LOAD.TOT", "b33149fd0b5c5aefc5b64ce2ded74a1e", 16349,
 		 "LETTRES.BIN", "89daf7e6ab6bd6c5127832a6145c3b31", 1024),
@@ -38,7 +38,7 @@
 // the runtime strips valid wrappers before handing data to the shared parser.
 {
 	{"mewilo",
-	 "AMSDOS files",
+	 "AMSDOS",
 	 AD_ENTRY3s(
 		 "AMSOAD.TOT", "d9d0dcbdf64ef28712aa13cc285a293a", 2688,
 		 "AMSOAD1.TOT", "22e4651a0a443de16d7b9fe8147b39c8", 8832,
@@ -55,7 +55,7 @@
 // The same CPC release with AMSDOS headers stripped by an extraction tool.
 {
 	{"mewilo",
-	 "raw files",
+	 "raw",
 	 AD_ENTRY3s(
 		 "AMSOAD.TOT", "7b9eadd6c0f2f5e1bcb7cec3b6fa7347", 2544,
 		 "AMSOAD1.TOT", "a12465d6e78ae7d7c65c0bb51057b17f", 8585,
@@ -72,7 +72,7 @@
 
 {
 	{"mewilo",
-	 "German resources - Amiga profile",
+	 "",
 	 AD_ENTRY2s(
 		 "LOAD.TOT", "8ceda438ecc01148f0da4c9dd771aa49", 16523,
 		 "LETTRES.BIN", "89daf7e6ab6bd6c5127832a6145c3b31", 1024),
@@ -87,7 +87,7 @@
 
 {
 	{"mewilo",
-	 "French resources - Amiga profile",
+	 "",
 	 AD_ENTRY2s(
 		 "LOAD.TOT", "b33149fd0b5c5aefc5b64ce2ded74a1e", 16349,
 		 "LETTRES.BIN", "89daf7e6ab6bd6c5127832a6145c3b31", 1024),

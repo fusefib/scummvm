@@ -102,6 +102,11 @@ DetectedGame GobMetaEngineDetection::toDetectedGame(const ADDetectedGame &adGame
 	DetectedGame game = AdvancedMetaEngineDetection::toDetectedGame(adGame, extraInfo);
 	if (!adGame.desc || strcmp(adGame.desc->gameId, "mewilo"))
 		game.appendGUIOptions(GUIO2(GUIO_NOLAUNCHLOAD, GAMEOPTION_TTS));
+	else if (game.platform == Common::kPlatformAmstradCPC &&
+		(game.extra == "AMSDOS" || game.extra == "raw"))
+		game.description = Common::String::format("%s (%s (%s)/%s)",
+			findGame("mewilo").description, Common::getPlatformDescription(game.platform),
+			game.extra.c_str(), Common::getLanguageDescription(game.language));
 	return game;
 }
 
