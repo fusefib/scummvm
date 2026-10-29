@@ -63,10 +63,6 @@ OldTotExecutor::OldTotExecutor(const OldTotData &data, OldTotVM &vm,
 	_suspended = false;
 	_suspendedNode = 0;
 	_stopReason = kOldTotExecutorRunning;
-
-	// Input waits may synchronously dispatch a scheduler child. Keep references
-	// to the active frame stable up to the executor's enforced stack limit.
-	_frames.reserve(kMaxFrames);
 }
 
 bool OldTotExecutor::valid(uint32 o, uint32 n) const {
@@ -439,6 +435,9 @@ bool OldTotExecutor::processDispatch(OldTotExecFrame &f) {
 bool OldTotExecutor::runLoop(uint baseDepth) {
 	if (_host.executionFailed())
 		return stop(kOldTotExecutorHostFailure);
+	// Inline waits can dispatch children while a parent frame is referenced.
+	// Clearing or importing the stack releases its previous reservation.
+	_frames.reserve(kMaxFrames);
 	while (_frames.size() > baseDepth && !_suspended) {
 		if (_host.shouldAbortExecution()) {
 			_stopReason = kOldTotExecutorHostAbort;
