@@ -303,11 +303,13 @@ void PreGob_Mewilo::fillScreen(byte color) {
 	markDirty(0, 0, 320, 200);
 }
 
-void PreGob_Mewilo::drawScore(uint value, int16 x, int16 y, byte color) {
+void PreGob_Mewilo::drawScore(uint value, int16 x, int16 y, byte color, int16 background) {
 	if (!_vm->_draw->_backSurface) {
 		renderFailure("missing score surface", 0);
 		return;
 	}
+	if (background >= 0)
+		_vm->_draw->_backSurface->fillRect(x, y, x + 15, y + 7, background);
 	value = MIN<uint>(99, value);
 	const byte digits[2] = {(byte)('0' + value / 10), (byte)('0' + value % 10)};
 	drawByteString(digits, 2, x, y, color, 8);

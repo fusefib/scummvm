@@ -292,7 +292,11 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 	// Presentation/VM-adjacent commands are shared across the native ports.
 	switch (command) {
 	case 0:
-		drawScore(score, 37 * 8, 184, 7);
+		// CPC glyphs overwrite their paper, so old digit strokes cannot remain.
+		if (_profile.platform == kMewiloPlatformAmstradCPC)
+			drawScore(score, 37 * 8, 184, 0, 2);
+		else
+			drawScore(score, 37 * 8, 184, 7);
 		return;
 	case 2:
 		installCrossCursor();
@@ -303,7 +307,13 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 	case 7:
 		return;
 	case 9:
-		drawScore(score, 28 * 8, 56, 1);
+		if (_profile.platform == kMewiloPlatformAmstradCPC) {
+			drawScore(score, 28 * 8, 56, 0, 3);
+			// The native CPC ending repeats the score below the main line.
+			drawScore(score, 19 * 8, 164, 0, 2);
+		} else {
+			drawScore(score, 28 * 8, 56, 1);
+		}
 		return;
 	default:
 		break;

@@ -134,7 +134,7 @@ private:
 	void markDirty(int16 x, int16 y, int16 width, int16 height);
 	void drawByteString(
 		const byte *text, uint length, int16 x, int16 y, byte color, byte lineAdvance = 8);
-	void drawScore(uint value, int16 x, int16 y, byte color);
+	void drawScore(uint value, int16 x, int16 y, byte color, int16 background = -1);
 	void drawInputField(const MewiloTextField &field, const Common::Array<byte> &text, bool cursor);
 	byte translateInputKey(int16 key) const;
 	bool playRawSample(
