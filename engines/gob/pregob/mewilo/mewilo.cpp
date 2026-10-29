@@ -26,10 +26,12 @@
 #include "common/textconsole.h"
 
 #include "gob/dataio.h"
+#include "gob/global.h"
 #include "gob/gob.h"
 #include "gob/pregob/mewilo/options.h"
 #include "gob/sound/soundmixer.h"
 #include "gob/util.h"
+#include "gob/video.h"
 
 namespace Gob {
 namespace Mewilo {
@@ -77,16 +79,29 @@ bool PreGob_Mewilo::shouldQuit() const {
 	return _vm->shouldQuit();
 }
 
+void PreGob_Mewilo::initPalette() {
+	byte palette[(kCursorColor + 1) * 3];
+	buildMewiloDisplayPalette(_presentationPlatform, palette);
+	// Gob's palette fade accepts six-bit staging values, not RGB888.
+	for (uint i = 0; i < 16 * 3; ++i)
+		palette[i] >>= 2;
+	// Keep the cursor's hue, using a nearby shade outside the scene's 16 inks.
+	for (uint i = 0; i < 3; ++i) {
+		const byte component = palette[15 * 3 + i];
+		palette[kCursorColor * 3 + i] = component < 60 ? component + 4 : component - 4;
+	}
+	setPalette(palette, kCursorColor + 1);
+	// A 16-color fade does not upload the spare cursor entry.
+	_vm->_video->setPalElem(kCursorColor, palette[kCursorColor * 3],
+		palette[kCursorColor * 3 + 1], palette[kCursorColor * 3 + 2],
+		-1, _vm->_global->_videoMode);
+}
+
 void PreGob_Mewilo::run() {
 	initScreen();
 	if (!initResources())
 		return;
-	byte palette[16 * 3];
-	buildMewiloDisplayPalette(_presentationPlatform, palette);
-	// Gob's palette fade accepts six-bit staging values, not RGB888.
-	for (uint i = 0; i < sizeof(palette); ++i)
-		palette[i] >>= 2;
-	setPalette(palette, 16);
+	initPalette();
 	if (!loadReplacements())
 		return;
 	if (!loadFont()) {

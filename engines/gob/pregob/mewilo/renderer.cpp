@@ -318,9 +318,9 @@ void PreGob_Mewilo::installCrossCursor() {
 	if (!_crossCursor) {
 		_crossCursor.reset(new Surface(16, 16, 1));
 		_crossCursor->clear();
-		_crossCursor->drawLine(7, 0, 7, 15, 15);
-		_crossCursor->drawLine(0, 7, 15, 7, 15);
-		_crossCursor->drawRect(5, 5, 9, 9, 15);
+		_crossCursor->drawLine(7, 0, 7, 15, kCursorColor);
+		_crossCursor->drawLine(0, 7, 15, 7, kCursorColor);
+		_crossCursor->drawRect(5, 5, 9, 9, kCursorColor);
 	}
 	setCursor(*_crossCursor, 7, 7);
 }

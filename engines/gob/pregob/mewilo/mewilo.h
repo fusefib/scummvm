@@ -83,6 +83,8 @@ public:
 		const MewiloTotData &tot, uint16 node, const byte *text, uint length) override;
 
 private:
+	enum { kCursorColor = 16 };
+
 	friend class MewiloHostTestSuite;
 
 	struct SavedRect {
@@ -149,6 +151,7 @@ private:
 	bool playCpcMusic(const Common::String &name);
 	void stopMewiloAudio();
 	void installCrossCursor();
+	void initPalette();
 	void waitMilliseconds(uint32 durationMs);
 	void presentFrame();
 	void tracePresentationDraw(const char *kind, uint16 site, const Common::Rect &region);
