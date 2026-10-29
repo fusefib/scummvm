@@ -111,29 +111,11 @@ bool PreGob_Mewilo::playAmigaSample(
 		return false;
 	}
 	memcpy(owned, pcm.data(), pcm.size());
-	Audio::SeekableAudioStream *raw =
-		Audio::makeRawStream(owned, pcm.size(), rate, 0, DisposeAfterUse::YES);
-	if (!raw) {
-		free(owned);
-		renderFailure("unable to create sample stream", 0);
-		return false;
-	}
-	Audio::AudioStream *loop = Audio::makeLoopingAudioStream(raw, repetitions);
-	Audio::Mixer *mixer = g_system->getMixer();
-	mixer->stopHandle(_sampleHandle);
 	// Native helper $4FBC passes the middle argument as IOAudio cycles, NOT a
 	// channel index. $4A64 asks audio.device for masks {2,4,1,8}: the first free
 	// voice is Paula channel 1 (left). We have no competing Amiga processes.
-	mixer->playStream(music ? Audio::Mixer::kMusicSoundType : Audio::Mixer::kSFXSoundType,
-		&_sampleHandle, loop, -1, MIN<uint>(volume, 64) * 255 / 64, -127);
-	// $4FBC polls CheckIO, then releases the request. Every native sample call
-	// is synchronous; do not let subsequent script effects overtake its audio.
-	while (!shouldQuit() && !hasError() && samplePlaying()) {
-		serviceEvents();
-		g_system->delayMillis(1);
-	}
-	mixer->stopHandle(_sampleHandle);
-	return !shouldQuit() && !hasError();
+	return playSample(owned, pcm.size(), rate, repetitions, music,
+		MIN<uint>(volume, 64) * 255 / 64, -127);
 }
 
 bool PreGob_Mewilo::playRawSample(
@@ -144,50 +126,59 @@ bool PreGob_Mewilo::playRawSample(
 		return false;
 	}
 	const int64 size = stream->size();
-	if (size <= 0 || size > 8 * 1024 * 1024) {
+	if (size <= 0 || size > 8 * 1024 * 1024 || repetitions <= 0 || !frequency) {
 		delete stream;
 		renderFailure("invalid sample extent", 0);
 		return false;
 	}
-	byte *data = new byte[(uint32)size];
+	byte *data = (byte *)malloc((uint32)size);
+	if (!data) {
+		delete stream;
+		renderFailure("unable to allocate sample", 0);
+		return false;
+	}
 	stream->seek(0);
 	const uint32 got = stream->read(data, (uint32)size);
 	delete stream;
 	if (got != (uint32)size) {
-		delete[] data;
+		free(data);
 		renderFailure("unable to read sample", 0);
 		return false;
 	}
 
 	Sound::convToSigned(data, (uint32)size);
-	playSample(data, (uint32)size, frequency, repetitions, music);
-	return true;
+	// Atari $17052 waits for its timer interrupt to clear the active flag.
+	// Music and effects both finish before the next script command runs.
+	return playSample(data, (uint32)size, frequency, repetitions, music);
 }
 
-void PreGob_Mewilo::playSample(
-	byte *pcm, uint32 size, uint16 frequency, int16 repetitions, bool music) {
-	SoundDesc &sample = music ? _musicSample : _sample;
-	// Stop the reader before replacing its backing bytes. Separate descriptors
-	// mean an animal effect cannot free or stop a currently playing song.
-	if (music)
-		_music->stop(0);
-	else
-		_vm->_sound->blasterStop(0, &_sample);
-	sample.free();
-	sample.set(SOUND_SND, pcm, size);
-	sample._frequency = frequency;
-	sample._flag = 8;
-	sample._mixerFlags = 0;
-	if (music)
-		_music->play(sample, repetitions, frequency);
-	else
-		_vm->_sound->blasterPlay(&sample, repetitions, frequency);
+bool PreGob_Mewilo::playSample(byte *pcm, uint32 size, uint16 frequency,
+	int16 repetitions, bool music, byte volume, int8 balance) {
+	Audio::SeekableAudioStream *raw =
+		Audio::makeRawStream(pcm, size, frequency, 0, DisposeAfterUse::YES);
+	if (!raw) {
+		free(pcm);
+		renderFailure("unable to create sample stream", 0);
+		return false;
+	}
+	Audio::AudioStream *loop = Audio::makeLoopingAudioStream(raw, repetitions);
+	Audio::Mixer *mixer = g_system->getMixer();
+	mixer->stopHandle(_sampleHandle);
+	mixer->playStream(music ? Audio::Mixer::kMusicSoundType : Audio::Mixer::kSFXSoundType,
+		&_sampleHandle, loop, -1, volume, balance);
+	// The rate converter can retain an audible tail after the producer ends.
+	// Wait for the mixer handle, preserving that tail across modal pauses.
+	while (!shouldQuit() && !hasError() && samplePlaying()) {
+		serviceEvents();
+		g_system->delayMillis(1);
+	}
+	mixer->stopHandle(_sampleHandle);
+	return !shouldQuit() && !hasError();
 }
 
 void PreGob_Mewilo::stopMewiloAudio() {
 	_effectToneUntil = activeMillis();
 	g_system->getMixer()->stopHandle(_sampleHandle);
-	_vm->_sound->blasterStop(0, &_sample);
 	_vm->_sound->speakerOff();
 	_music->stop(0);
 }
@@ -214,24 +205,7 @@ bool PreGob_Mewilo::playMusicPcm(const Common::Array<byte> &pcm) {
 	if (!owned)
 		return false;
 	memcpy(owned, pcm.data(), pcm.size());
-	Audio::SeekableAudioStream *raw =
-		Audio::makeRawStream(owned, pcm.size(), kMewiloThomsonSampleRate, 0, DisposeAfterUse::YES);
-	if (!raw) {
-		free(owned);
-		return false;
-	}
-	Audio::Mixer *mixer = g_system->getMixer();
-	mixer->stopHandle(_sampleHandle);
-	mixer->playStream(Audio::Mixer::kMusicSoundType, &_sampleHandle, raw);
-	// The producer can finish before the rate converter's buffered tail is
-	// audible. Wait for the finite mixer handle, not SoundMixer::isPlaying().
-	// This also preserves the unplayed tail across mixer pauses.
-	while (!shouldQuit() && !hasError() && samplePlaying()) {
-		serviceEvents();
-		g_system->delayMillis(1);
-	}
-	mixer->stopHandle(_sampleHandle);
-	return !shouldQuit() && !hasError();
+	return playSample(owned, pcm.size(), kMewiloThomsonSampleRate, 1, true);
 }
 
 bool PreGob_Mewilo::playCpcMusic(const Common::String &name) {
@@ -247,7 +221,13 @@ bool PreGob_Mewilo::playCpcMusic(const Common::String &name) {
 		return false;
 	byte *pcm = new byte[cycle.size()];
 	memcpy(pcm, cycle.data(), cycle.size());
-	playSample(pcm, cycle.size(), 25000, -1, true);
+	_music->stop(0);
+	_musicSample.free();
+	_musicSample.set(SOUND_SND, pcm, cycle.size());
+	_musicSample._frequency = 25000;
+	_musicSample._flag = 8;
+	_musicSample._mixerFlags = 0;
+	_music->play(_musicSample, -1, 25000);
 
 	// Native code loops the music until CP/M BIOS console-status reports a key.
 	// ScummVM's checkKey consumes the buffered event, so retain it for the next

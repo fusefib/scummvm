@@ -154,7 +154,6 @@ void PreGob_Mewilo::resetForRestart() {
 	discardRestore();
 	_presentation.reset();
 	stopMewiloAudio();
-	_sample.free();
 	_musicSample.free();
 	unloadModule();
 	_savedRects.clear();
