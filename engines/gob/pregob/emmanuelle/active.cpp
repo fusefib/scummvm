@@ -32,6 +32,8 @@
 namespace Gob {
 namespace Emmanuelle {
 
+// Keep the offscreen origin when clipping leaves an empty sprite.
+// Common::Rect::clip() would clamp that origin to the screen edge.
 static SpriteBounds clip320x200(int left, int top, int right, int bottom) {
 	if (left < 0)
 		left = 0;

@@ -671,6 +671,49 @@ bool GobConsole::cmd_cpSolve(int argc, const char **argv) {
 
 namespace Emmanuelle {
 
+const char *protectionColorName(byte color) {
+	switch (color) {
+	case 0:
+		return "white";
+	case 1:
+		return "black";
+	case 2:
+		return "yellow";
+	case 3:
+		return "green";
+	case 4:
+		return "blue";
+	case 5:
+		return "red";
+	case 6:
+		return "grey";
+	case 7:
+		return "brown";
+	default:
+		return nullptr;
+	}
+}
+
+bool buildProtectionHint(bool initModule, bool suspended, byte opcode,
+						 byte regionCount, const uint16 vars[7],
+						 ProtectionChallenge &out) {
+	if (!initModule || !suspended || opcode != 0x1B || regionCount != 8 ||
+		!vars || vars[1] >= 4 || vars[3] >= 8 || vars[4] >= 4 ||
+		vars[6] >= 8)
+		return false;
+
+	ProtectionChallenge challenge;
+	challenge.first.letter = (byte)vars[1];
+	challenge.first.box = vars[2];
+	challenge.first.color = (byte)vars[3];
+	challenge.second.letter = (byte)vars[4];
+	challenge.second.box = vars[5];
+	challenge.second.color = (byte)vars[6];
+	out = challenge;
+	return true;
+}
+
+
 void PreGob_Emmanuelle::exportDiagnosticSnapshot(
 	OldTotDiagnosticSnapshot &out) const {
 	out = OldTotDiagnosticSnapshot();

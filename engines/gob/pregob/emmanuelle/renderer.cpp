@@ -296,67 +296,6 @@ void OldTotRenderer::notePresentationDirtyRect(int16 left, int16 top,
 	_dirtyBottom = MAX(_dirtyBottom, bottom);
 }
 
-bool OldTotRenderer::applyDosPalette(const Common::String &moduleName,
-									 byte videoMode) {
-	if (!_vm || !_vm->_draw || !_vm->_global || !_vm->_video)
-		return false;
-
-	if (videoMode <= 1) {
-		byte evenTable[16];
-		byte oddTable[16];
-		if (!getDosCgaColorTables(moduleName, evenTable, oddTable))
-			return false;
-		const byte monochromeIndexes[4] = {0, 8, 7, 15};
-		const byte colorIndexes[4] = {1, 11, 13, 15};
-		const byte *indexes = videoMode == 0
-			? monochromeIndexes : colorIndexes;
-		for (uint i = 0; i < 4; ++i)
-			_vm->_draw->_vgaPalette[i] =
-				_vm->_global->_vgaPalette[indexes[i]];
-		_vm->_video->setPalette(_vm->_draw->_vgaPalette);
-		return true;
-	}
-
-	byte registers[16];
-	if (!getDosPaletteRegisters(moduleName, registers))
-		return false;
-
-	for (uint i = 0; i < 16; ++i) {
-		const byte colorIndex = dosEgaPaletteIndex(registers[i]);
-		_vm->_draw->_vgaPalette[i] = _vm->_global->_vgaPalette[colorIndex];
-	}
-	_vm->_video->setPalette(_vm->_draw->_vgaPalette);
-	return true;
-}
-
-bool OldTotRenderer::presentDosFrame(const Common::String &moduleName,
-									 byte videoMode) {
-	if (videoMode > 1)
-		return true;
-	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface ||
-		!_vm->_draw->_frontSurface || !_vm->_video)
-		return false;
-
-	byte evenTable[16];
-	byte oddTable[16];
-	if (!getDosCgaColorTables(moduleName, evenTable, oddTable))
-		return false;
-
-	const Surface &back = *_vm->_draw->_backSurface;
-	Surface &front = *_vm->_draw->_frontSurface;
-	if (back.getWidth() != front.getWidth() ||
-		back.getHeight() != front.getHeight())
-		return false;
-	for (uint16 y = 0; y < back.getHeight(); ++y) {
-		for (uint16 x = 0; x < back.getWidth(); ++x) {
-			front.putPixelRaw(x, y, dosCgaDitheredColor(
-				(byte)back.get(x, y).get(), x, y, evenTable, oddTable));
-		}
-	}
-	_vm->_video->dirtyRectsAll();
-	return true;
-}
-
 void OldTotRenderer::copyPresentationRect(const Surface &target,
 	int16 left, int16 top, int16 right, int16 bottom) {
 	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface)

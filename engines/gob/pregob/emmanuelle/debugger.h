@@ -43,6 +43,11 @@ namespace Emmanuelle {
 
 struct ProtectionChallenge;
 
+bool buildProtectionHint(bool initModule, bool suspended, byte opcode,
+						 byte regionCount, const uint16 vars[7],
+						 ProtectionChallenge &out);
+const char *protectionColorName(byte color);
+
 struct OldTotInputDiagnosticState {
 	OldTotInputDiagnosticState() {
 		key = 0;

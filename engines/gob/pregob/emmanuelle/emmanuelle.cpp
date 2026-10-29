@@ -178,14 +178,14 @@ PreGob_Emmanuelle::~PreGob_Emmanuelle() {
 	}
 }
 
-Common::SeekableReadStream *PreGob_Emmanuelle::openLoose(
+Common::SeekableReadStream *PreGob_Emmanuelle::openResource(
 	const Common::String &name) const {
 	return _vm->_dataIO->getFile(name);
 }
 
 OldTotData *PreGob_Emmanuelle::loadScriptResource(
 		const Common::String &name, Common::String &reason) const {
-	Common::SeekableReadStream *stream = openLoose(name);
+	Common::SeekableReadStream *stream = openResource(name);
 	if (!stream || stream->size() <= 0 || stream->size() > 0xFFFF) {
 		delete stream;
 		reason = "script resource is unavailable";
@@ -257,7 +257,7 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 	const char *bankName = _platformTag == kOldTotPlatformAmiga
 							   ? "INIT.IA1"
 							   : "INIT.I01";
-	Common::SeekableReadStream *stream = openLoose(bankName);
+	Common::SeekableReadStream *stream = openResource(bankName);
 	if (!stream) {
 		debugC(1, kDebugFileIO, "Emmanuelle: %s is missing", bankName);
 		return false;
@@ -272,7 +272,7 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 
 	const char *fontNames[2] = {"JEUCAR2.LET", "JEUCAR3.LET"};
 	for (uint i = 0; i < ARRAYSIZE(fontNames); ++i) {
-		stream = openLoose(fontNames[i]);
+		stream = openResource(fontNames[i]);
 		if (!stream) {
 			debugC(1, kDebugFileIO, "Emmanuelle: %s is missing",
 				   fontNames[i]);
@@ -347,7 +347,7 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 
 	if (moduleNeedsLocalGraphicsFile(moduleId, usesLocalGraphics,
 									 _inlineLocalGraphics)) {
-		Common::SeekableReadStream *stream = openLoose(_moduleFileStem + ixxExtension);
+		Common::SeekableReadStream *stream = openResource(_moduleFileStem + ixxExtension);
 		if (!stream) {
 			debugC(1, kDebugFileIO, "Emmanuelle: %s%s is missing", stem,
 				   ixxExtension);
@@ -834,20 +834,6 @@ bool PreGob_Emmanuelle::handleNativeFF0B(
 		runtimeState.videoInitMarker = 0x28;
 	}
 	return true;
-}
-
-void PreGob_Emmanuelle::playDosFightTone(uint16 frequency) {
-	if (_platformTag != kOldTotPlatformDOS || !_vm || !_vm->_sound)
-		return;
-
-	setAudioState(kOldTotAudioDosSpeaker, -1, frequency, 0,
-						 true, true);
-	_vm->_sound->speakerOn((int16)frequency, -1);
-	// Pump events without advancing script timers while the tone plays.
-	delay(10);
-	_vm->_sound->speakerOff();
-	setAudioState(kOldTotAudioDosSpeaker, -1, frequency, 0,
-						 true, false);
 }
 
 static const char *loopResultDescription(ModuleLoopResult result) {

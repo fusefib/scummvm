@@ -237,7 +237,7 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 			moduleUsesLocalGraphics(state.module), _inlineLocalGraphics)) {
 		const char *ixxExtension = _platformTag == kOldTotPlatformAmiga
 			? ".IA0" : ".I00";
-		Common::SeekableReadStream *stream = openLoose(
+		Common::SeekableReadStream *stream = openResource(
 			Common::String(stem) + ixxExtension);
 		if (!stream) {
 			reason = "local graphics bank is unavailable";

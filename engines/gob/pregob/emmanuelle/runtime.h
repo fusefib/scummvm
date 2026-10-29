@@ -194,10 +194,7 @@ bool command201SkipsIntermediateNodes(OldTotPlatformTag platform,
 bool decodeProtectionPrompt(const byte raw[4], ProtectionPrompt &out);
 bool decodeProtectionRecord(const byte raw[8], ProtectionChallenge &out);
 void installProtectionChallenge(const ProtectionChallenge &c, uint16 vars[7]);
-bool buildProtectionHint(bool initModule, bool suspended, byte opcode,
-						 byte regionCount, const uint16 vars[7],
-						 ProtectionChallenge &out);
-const char *protectionColorName(byte color);
+
 
 } // namespace Emmanuelle
 } // namespace Gob

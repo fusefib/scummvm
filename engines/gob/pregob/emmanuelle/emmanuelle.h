@@ -138,7 +138,7 @@ public:
 
 private:
 	void failHostOperation(const char *operation, uint16 site = 0);
-	Common::SeekableReadStream *openLoose(const Common::String &name) const;
+	Common::SeekableReadStream *openResource(const Common::String &name) const;
 	OldTotData *loadScriptResource(const Common::String &name,
 		Common::String &reason) const;
 	bool loadSharedAssets();
