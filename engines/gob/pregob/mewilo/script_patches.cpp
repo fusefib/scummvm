@@ -19,11 +19,13 @@
  */
 
 #include "gob/pregob/mewilo/script_patches.h"
+
 #include "common/endian.h"
 #include "common/md5.h"
 #include "common/memstream.h"
 #include "common/textconsole.h"
 #include "common/util.h"
+
 #include "gob/pregob/mewilo/tot.h"
 
 namespace Gob {

@@ -275,5 +275,6 @@ void PreGob_Mewilo::commitRestore() {
 	markDirty(0, 0, 320, 200);
 	discardRestore();
 }
+
 } // End of namespace Mewilo
 } // End of namespace Gob

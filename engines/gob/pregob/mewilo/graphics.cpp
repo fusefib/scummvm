@@ -18,12 +18,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/endian.h"
-#include "common/util.h"
+#include "gob/pregob/mewilo/graphics.h"
 
+#include "common/endian.h"
 #include "common/md5.h"
 #include "common/memstream.h"
-#include "gob/pregob/mewilo/graphics.h"
+#include "common/util.h"
+
 #include "gob/pregob/mewilo/translation.h"
 #include "gob/surface.h"
 
@@ -82,7 +83,7 @@ bool MewiloI00Bank::load(Common::SeekableReadStream &stream, bool cpcZeroPrefix)
 }
 
 bool MewiloI00Bank::getRecord(uint index, uint16 &framedSize,
-	const byte *&payload, uint32 &payloadSize) const {
+		const byte *&payload, uint32 &payloadSize) const {
 	framedSize = 0;
 	payload = nullptr;
 	payloadSize = 0;
@@ -104,7 +105,7 @@ MewiloPackedDecodeResult::MewiloPackedDecodeResult() :
 }
 
 MewiloPackedDecodeResult drawMewiloPacked(const byte *payload, uint32 payloadSize,
-	Surface &dest, int16 x, int16 y, uint16 width, uint16 height, byte scaleX) {
+		Surface &dest, int16 x, int16 y, uint16 width, uint16 height, byte scaleX) {
 	MewiloPackedDecodeResult result;
 	if (!payload || !width || !height || !scaleX)
 		return result;

@@ -19,6 +19,7 @@
  */
 
 #include "gob/pregob/mewilo/thomson_disk.h"
+
 #include "common/endian.h"
 #include "common/memstream.h"
 

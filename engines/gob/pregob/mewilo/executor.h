@@ -88,7 +88,9 @@ public:
 	virtual void saveRect(byte xCell, byte y, byte widthCell, byte height) = 0;
 	virtual void restoreRect() = 0;
 	virtual void waitOrDelay(byte argument) = 0;
-	virtual void waitOrDelayAt(const MewiloTotData &, uint16, byte argument) { waitOrDelay(argument); }
+	virtual void waitOrDelayAt(const MewiloTotData &, uint16, byte argument) {
+		waitOrDelay(argument);
+	}
 	virtual bool waitContinueInput() = 0;
 	virtual bool waitInputRelease() = 0;
 	virtual void fillScreen(byte color) = 0;
@@ -104,7 +106,9 @@ public:
 		handled = false;
 		return false;
 	}
-	virtual void showRejectMessageAt(const MewiloTotData &, uint16, const byte *text, uint length) { showRejectMessage(text, length); }
+	virtual void showRejectMessageAt(const MewiloTotData &, uint16, const byte *text, uint length) {
+		showRejectMessage(text, length);
+	}
 };
 
 // Continuations contain script offsets, never native pointers or C++ frames.

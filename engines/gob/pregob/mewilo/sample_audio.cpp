@@ -19,6 +19,7 @@
  */
 
 #include "gob/pregob/mewilo/sample_audio.h"
+
 #include "common/endian.h"
 #include "common/util.h"
 
@@ -29,10 +30,12 @@ static const char *const kSplNames[] = {
 	"INTRO.SPL", "COUCOU.SPL", "RHUM.SPL", "OISEAUX.SPL", "PERDU.SPL",
 	"CHEVAL.SPL", "RIVIERE.SPL", "PORTE.SPL", "CLOCHE.SPL", "COCHON.SPL",
 	"POULE.SPL", "BOUCHON.SPL"};
+
 static const char *const kSmpNames[] = {
 	"intro.smp", "pendule.smp", "rhum.smp", "oiseaux.smp", "musicfin.smp",
 	"henni.smp", "riviere.smp", "porte.smp", "cloche.smp", "cochon.smp",
 	"poule.smp", "musbon.smp", "bouchon.smp"};
+
 uint mewiloSampleCount(MewiloAudioBackend backend) {
 	return backend == kMewiloAudioAtariSpl ? ARRAYSIZE(kSplNames) :
 		backend == kMewiloAudioAmigaSmp ? ARRAYSIZE(kSmpNames) : 0;

@@ -19,9 +19,11 @@
  */
 
 #include "gob/pregob/mewilo/font.h"
+
 #include "common/endian.h"
 #include "common/md5.h"
 #include "common/memstream.h"
+
 #include "gob/surface.h"
 
 namespace Gob {

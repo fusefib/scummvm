@@ -85,7 +85,7 @@ struct MewiloPackedDecodeResult {
  * pixels so the same decoder can validate Atari (1x) and CPC (2x) resources.
  */
 MewiloPackedDecodeResult drawMewiloPacked(const byte *payload, uint32 payloadSize,
-	Surface &dest, int16 x, int16 y, uint16 width, uint16 height, byte scaleX = 1);
+		Surface &dest, int16 x, int16 y, uint16 width, uint16 height, byte scaleX = 1);
 
 /** Draw a replacement after native decode/scratch effects and before dirty marking.
  * This ordering preserves the Atari scratch bytes needed by subsequent images.

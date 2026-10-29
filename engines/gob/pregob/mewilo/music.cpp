@@ -18,11 +18,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "gob/pregob/mewilo/music.h"
+
 #include "common/endian.h"
 #include "common/stream.h"
 #include "common/util.h"
-
-#include "gob/pregob/mewilo/music.h"
 
 namespace Gob {
 namespace Mewilo {

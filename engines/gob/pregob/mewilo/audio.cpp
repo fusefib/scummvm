@@ -204,7 +204,7 @@ bool PreGob_Mewilo::playRawSample(
 }
 
 bool PreGob_Mewilo::playSample(byte *pcm, uint32 size, uint16 frequency,
-	int16 repetitions, bool music, byte volume, int8 balance) {
+		int16 repetitions, bool music, byte volume, int8 balance) {
 	Audio::SeekableAudioStream *raw =
 		Audio::makeRawStream(pcm, size, frequency, 0, DisposeAfterUse::YES);
 	if (!raw) {

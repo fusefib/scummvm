@@ -38,6 +38,7 @@ MewiloSaveState::MewiloSaveState() :
 	memset(sourceMd5, 0, sizeof(sourceMd5));
 	memset(effectiveMd5, 0, sizeof(effectiveMd5));
 }
+
 MewiloReleaseIdentity::MewiloReleaseIdentity() : exactImages(true) {
 	memset(digest, 0, sizeof(digest));
 	memset(banks, 0, sizeof(banks));
@@ -262,5 +263,6 @@ bool mewiloSaveCompatible(const MewiloSaveState &s, MewiloPlatform target,
 	reason.clear();
 	return true;
 }
+
 } // namespace Mewilo
 } // namespace Gob
