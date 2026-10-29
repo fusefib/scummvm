@@ -381,11 +381,7 @@ bool OldTotRenderer::presentAmigaFadeToBlackStep(byte phase) {
 		return false;
 	uint16 work[32];
 	for (uint i = 0; i < 32; ++i)
-		work[i] = _amigaLogicalPalette[i];
-	for (byte step = 0; step <= phase; ++step) {
-		for (uint i = 0; i < 32; ++i)
-			work[i] = dimAmigaPaletteWord(work[i], 1);
-	}
+		work[i] = dimAmigaPaletteWord(_amigaLogicalPalette[i], phase + 1);
 	showAmigaWords(work);
 	if (phase == 15)
 		_amigaBlack = true;

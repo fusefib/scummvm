@@ -465,11 +465,7 @@ bool OldTotRenderer::presentAtariFadeToBlackStep(byte phase) {
 		return false;
 	uint16 work[16];
 	for (uint i = 0; i < 16; ++i)
-		work[i] = _atariLogicalPalette[i];
-	for (byte step = 0; step <= phase; ++step) {
-		for (uint i = 0; i < 16; ++i)
-			work[i] = dimAtariStPaletteWord(work[i], 1);
-	}
+		work[i] = dimAtariStPaletteWord(_atariLogicalPalette[i], phase + 1);
 	showAtariWords(work);
 	if (phase == 7)
 		_atariBlack = true;

@@ -838,14 +838,9 @@ uint16 dimAmigaPaletteWord(uint16 word, byte steps) {
 	byte red = (word >> 8) & 0x0F;
 	byte green = (word >> 4) & 0x0F;
 	byte blue = word & 0x0F;
-	while (steps--) {
-		if (red)
-			--red;
-		if (green)
-			--green;
-		if (blue)
-			--blue;
-	}
+	red = red > steps ? red - steps : 0;
+	green = green > steps ? green - steps : 0;
+	blue = blue > steps ? blue - steps : 0;
 	return (uint16)((red << 8) | (green << 4) | blue);
 }
 
