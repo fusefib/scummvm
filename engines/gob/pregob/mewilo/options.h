@@ -33,6 +33,7 @@ namespace Gob {
 namespace Mewilo {
 
 MewiloOutputMode mewiloOutputMode(const Common::String &domain = Common::String());
+uint32 mewiloAnimationFrameMillis(const Common::String &domain = Common::String());
 MewiloPlatform mewiloPresentationPlatform(Common::Platform detected, bool thomsonTO);
 GUI::OptionsContainerWidget *createMewiloOptions(
 	GUI::GuiObject *boss, const Common::String &name, const Common::String &target);

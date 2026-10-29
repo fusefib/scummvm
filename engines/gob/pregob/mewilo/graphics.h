@@ -61,7 +61,6 @@ private:
 struct MewiloPackedDecodeResult {
 	uint32 pixelsWritten;
 	uint32 bytesConsumed;
-	uint32 runsDecoded;
 	uint32 runOverhang;
 	bool complete;
 	bool truncated;

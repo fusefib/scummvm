@@ -24,8 +24,6 @@
 #include "common/memstream.h"
 #include "common/util.h"
 
-#include "gob/pregob/mewilo/graphics.h"
-
 namespace Gob {
 namespace Mewilo {
 
@@ -198,47 +196,6 @@ uint32 mewiloAtariFixedDelayMillis(uint16 units) {
 	// The immediate push/call plus helper take 6764*units + 208 cycles.
 	// FF03 has a separate multiplier/call cost; zero FF03 remains input.
 	return (6764U * units + 208U + 7999U) / 8000U;
-}
-
-uint32 mewiloPackedDrawMillis(MewiloPlatform platform, byte xCell, byte widthCell,
-	byte height, const MewiloPackedDecodeResult &decoded, bool external) {
-	if (!decoded.complete || !widthCell || !height)
-		return 0;
-	const uint64 pixels = decoded.pixelsWritten;
-	const uint64 runs = decoded.runsDecoded;
-	const uint64 bytes = decoded.bytesConsumed;
-	uint64 cycles;
-	uint32 clock;
-	if (platform == kMewiloPlatformAtariST) {
-		// $16CDE's planar decoder: four-plane groups, RLE parsing and row edges.
-		// Odd eight-pixel cells need extra leading/trailing word operations.
-		const uint lead = xCell & 1;
-		const uint tail = (widthCell - lead) & 1;
-		cycles = 316 + 1181 * (pixels / 8) + 90 * height + 96 * runs + 28 * bytes +
-			(93 * lead + 161 * tail) * height;
-		clock = 8000000;
-	} else if (platform == kMewiloPlatformAmiga) {
-		// Amiga $105B6 accumulates bits and writes four plane bytes per group.
-		cycles = 526 + 65 * pixels + 58 * height + 174 * runs + 32 * bytes;
-		clock = 7093790;
-	} else if (platform == kMewiloPlatformAmstradCPC) {
-		// Nominal Z80 work from $9C0D/$9CC8/$9CFE, using four-pixel source cells.
-		// Small row-address/carry savings and Gate Array wait states are omitted.
-		cycles = 383 + 313 * pixels / 2 + 231 * runs + 17 * bytes + 173 * height;
-		clock = 4000000;
-	} else if (platform == kMewiloPlatformThomsonTO) {
-		// Rounded work estimates: TOT reads switch banks, I00 reads are direct.
-		// Keep the costly native RLE reads without reproducing every bit-phase
-		// branch in $8241/$82F5 and $7480/$7546 just to count CPU cycles.
-		cycles = external ? 75 + 44 * height + 10 * pixels + 100 * runs + 75 * bytes
-			: 500 + 44 * height + 10 * pixels + 275 * runs + 250 * bytes;
-		clock = 1000000;
-	} else {
-		return 0;
-	}
-	// Nominal decoder work, excluding disk/OS/raster waits and contention.
-	// Modern decoding must not erase this substantial part of animation time.
-	return (cycles * 1000 + clock - 1) / clock;
 }
 
 static const char *const kModuleSuffixes[9] = {"", "0", "1", "2", "3", "4", "5", "7", "8"};

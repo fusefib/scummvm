@@ -59,8 +59,7 @@ void PreGob_Mewilo::serviceEvents() {
 void PreGob_Mewilo::waitMilliseconds(uint32 durationMs) {
 	MewiloTimingPlan plan;
 	plan.milliseconds = durationMs;
-	// A native helper neither starts nor finishes an authored image step.
-	waitPresentation(plan, 0, false);
+	waitPresentation(plan, 0);
 }
 
 bool PreGob_Mewilo::waitContinueInput() {
@@ -91,31 +90,8 @@ void PreGob_Mewilo::waitOrDelay(byte argument) {
 	}
 }
 
-void PreGob_Mewilo::waitPackedDraw(const MewiloTotData &tot, uint16 site,
-	const MewiloPackedDecodeResult &decoded, uint32 started) {
-	MewiloTimingPlan plan;
-	plan.milliseconds = mewiloPackedDrawMillis(_presentationPlatform,
-		tot.byteAt(site + 3), tot.byteAt(site + 5), tot.byteAt(site + 6), decoded,
-		(tot.byteAt(site) & 0x3F) >= 0x20);
-	if (!plan.milliseconds)
-		return;
-	plan.rule = "packed-draw-work";
-	// Keep the composition's step open. Its eventual FF03 owns a separate delay;
-	// optional readability budgets can include drawing already accounted here.
-	// Native drawing updates pixels progressively. Retain the preceding frame
-	// until this completed draw is due, rather than holding the new frame for
-	// its own cost (which shifts exposure when successive image sizes differ).
-	_deferPresentation = true;
-	waitPresentation(plan, site, false, activeMillis() - started);
-	_deferPresentation = false;
-	presentFrame();
-}
-
-void PreGob_Mewilo::waitPresentation(
-	const MewiloTimingPlan &plan, uint16 site, bool ownsStep, uint32 elapsedWork) {
-	const uint32 start = activeMillis() - elapsedWork;
-	if (ownsStep)
-		_presentation.beginStep(start);
+void PreGob_Mewilo::waitPresentation(const MewiloTimingPlan &plan, uint16 site) {
+	const uint32 start = activeMillis();
 	if (plan.anchor == kMewiloVisibleHold || plan.minimumExposure)
 		_presentation.dirty(plan.region);
 	if (!plan.exposureRegion.isEmpty())
@@ -127,7 +103,7 @@ void PreGob_Mewilo::waitPresentation(
 	while (!shouldQuit() && !hasError() && !_pendingRestore) {
 		const uint32 now = activeMillis();
 		elapsed = plan.anchor == kMewiloVisibleHold ? _presentation.visibleAge(plan.region, now)
-			: plan.anchor == kMewiloStepBudget ? _presentation.stepAge(now) : now - start;
+			: now - start;
 		const uint32 remaining = _presentation.waitRemaining(
 			plan, MAX<int16>(1, _vm->_global->_speedFactor), start, now);
 		if (!remaining)
@@ -145,16 +121,17 @@ void PreGob_Mewilo::waitPresentation(
 	// effective budget used to finish the wait, not the earlier speed's target.
 	const uint speed = MAX<int16>(1, _vm->_global->_speedFactor);
 	debugC(4, kDebugGameFlow,
-		"MEWILO_PRESENT wait module=%s site=%04X rule=%s anchor=%u calibrated=%u budget=%u elapsed=%u minimum=%u visible=%u aborted=%u t=%u frame=%u rect=%d,%d,%d,%d",
+		"MEWILO_PRESENT wait module=%s site=%04X rule=%s anchor=%u calibrated=%u "
+		"source=%u presentation=%u speed=%u animation=%u reading=%u budget=%u elapsed=%u minimum=%u "
+		"visible=%u aborted=%u t=%u frame=%u rect=%d,%d,%d,%d",
 		_moduleStem.c_str(), site, plan.rule, (uint)plan.anchor, plan.calibrated,
+		(uint)_profile.platform, (uint)_presentationPlatform, speed, plan.animation, plan.reading,
 		mewiloScaleTime(plan.milliseconds, speed), elapsed,
 		mewiloScaleTime(plan.minimumExposure, speed),
 		_presentation.visibleAge(
 			plan.exposureRegion.isEmpty() ? plan.region : plan.exposureRegion, activeMillis()),
 		shouldQuit() || hasError() || _pendingRestore, activeMillis(), _presentation.frame(),
 		plan.region.left, plan.region.top, plan.region.right, plan.region.bottom);
-	if (ownsStep)
-		_presentation.finishStep();
 }
 
 void PreGob_Mewilo::waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte argument) {
@@ -163,9 +140,10 @@ void PreGob_Mewilo::waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte ar
 		return;
 	}
 	MewiloTimingPlan plan = mewiloTimingPlan(tot, _moduleStem.c_str(), _vm->_language,
-		_presentationPlatform, site, argument, _normalizeTiming);
-	bool calibrated = false;
-	plan.minimumDelay = mewiloNativeDelayMillis(_presentationPlatform, argument, calibrated);
+		_presentationPlatform, site, argument, _normalizeTiming, _animationFrameMillis);
+	debugC(4, kDebugGameFlow,
+		"MEWILO_PRESENT cue module=%s site=%04X operand=%u frame_ms=%u readability=%u rule=%s",
+		_moduleStem.c_str(), site, argument, _animationFrameMillis, _normalizeTiming, plan.rule);
 	const ReplacementEntry *text =
 		plan.textNode ? replacementEntry(tot, plan.textNode, kReplacementText) : nullptr;
 	if (text) {

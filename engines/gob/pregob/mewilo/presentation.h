@@ -33,28 +33,31 @@ class MewiloTotData;
 
 enum MewiloTimeAnchor {
 	kMewiloElapsedWait, ///< Budget begins on entering the delay instruction.
-	kMewiloVisibleHold, ///< Minimum exposure of the specified output region.
-	kMewiloStepBudget   ///< Decode, composition and already elapsed work count.
+	kMewiloVisibleHold  ///< Minimum exposure of the specified output region.
 };
 
 struct MewiloTimingPlan {
 	MewiloTimeAnchor anchor;
 	uint32 milliseconds;
-	uint32 minimumDelay; ///< Native delay also applies under optional step/exposure budgets.
-	uint16 minimumExposure; ///< Concurrent safety floor for a late animation step.
+	uint32 minimumDelay; ///< Elapsed delay also applies under a visibility budget.
+	uint32 minimumExposure; ///< Concurrent minimum exposure of the selected frame.
 	Common::Rect region;
 	Common::Rect exposureRegion; ///< Optional separate image floor under dialogue.
 	const char *rule;
 	bool calibrated;
+	bool animation;
+	bool reading;
 	uint16 textNode; ///< Reading floor uses the displayed language when nonzero.
 	MewiloTimingPlan();
 };
 
 uint32 mewiloScaleTime(uint32 milliseconds, uint speedFactor);
+uint32 mewiloAnimationDelayMillis(uint32 frameMillis, byte operand);
 uint32 mewiloReadingMillis(const byte *text, uint length);
-// Zero remains input. Native delay estimates and optional reading floors are separate.
+// Reviewed scene cues share a frame pace. Other waits retain native timing.
 MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
-	Common::Language language, MewiloPlatform platform, uint16 site, byte operand, bool normalize);
+	Common::Language language, MewiloPlatform platform, uint16 site, byte operand,
+	bool normalize, uint32 animationFrameMillis);
 
 /** Mewilo-only presentation clock, not an interpreter or a frame scheduler.
  *
@@ -67,8 +70,6 @@ class MewiloPresentation {
 public:
 	MewiloPresentation();
 	void reset();
-	void beginStep(uint32 activeTime);
-	void finishStep();
 	void dirty(const Common::Rect &region);
 
 	bool pending() const { return !_dirty.isEmpty(); }
@@ -76,7 +77,6 @@ public:
 	// Called AFTER the back buffer has actually been submitted to the backend.
 	bool submitted(const byte *pixels, uint pitch, uint32 activeTime, Common::Rect &changed);
 	uint32 visibleAge(const Common::Rect &region, uint32 activeTime) const;
-	uint32 stepAge(uint32 activeTime) const;
 
 	uint32 frame() const { return _frame; }
 
@@ -95,8 +95,7 @@ private:
 	byte _pixels[320 * 200]; ///< Last submitted image, not another render buffer.
 	Tile _tiles[kTiles];
 	Common::Rect _dirty;
-	uint32 _stepStart, _frame;
-	bool _stepActive;
+	uint32 _frame;
 };
 
 } // End of namespace Mewilo

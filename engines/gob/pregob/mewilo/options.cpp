@@ -44,6 +44,12 @@ MewiloOutputMode mewiloOutputMode(const Common::String &domain) {
 	return kMewiloOriginal;
 }
 
+uint32 mewiloAnimationFrameMillis(const Common::String &domain) {
+	const int value = ConfMan.hasKey("mewilo_animation_frame_ms", domain)
+		? ConfMan.getInt("mewilo_animation_frame_ms", domain) : 500;
+	return ((CLIP<int>(value, 100, 1000) + 5) / 10) * 10;
+}
+
 MewiloPlatform mewiloPresentationPlatform(Common::Platform detected, bool thomsonTO) {
 	const MewiloPlatform native = mewiloPlatformFromCommon(detected, thomsonTO);
 	if (native != kMewiloPlatformAtariST && native != kMewiloPlatformAmiga)
@@ -61,6 +67,10 @@ MewiloPlatform mewiloPresentationPlatform(Common::Platform detected, bool thomso
 }
 
 class MewiloOptions : public GUI::OptionsContainerWidget {
+	enum {
+		kAnimationFrameChanged = 'MAFC'
+	};
+
 public:
 	MewiloOptions(GUI::GuiObject *boss, const Common::String &name, const Common::String &target) :
 		OptionsContainerWidget(boss, name, "MewiloOptions", target), _wording(this),
@@ -86,9 +96,19 @@ public:
 			new GUI::RadiobuttonWidget(
 				widgetsBoss(), _dialogLayout + ".Amiga", &_presentation, 2, _("Amiga"));
 		}
+		_animationLabel = new GUI::StaticTextWidget(widgetsBoss(),
+			_dialogLayout + ".AnimationFrameLabel", Common::U32String());
+		_animationSlider = new GUI::SliderWidget(widgetsBoss(),
+			_dialogLayout + ".AnimationFrame",
+			_("Sets the time between story animation poses. Higher values play slower. Takes effect next launch."),
+			kAnimationFrameChanged);
+		_animationSlider->setMinValue(10);
+		_animationSlider->setMaxValue(100);
+		_animationSlider->setValue(50);
+		updateAnimationLabel();
 		_timing = new GUI::CheckboxWidget(widgetsBoss(), _dialogLayout + ".Timing",
-			_("Improve scene readability"),
-			_("Hold reviewed frames and text long enough to see them. Takes effect next launch; native delay conversions remain active."));
+			_("Improve text readability"),
+			_("Hold short dialogue long enough to read. Takes effect next launch."));
 	}
 
 	void load() override {
@@ -97,6 +117,8 @@ public:
 			? ConfMan.get("mewilo_presentation", _domain)
 			: Common::String();
 		_presentation.setValue(p == "atari" ? 1 : p == "amiga" ? 2 : 0);
+		_animationSlider->setValue(mewiloAnimationFrameMillis(_domain) / 10);
+		updateAnimationLabel();
 		_timing->setState(ConfMan.hasKey("mewilo_presentation_timing", _domain) &&
 			ConfMan.getBool("mewilo_presentation_timing", _domain));
 	}
@@ -110,6 +132,7 @@ public:
 				_domain);
 		}
 		ConfMan.setBool("mewilo_presentation_timing", _timing->getState(), _domain);
+		ConfMan.setInt("mewilo_animation_frame_ms", _animationSlider->getValue() * 10, _domain);
 
 		return true;
 	}
@@ -117,7 +140,16 @@ public:
 	void setEnabled(bool enabled) override {
 		_wording.setEnabled(enabled);
 		_presentation.setEnabled(enabled && _full);
+		_animationLabel->setEnabled(enabled);
+		_animationSlider->setEnabled(enabled);
 		_timing->setEnabled(enabled);
+	}
+
+	void handleCommand(GUI::CommandSender *sender, uint32 cmd, uint32 data) override {
+		if (cmd == kAnimationFrameChanged)
+			updateAnimationLabel();
+		else
+			GUI::OptionsContainerWidget::handleCommand(sender, cmd, data);
 	}
 
 protected:
@@ -136,11 +168,21 @@ protected:
 				.addWidget("Atari", "Checkbox")
 				.addWidget("Amiga", "Checkbox");
 		}
-		layout.addSpace().addWidget("Timing", "Checkbox").closeLayout().closeDialog();
+		layout.addSpace()
+			.addWidget("AnimationFrameLabel", "", -1, layout.getVar("Globals.Line.Height"))
+			.addWidget("AnimationFrame", "Slider")
+			.addWidget("Timing", "Checkbox").closeLayout().closeDialog();
 	}
 
 private:
+	void updateAnimationLabel() {
+		_animationLabel->setLabel(Common::U32String::format(_("Animation frame: %d ms"),
+			_animationSlider->getValue() * 10));
+	}
+
 	GUI::RadiobuttonGroup _wording, _presentation;
+	GUI::StaticTextWidget *_animationLabel;
+	GUI::SliderWidget *_animationSlider;
 	GUI::CheckboxWidget *_timing;
 	bool _full;
 };

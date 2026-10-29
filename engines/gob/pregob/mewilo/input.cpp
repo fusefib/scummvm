@@ -72,7 +72,6 @@ byte PreGob_Mewilo::translateInputKey(int16 key) const {
 
 bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
 	presentFrame();
-	_presentation.finishStep();
 	debugC(4, kDebugGameFlow, "MEWILO_PRESENT input module=%s t=%u frame=%u", _moduleStem.c_str(),
 		activeMillis(), _presentation.frame());
 	event = MewiloInputEvent();
@@ -196,6 +195,7 @@ void PreGob_Mewilo::showRejectMessage(const byte *text, uint length) {
 	MewiloTimingPlan plan;
 	plan.anchor = kMewiloVisibleHold;
 	plan.rule = "reject-message";
+	plan.reading = _normalizeTiming;
 	plan.region = Common::Rect(0, y, 320, 200);
 	plan.milliseconds = _normalizeTiming ? mewiloReadingMillis(text, length) : 250;
 	waitPresentation(plan, 0);

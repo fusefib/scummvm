@@ -43,8 +43,6 @@ enum MewiloAudioBackend {
 	kMewiloAudioThomsonNote
 };
 
-struct MewiloPackedDecodeResult;
-
 struct MewiloPlatformProfile {
 	MewiloPlatform platform;
 	const char *modulePrefix;
@@ -64,8 +62,6 @@ void buildMewiloPalette(MewiloPlatform platform, byte palette[16 * 3]);
 void buildMewiloDisplayPalette(MewiloPlatform platform, byte palette[16 * 3]);
 uint32 mewiloNativeDelayMillis(MewiloPlatform platform, byte operand, bool &calibrated);
 uint32 mewiloAtariFixedDelayMillis(uint16 units);
-uint32 mewiloPackedDrawMillis(MewiloPlatform platform, byte xCell, byte widthCell,
-	byte height, const MewiloPackedDecodeResult &decoded, bool external = false);
 int mewiloModuleIndex(const Common::String &stem, const char *prefix);
 Common::String mewiloModuleStem(uint index, const char *prefix);
 
