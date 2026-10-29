@@ -379,6 +379,11 @@ void PreGob_Mewilo::choiceFeedback(byte value) {
 		static const uint16 kPeriods[3] = {120, 478, 239};
 		static const int32 kLengths[3] = {250, 350, 250};
 		playEffectTone(mewiloCpcTonePeriodToHz(kPeriods[value]), kLengths[value]);
+		// Native code queues SOUND, then spins using its duration. Use the
+		// finite tone's duration as a portable budget for that blocking work.
+		waitMilliseconds(kLengths[value]);
+		_vm->_sound->speakerOff();
+		_effectToneUntil = activeMillis();
 		return;
 	}
 
