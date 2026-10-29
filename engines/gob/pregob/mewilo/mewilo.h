@@ -83,7 +83,14 @@ public:
 		const MewiloTotData &tot, uint16 node, const byte *text, uint length) override;
 
 private:
-	enum { kCursorColor = 16 };
+	enum { kCursorColor = 16, kWaitCursorThresholdMillis = 200 };
+
+	enum CursorPhase {
+		kCursorInactive,
+		kCursorNormal,
+		kCursorPending,
+		kCursorBusy
+	};
 
 	friend class MewiloHostTestSuite;
 
@@ -137,7 +144,11 @@ private:
 		const byte *text, uint length, int16 x, int16 y, byte color, byte lineAdvance = 8);
 	void drawScore(uint value, bool ending);
 	void drawScoreDigits(uint value, int16 x, int16 y, byte color, byte background);
+	void beginGameCursor();
+	void endGameCursor();
 	void installCrossCursor();
+	void installWaitCursor();
+	void resetWaitCursor();
 	void initPalette();
 	void presentFrame();
 	void tracePresentationDraw(const char *kind, uint16 site, const Common::Rect &region);
@@ -162,6 +173,7 @@ private:
 	void stopMewiloAudio();
 	void waitMilliseconds(uint32 durationMs);
 	void waitPresentation(const MewiloTimingPlan &plan, uint16 site);
+	void updateWaitCursor();
 	uint32 activeMillis() const;
 
 	// A presentation override must keep native resource and save semantics.
@@ -181,6 +193,9 @@ private:
 	SoundMixer *_music;
 	Common::Array<SavedRect> _savedRects;
 	SurfacePtr _crossCursor;
+	SurfacePtr _waitCursor;
+	CursorPhase _cursorPhase;
+	uint32 _cursorPhaseStart;
 	Common::String _moduleStem;
 	int16 _pendingKey;
 	Common::Array<MewiloInputEvent> _mousePresses;

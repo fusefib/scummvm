@@ -23,6 +23,8 @@
 #include "common/textconsole.h"
 #include "common/util.h"
 
+#include "graphics/wincursor.h"
+
 #include "gob/draw.h"
 #include "gob/global.h"
 #include "gob/gob.h"
@@ -341,6 +343,22 @@ void PreGob_Mewilo::drawScoreDigits(uint value, int16 x, int16 y, byte color, by
 	markDirty(x, y, 16, 8);
 }
 
+void PreGob_Mewilo::beginGameCursor() {
+	if (_cursorPhase != kCursorInactive)
+		return;
+	addCursor();
+	_cursorPhase = kCursorNormal;
+	installCrossCursor();
+}
+
+void PreGob_Mewilo::endGameCursor() {
+	if (_cursorPhase == kCursorInactive)
+		return;
+	// Cached images outlive this stack entry; they do not imply ownership.
+	_cursorPhase = kCursorInactive;
+	removeCursor();
+}
+
 void PreGob_Mewilo::installCrossCursor() {
 	if (!_crossCursor) {
 		_crossCursor.reset(new Surface(16, 16, 1));
@@ -350,6 +368,30 @@ void PreGob_Mewilo::installCrossCursor() {
 		_crossCursor->drawRect(5, 5, 9, 9, kCursorColor);
 	}
 	setCursor(*_crossCursor, 7, 7);
+}
+
+void PreGob_Mewilo::installWaitCursor() {
+	if (!_waitCursor) {
+		Graphics::Cursor *cursor = Graphics::makeBusyWinCursor();
+		_waitCursor.reset(new Surface(cursor->getWidth(), cursor->getHeight(), 1));
+		const byte *pixels = cursor->getSurface();
+		for (uint y = 0; y < cursor->getHeight(); ++y)
+			for (uint x = 0; x < cursor->getWidth(); ++x)
+				_waitCursor->putPixel(x, y,
+					pixels[y * cursor->getWidth() + x] == 1 ? kCursorColor : 0);
+		delete cursor;
+	}
+	// Use the surface overload so the existing game palette stays in force.
+	setCursor(*_waitCursor, 7, 13);
+}
+
+void PreGob_Mewilo::resetWaitCursor() {
+	if (_cursorPhase == kCursorInactive)
+		return;
+	const bool wasBusy = _cursorPhase == kCursorBusy;
+	_cursorPhase = kCursorNormal;
+	if (wasBusy)
+		installCrossCursor();
 }
 
 void PreGob_Mewilo::tracePresentationDraw(

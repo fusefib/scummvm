@@ -65,6 +65,7 @@ byte PreGob_Mewilo::translateInputKey(int16 key) const {
 }
 
 bool PreGob_Mewilo::waitInput(MewiloInputEvent &event) {
+	resetWaitCursor();
 	presentFrame();
 	debugC(4, kDebugGameFlow, "MEWILO_PRESENT input module=%s t=%u frame=%u", _moduleStem.c_str(),
 		activeMillis(), _presentation.frame());
@@ -131,6 +132,7 @@ bool PreGob_Mewilo::waitContinueInput() {
 }
 
 bool PreGob_Mewilo::waitInputRelease() {
+	resetWaitCursor();
 	int16 x, y;
 	MouseButtons buttons;
 	while (!shouldQuit() && !hasError() && !_pendingRestore) {

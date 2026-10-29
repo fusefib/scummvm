@@ -62,6 +62,23 @@ void PreGob_Mewilo::waitMilliseconds(uint32 durationMs) {
 	waitPresentation(plan, 0);
 }
 
+void PreGob_Mewilo::updateWaitCursor() {
+	if (_cursorPhase == kCursorInactive || _cursorPhase == kCursorBusy ||
+		_pauseDepth || shouldQuit() || hasError() || _pendingRestore)
+		return;
+	const uint32 now = activeMillis();
+	if (_cursorPhase == kCursorNormal) {
+		_cursorPhase = kCursorPending;
+		_cursorPhaseStart = now;
+	}
+	// Consecutive automatic operations share one active-time phase. This
+	// observes existing polls without changing their deadlines or speed.
+	if (now - _cursorPhaseStart >= kWaitCursorThresholdMillis) {
+		installWaitCursor();
+		_cursorPhase = kCursorBusy;
+	}
+}
+
 void PreGob_Mewilo::waitOrDelay(byte argument) {
 	if (!argument) {
 		if (waitContinueInput())
@@ -91,6 +108,7 @@ void PreGob_Mewilo::waitPresentation(const MewiloTimingPlan &plan, uint16 site) 
 			plan, MAX<int16>(1, _vm->_global->_speedFactor), start, now);
 		if (!remaining)
 			break;
+		updateWaitCursor();
 		serviceEvents();
 		if (shouldQuit() || hasError() || _pendingRestore)
 			break;

@@ -220,6 +220,7 @@ bool PreGob_Mewilo::playSample(byte *pcm, uint32 size, uint16 frequency,
 	// The rate converter can retain an audible tail after the producer ends.
 	// Wait for the mixer handle, preserving that tail across modal pauses.
 	while (!shouldQuit() && !hasError() && samplePlaying()) {
+		updateWaitCursor();
 		serviceEvents();
 		g_system->delayMillis(1);
 	}
@@ -283,6 +284,7 @@ bool PreGob_Mewilo::playCpcMusic(const Common::String &name) {
 	// Native code loops the music until CP/M BIOS console-status reports a key.
 	// ScummVM's checkKey consumes the buffered event, so retain it for the next
 	// VM input node to preserve the native "status only" behavior.
+	resetWaitCursor();
 	while (!shouldQuit() && !hasError() && _music->isPlaying()) {
 		serviceEvents();
 		const int16 key = _vm->_util->checkKey();

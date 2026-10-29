@@ -256,6 +256,7 @@ void PreGob_Mewilo::commitRestore() {
 	PreparedRestore *p = _pendingRestore;
 	if (!p)
 		return;
+	resetWaitCursor();
 	stopMewiloAudio();
 	commitModule(p->module);
 	_executor.adoptState(p->executor);

@@ -42,7 +42,8 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) :
 	_profile(getMewiloPlatformProfile(mewiloPlatformFromCommon(vm->getPlatform(), thomsonTO))),
 	_presentationPlatform(mewiloPresentationPlatform(vm->getPlatform(), thomsonTO)),
 	_useThomsonDisk(thomsonFD), _audioBackend(_profile.audioBackend), _sampleAudioSelected(false),
-	_executor(*this), _tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
+	_executor(*this), _tot(nullptr), _i00(nullptr), _music(nullptr),
+	_cursorPhase(kCursorInactive), _cursorPhaseStart(0), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0),
 	_hostFailed(false),
 	_animationFrameMillis(mewiloAnimationFrameMillis()),
@@ -95,7 +96,8 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 		drawScore(variableCount > 0x17 ? (uint16)variables[0x17].word0 : 0, command == 9);
 		return;
 	case 2:
-		installCrossCursor();
+		if (_cursorPhase != kCursorBusy)
+			installCrossCursor();
 		showCursor();
 		// The source platform owns this cue independently of installed samples.
 		playNativeCue();
@@ -129,8 +131,7 @@ void PreGob_Mewilo::run() {
 		initialModule = initialModule.substr(0, initialModule.size() - 4);
 	if (initialModule.empty())
 		initialModule = _profile.modulePrefix;
-	addCursor();
-	installCrossCursor();
+	beginGameCursor();
 	showCursor();
 	fadeIn();
 	_executor.reset();
@@ -174,10 +175,11 @@ void PreGob_Mewilo::run() {
 		}
 	}
 	stopMewiloAudio();
-	removeCursor();
+	endGameCursor();
 }
 
 void PreGob_Mewilo::resetForRestart() {
+	resetWaitCursor();
 	_hostFailed = false;
 	discardRestore();
 	_presentation.reset();
