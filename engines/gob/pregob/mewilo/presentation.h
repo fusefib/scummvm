@@ -44,6 +44,8 @@ struct MewiloTimingPlan {
 	Common::Rect region;
 	Common::Rect exposureRegion; ///< Optional separate image floor under dialogue.
 	const char *rule;
+	// True for documented nominal native conversions, not hardware timing.
+	// The Atari estimate and presentation policies leave this false.
 	bool calibrated;
 	bool animation;
 	bool reading;
@@ -57,7 +59,7 @@ uint32 mewiloReadingMillis(const byte *text, uint length);
 // Reviewed scene cues share a frame pace. Other waits retain native timing.
 MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 	Common::Language language, MewiloPlatform platform, uint16 site, byte operand,
-	bool normalize, uint32 animationFrameMillis);
+	bool readabilityHolds, uint32 animationFrameMillis);
 
 /** Mewilo-only presentation clock, not an interpreter or a frame scheduler.
  *

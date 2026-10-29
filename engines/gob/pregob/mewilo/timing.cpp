@@ -123,10 +123,10 @@ void PreGob_Mewilo::waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte ar
 		return;
 	}
 	MewiloTimingPlan plan = mewiloTimingPlan(tot, _moduleStem.c_str(), _vm->_language,
-		_presentationPlatform, site, argument, _normalizeTiming, _animationFrameMillis);
+		_presentationPlatform, site, argument, _readabilityHolds, _animationFrameMillis);
 	debugC(4, kDebugGameFlow,
 		"MEWILO_PRESENT cue module=%s site=%04X operand=%u frame_ms=%u readability=%u rule=%s",
-		_moduleStem.c_str(), site, argument, _animationFrameMillis, _normalizeTiming, plan.rule);
+		_moduleStem.c_str(), site, argument, _animationFrameMillis, _readabilityHolds, plan.rule);
 	const ReplacementEntry *text =
 		plan.textNode ? replacementEntry(tot, plan.textNode, kReplacementText) : nullptr;
 	if (text) {

@@ -218,9 +218,9 @@ void PreGob_Mewilo::showRejectMessage(const byte *text, uint length) {
 	MewiloTimingPlan plan;
 	plan.anchor = kMewiloVisibleHold;
 	plan.rule = "reject-message";
-	plan.reading = _normalizeTiming;
+	plan.reading = _readabilityHolds;
 	plan.region = Common::Rect(0, y, 320, 200);
-	plan.milliseconds = _normalizeTiming ? mewiloReadingMillis(text, length) : 250;
+	plan.milliseconds = _readabilityHolds ? mewiloReadingMillis(text, length) : 250;
 	waitPresentation(plan, 0);
 }
 

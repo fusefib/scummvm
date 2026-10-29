@@ -44,7 +44,7 @@ PreGob_Mewilo::PreGob_Mewilo(GobEngine *vm, bool thomsonTO, bool thomsonFD) :
 	_executor(*this), _tot(nullptr), _i00(nullptr), _music(nullptr), _pendingKey(0),
 	_acceptMousePresses(false), _pauseStart(0), _pausedMillis(0), _pauseDepth(0),
 	_hostFailed(false),
-	_normalizeTiming(ConfMan.hasKey("mewilo_presentation_timing") &&
+	_readabilityHolds(ConfMan.hasKey("mewilo_presentation_timing") &&
 		ConfMan.getBool("mewilo_presentation_timing")),
 	_animationFrameMillis(mewiloAnimationFrameMillis()),
 	_scriptPatchPolicy(
