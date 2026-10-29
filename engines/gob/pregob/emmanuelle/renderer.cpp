@@ -26,6 +26,7 @@
  */
 
 #include "gob/pregob/emmanuelle/renderer.h"
+#include "graphics/surface.h"
 
 #include "common/system.h"
 
@@ -503,7 +504,7 @@ void OldTotRenderer::fillScreen(byte color) {
 		back.getHeight() - 1);
 }
 
-bool OldTotRenderer::drawPackedPayload(const Common::Array<byte> &payload,
+bool OldTotRenderer::drawPackedPayload(Common::Array<byte> &payload,
 									   uint16 width, uint16 height, int16 x, int16 y, bool transparentZero,
 									   bool horizontalFlip, bool verticalFlip) {
 	if (payload.empty() || !_vm || !_vm->_draw || !_vm->_video ||
@@ -513,7 +514,6 @@ bool OldTotRenderer::drawPackedPayload(const Common::Array<byte> &payload,
 	Surface &dest = *_vm->_draw->_backSurface;
 	if (_platform == kOldTotPlatformAmiga) {
 		Surface decoded(width, height, 1);
-		decoded.clear();
 		if (!decodeAmigaPackedPayload(payload, width, height, decoded))
 			return false;
 		for (int16 dy = 0; dy < (int16)height; ++dy) {
@@ -541,14 +541,13 @@ bool OldTotRenderer::drawPackedPayload(const Common::Array<byte> &payload,
 		return true;
 	}
 
-	Common::Array<byte> packedPayload = payload;
 	if (!horizontalFlip && !verticalFlip) {
-		_vm->_video->drawPackedSprite(&packedPayload[0], width, height, x, y,
+		_vm->_video->drawPackedSprite(&payload[0], width, height, x, y,
 									  transparentZero ? 1 : 0, dest);
 	} else {
 		Surface temp(width, height, dest.getBPP());
 		temp.clear();
-		_vm->_video->drawPackedSprite(&packedPayload[0], width, height, 0, 0,
+		_vm->_video->drawPackedSprite(&payload[0], width, height, 0, 0,
 									  0, temp);
 		const uint32 transparent = temp.getColorFromIndex(0);
 		for (int16 dy = 0; dy < (int16)height; ++dy) {
@@ -625,7 +624,6 @@ SurfacePtr OldTotRenderer::decodeSpriteSurface(const OldTotData &tot,
 		return SurfacePtr();
 
 	SurfacePtr raw(new Surface(desc.width, desc.height, 1));
-	raw->clear();
 	if (_platform == kOldTotPlatformAmiga) {
 		if (!decodeAmigaPackedPayload(payload, desc.width, desc.height, *raw))
 			return SurfacePtr();
@@ -636,16 +634,16 @@ SurfacePtr OldTotRenderer::decodeSpriteSurface(const OldTotData &tot,
 	if (!desc.horizontalFlip() && !desc.verticalFlip())
 		return raw;
 
-	SurfacePtr flipped(new Surface(desc.width, desc.height, 1));
-	flipped->clear();
-	for (int16 y = 0; y < (int16)desc.height; ++y) {
-		const int16 sourceY = desc.verticalFlip() ? desc.height - 1 - y : y;
-		for (int16 x = 0; x < (int16)desc.width; ++x) {
-			const int16 sourceX = desc.horizontalFlip() ? desc.width - 1 - x : x;
-			flipped->putPixelRaw(x, y, raw->get(sourceX, sourceY).get());
-		}
-	}
-	return flipped;
+	// The decoded image is exclusively owned. The view never frees its pixels.
+	Graphics::Surface image;
+	image.init(desc.width, desc.height, desc.width, raw->getData(),
+		Graphics::PixelFormat::createFormatCLUT8());
+	const Common::Rect bounds(desc.width, desc.height);
+	if (desc.horizontalFlip())
+		image.flipHorizontal(bounds);
+	if (desc.verticalFlip())
+		image.flipVertical(bounds);
+	return raw;
 }
 
 SurfacePtr OldTotRenderer::buildMaskedCell(const Surface &sprite,

@@ -64,8 +64,7 @@ uint16 amigaInitialModuleSelector(uint16 scriptSelector,
 								 bool forceLoadHot);
 
 bool decodeAmigaPackedPixels(const Common::Array<byte> &payload,
-							 uint16 width, uint16 height,
-							 Common::Array<byte> &pixels);
+							 byte *pixels, uint32 pixelCount);
 bool getAmigaModulePalette(const Common::String &moduleName,
 						   uint16 words[32]);
 bool getAmigaTextColorTable(const Common::String &moduleName, byte colors[16]);

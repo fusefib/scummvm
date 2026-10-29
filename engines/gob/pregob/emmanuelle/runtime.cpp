@@ -730,40 +730,31 @@ void getAmigaSchedulerTiming(byte period, uint16 &reload,
 }
 
 bool decodeAmigaPackedPixels(const Common::Array<byte> &payload,
-							 uint16 width, uint16 height, Common::Array<byte> &pixels) {
-	pixels.clear();
-	if (width == 0 || height == 0)
+							 byte *pixels, uint32 pixelCount) {
+	if (!pixels || !pixelCount)
 		return false;
-	const uint32 expected = (uint32)width * height;
-	if (expected / width != height)
-		return false;
-	pixels.resize(expected);
-
 	uint32 pixel = 0;
 	uint32 position = 0;
-	while (pixel < expected) {
-		if (position >= payload.size()) {
-			pixels.clear();
+	while (pixel < pixelCount) {
+		if (position >= payload.size())
 			return false;
-		}
 		const byte value = payload[position++];
 		const byte color = value >> 3;
 		uint32 run = 0;
 		if (value & 0x04) {
 			run = (value & 0x03) + 1;
 		} else {
-			if (position >= payload.size()) {
-				pixels.clear();
+			if (position >= payload.size())
 				return false;
-			}
 			run = ((((uint32)value & 0x03) << 8) |
 				   payload[position++]) +
 				  1;
 		}
-		const uint32 remaining = expected - pixel;
+		// The last run may extend past the image.
+		const uint32 remaining = pixelCount - pixel;
 		const uint32 count = run < remaining ? run : remaining;
-		for (uint32 i = 0; i < count; ++i)
-			pixels[pixel++] = color;
+		memset(pixels + pixel, color, count);
+		pixel += count;
 	}
 	return true;
 }

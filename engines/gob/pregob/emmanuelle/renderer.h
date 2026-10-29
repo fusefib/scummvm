@@ -196,7 +196,7 @@ public:
 	SurfacePtr buildFightCell(const Surface &sprite, uint16 cellWidth,
 							  uint16 cellHeight, int16 offsetX,
 							  int16 offsetY) const;
-	bool drawPackedPayload(const Common::Array<byte> &payload, uint16 width,
+	bool drawPackedPayload(Common::Array<byte> &payload, uint16 width,
 						   uint16 height, int16 x, int16 y, bool transparentZero,
 						   bool horizontalFlip, bool verticalFlip);
 

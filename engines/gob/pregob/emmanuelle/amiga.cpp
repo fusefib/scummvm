@@ -217,12 +217,10 @@ void PreGob_Emmanuelle::waitAmigaInputRelease() {
 bool OldTotRenderer::decodeAmigaPackedPayload(
 	const Common::Array<byte> &payload, uint16 width, uint16 height,
 	Surface &out) const {
-	Common::Array<byte> pixels;
-	if (!decodeAmigaPackedPixels(payload, width, height, pixels))
+	if (out.getBPP() != 1 || out.getWidth() != width || out.getHeight() != height)
 		return false;
-	for (uint32 i = 0; i < pixels.size(); ++i)
-		out.putPixelRaw(i % width, i / width, pixels[i]);
-	return true;
+	// The caller owns an unpublished sprite; malformed data cannot alter the screen.
+	return decodeAmigaPackedPixels(payload, out.getData(), (uint32)width * height);
 }
 
 bool OldTotRenderer::presentAmigaMode44Step(byte variant, byte phase) {
