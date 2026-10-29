@@ -21,6 +21,7 @@
 #include "gob/pregob/mewilo/executor.h"
 
 #include "gob/pregob/mewilo/text.h"
+#include "gob/pregob/mewilo/tot.h"
 
 namespace Gob {
 namespace Mewilo {

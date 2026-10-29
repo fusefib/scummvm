@@ -27,6 +27,7 @@
 #include "gob/global.h"
 #include "gob/gob.h"
 #include "gob/pregob/mewilo/text.h"
+#include "gob/pregob/mewilo/tot.h"
 #include "gob/video.h"
 
 namespace Gob {

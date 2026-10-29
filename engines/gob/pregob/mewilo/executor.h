@@ -22,10 +22,12 @@
 #define GOB_PREGOB_MEWILO_EXECUTOR_H
 
 #include "common/array.h"
-#include "gob/pregob/mewilo/tot.h"
+#include "common/scummsys.h"
 
 namespace Gob {
 namespace Mewilo {
+
+class MewiloTotData;
 
 static const uint kMewiloVariableCount = 52;
 
@@ -138,6 +140,8 @@ public:
 	bool exportState(MewiloExecState &out) const;
 	static bool validateState(const MewiloTotData &tot, const MewiloExecState &state);
 	bool importState(const MewiloTotData &tot, const MewiloExecState &state);
+	// Transfer prepared continuation for this same host. The module's owner
+	// must already have transferred its lifetime before adopting the state.
 	void adoptState(MewiloExecutor &prepared);
 
 	MewiloVar &variable(uint index) { return _variables[index]; }
@@ -155,8 +159,8 @@ private:
 	bool answerMatches(const MewiloTextField &field, const Common::Array<byte> &input) const;
 	bool parseTextField(uint32 offset, MewiloTextField &field, uint32 &nextOffset) const;
 
-	MewiloExecHost &_host;
-	const MewiloTotData *_tot;
+	MewiloExecHost &_host; ///< Borrowed; must outlive the executor.
+	const MewiloTotData *_tot; ///< Borrowed; detach before its owner deletes it.
 	uint _dispatchesUntilService;
 	Common::Array<MewiloExecFrame> _frames;
 	uint _modalDepth;

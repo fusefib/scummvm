@@ -24,7 +24,10 @@
 #include "common/platform.h"
 #include "common/scummsys.h"
 #include "common/str.h"
-#include "common/stream.h"
+
+namespace Common {
+class SeekableReadStream;
+} // End of namespace Common
 
 namespace Gob {
 namespace Mewilo {

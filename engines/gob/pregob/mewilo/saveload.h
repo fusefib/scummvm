@@ -25,6 +25,7 @@
 #include "common/stream.h"
 
 #include "gob/pregob/mewilo/executor.h"
+#include "gob/pregob/mewilo/platform.h"
 #include "gob/pregob/mewilo/script_patches.h"
 
 namespace Gob {

@@ -28,6 +28,7 @@
 #include "gob/dataio.h"
 #include "gob/gob.h"
 #include "gob/pregob/mewilo/options.h"
+#include "gob/pregob/mewilo/tot.h"
 #include "gob/sound/soundmixer.h"
 #include "gob/util.h"
 

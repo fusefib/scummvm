@@ -28,6 +28,8 @@
 
 #include "gob/draw.h"
 #include "gob/gob.h"
+#include "gob/pregob/mewilo/tot.h"
+#include "gob/util.h"
 
 namespace Gob {
 namespace Mewilo {

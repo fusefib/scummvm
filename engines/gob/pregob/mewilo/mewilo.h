@@ -93,6 +93,7 @@ private:
 		SurfacePtr surface;
 	};
 
+	// Owns staged resources; commitModule transfers and nulls both pointers.
 	struct PreparedModule {
 		MewiloTotData *tot;
 		MewiloI00Bank *i00;
@@ -145,6 +146,8 @@ private:
 	byte translateInputKey(int16 key) const;
 	bool playRawSample(
 		const Common::String &name, uint16 frequency, int16 repetitions = 1, bool music = false);
+	// Consumes malloc-compatible PCM on every return path, including errors
+	// and quit. Raw/looping streams and the mixer carry disposal after handoff.
 	bool playSample(byte *pcm, uint32 size, uint16 frequency, int16 repetitions, bool music,
 		byte volume = 255, int8 balance = 0);
 	Common::SeekableReadStream *openAmigaSample(const Common::String &name) const;

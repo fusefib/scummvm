@@ -23,7 +23,10 @@
 
 #include "common/array.h"
 #include "common/scummsys.h"
-#include "common/stream.h"
+
+namespace Common {
+class SeekableReadStream;
+} // End of namespace Common
 
 namespace Gob {
 
@@ -35,10 +38,9 @@ struct ReplacementEntry;
 
 class MewiloI00Bank {
 public:
-	static const uint kMaxRecords = 256;
 	// Port budget, not a native size field: room for all byte-indexed 16-bit
 	// records, the CPC zero prefix, and substantial opaque file tails.
-	static const uint32 kMaxDataSize = 32 * 1024 * 1024;
+	enum { kMaxRecords = 256, kMaxDataSize = 32 * 1024 * 1024 };
 
 	MewiloI00Bank();
 	explicit MewiloI00Bank(Common::SeekableReadStream &stream, bool cpcZeroPrefix = false);
