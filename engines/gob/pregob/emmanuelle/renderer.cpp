@@ -413,6 +413,52 @@ void OldTotRenderer::fillScreen(byte color) {
 		back.getHeight() - 1);
 }
 
+static bool drawDosStPackedPayload(const Common::Array<byte> &payload,
+		uint16 width, uint16 height, int16 x, int16 y, bool transparentZero,
+		Surface &dest) {
+	if (!width || !height)
+		return false;
+	const uint32 pixelCount = (uint32)width * height;
+	// These sprites use native four-bit RLE, not the later Gob compression
+	// headers. Validate every required run before touching a live surface.
+	for (uint pass = 0; pass < 2; ++pass) {
+		uint32 pos = 0;
+		uint32 pixels = 0;
+		while (pixels < pixelCount) {
+			if (pos >= payload.size())
+				return false;
+			const byte token = payload[pos++];
+			uint32 run = token & 7;
+			if (!(token & 8)) {
+				if (pos >= payload.size())
+					return false;
+				run = (run << 8) | payload[pos++];
+			}
+			// The native decoder clips an oversized final run and ignores the tail.
+			run = MIN(run + 1, pixelCount - pixels);
+			if (pass && (!transparentZero || (token >> 4))) {
+				const uint32 color = dest.getColorFromIndex(token >> 4);
+				int targetX = x + (int)(pixels % width);
+				int targetY = y + (int)(pixels / width);
+				for (uint32 i = 0; i < run; ++i) {
+					if (targetX >= 0 && targetX < dest.getWidth() &&
+						targetY >= 0 && targetY < dest.getHeight())
+						dest.putPixelRaw(targetX, targetY, color);
+					if (++targetX == x + width) {
+						targetX = x;
+						++targetY;
+					}
+				}
+			}
+			pixels += run;
+		}
+		// Retain Gob's direct-draw bottom boundary after validating the payload.
+		if (y + height > dest.getHeight())
+			return true;
+	}
+	return true;
+}
+
 bool OldTotRenderer::drawPackedPayload(Common::Array<byte> &payload,
 									   uint16 width, uint16 height, int16 x, int16 y, bool transparentZero,
 									   bool horizontalFlip, bool verticalFlip) {
@@ -451,13 +497,14 @@ bool OldTotRenderer::drawPackedPayload(Common::Array<byte> &payload,
 	}
 
 	if (!horizontalFlip && !verticalFlip) {
-		_vm->_video->drawPackedSprite(&payload[0], width, height, x, y,
-									  transparentZero ? 1 : 0, dest);
+		if (!drawDosStPackedPayload(payload, width, height, x, y,
+				transparentZero, dest))
+			return false;
 	} else {
 		Surface temp(width, height, dest.getBPP());
 		temp.clear();
-		_vm->_video->drawPackedSprite(&payload[0], width, height, 0, 0,
-									  0, temp);
+		if (!drawDosStPackedPayload(payload, width, height, 0, 0, false, temp))
+			return false;
 		const uint32 transparent = temp.getColorFromIndex(0);
 		for (int16 dy = 0; dy < (int16)height; ++dy) {
 			const int16 targetY = y + dy;
@@ -537,8 +584,9 @@ SurfacePtr OldTotRenderer::decodeSpriteSurface(const OldTotData &tot,
 		if (!decodeAmigaPackedPayload(payload, desc.width, desc.height, *raw))
 			return SurfacePtr();
 	} else {
-		_vm->_video->drawPackedSprite(&payload[0], desc.width, desc.height,
-									  0, 0, 0, *raw);
+		if (!drawDosStPackedPayload(payload, desc.width, desc.height, 0, 0,
+				false, *raw))
+			return SurfacePtr();
 	}
 	if (!desc.horizontalFlip() && !desc.verticalFlip())
 		return raw;
