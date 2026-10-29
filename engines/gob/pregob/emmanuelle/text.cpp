@@ -26,6 +26,7 @@
  */
 
 #include "gob/pregob/emmanuelle/text.h"
+#include "gob/video.h"
 
 namespace Gob {
 namespace Emmanuelle {
@@ -139,6 +140,92 @@ bool planOldTotText(const OldTotData &d, const OldTotVM &vm, uint16 o, OldTotTex
 		cy += out.lineAdvance;
 	}
 	return true;
+}
+
+int16 alignOldTotTextBaselines(OldTotTextPlan &plan, const Font &font,
+		bool keepSingleLineBaseline) {
+	bool needsAlignment = false;
+	for (uint i = 0; i < plan.glyphs.size(); ++i) {
+		OldTotTextGlyph &glyph = plan.glyphs[i];
+		glyph.y = glyph.cellY;
+		needsAlignment |= glyph.character == 0xE1 || glyph.character == 0x80 || glyph.character == 0x87;
+	}
+	if (!needsAlignment)
+		return plan.y;
+	const bool keepBaseline = keepSingleLineBaseline &&
+		plan.glyphs[0].cellY == plan.glyphs.back().cellY &&
+		plan.glyphs[0].cellY + font.getCharHeight() + 2 <= plan.y + plan.height;
+
+	// Place native E1 (sharp-s) one row below ordinary letters, 87/80 (c/C
+	// with cedilla) two rows below. Lift the line to fit the lowest character.
+	// Mixed German LOADHOT:23C4 uses offsets -2/-1/0 respectively.
+	byte pixels[64];
+	Surface mask(8, 8, 1, pixels);
+	int lift = 0;
+	int nextLineY = 0;
+	int nextInkTop = 32767;
+	int inkTop = plan.y;
+	uint end = plan.glyphs.size();
+	while (end) {
+		const int cellY = plan.glyphs[end - 1].cellY;
+		uint start = end - 1;
+		while (start && plan.glyphs[start - 1].cellY == cellY)
+			--start;
+		bool visibleLine = false;
+		for (uint i = start; i < end; ++i)
+			visibleLine |= plan.glyphs[i].character != ' ';
+		if (!visibleLine) {
+			end = start;
+			continue;
+		}
+
+		// Work backward so a raised line also raises its contiguous predecessors.
+		// Extra blank-line spacing absorbs that carry: the German protection
+		// screen's later colour label must not push its top instructions offscreen.
+		if (nextInkTop != 32767)
+			lift = MAX(0, lift - MAX(0, nextLineY - cellY - plan.lineAdvance));
+		for (uint i = start; i < end; ++i) {
+			OldTotTextGlyph &glyph = plan.glyphs[i];
+			const int offset = glyph.character == 0xE1 ? 1 :
+				(glyph.character == 0x80 || glyph.character == 0x87 ? 2 : 0);
+			glyph.y = glyph.cellY + offset;
+			if (!keepBaseline)
+				lift = MAX(lift, offset);
+		}
+		for (uint i = start; i < end; ++i)
+			plan.glyphs[i].y -= lift;
+
+		// Measure ink rather than cells. The two native fonts have different
+		// vertical extents; a full-cell collision test would lift too much.
+		int top = 32767;
+		int bottom = -32768;
+		for (uint i = start; i < end; ++i) {
+			const OldTotTextGlyph &glyph = plan.glyphs[i];
+			mask.clear();
+			font.drawLetterRaw(mask, glyph.character, 0, 0, 1, 0, false);
+			for (uint row = 0; row < 8; ++row) {
+				for (uint col = 0; col < 8; ++col) {
+					if (pixels[row * 8 + col]) {
+						top = MIN(top, glyph.y + (int)row);
+						bottom = MAX(bottom, glyph.y + (int)row);
+					}
+				}
+			}
+		}
+		if (bottom >= nextInkTop) {
+			const int extra = bottom - nextInkTop + 1;
+			lift += extra;
+			top -= extra;
+			for (uint i = start; i < end; ++i)
+				plan.glyphs[i].y -= extra;
+		}
+		if (top != 32767)
+			nextInkTop = top;
+		inkTop = MIN(inkTop, top);
+		nextLineY = cellY;
+		end = start;
+	}
+	return inkTop;
 }
 
 } // End of namespace Emmanuelle

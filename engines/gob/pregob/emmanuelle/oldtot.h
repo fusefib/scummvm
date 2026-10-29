@@ -104,7 +104,7 @@ struct OldTotAnimationSetup {
 
 	byte slot;
 	byte flags;
-	byte frameDelay; ///< Multiplied by 10 on the delay path.
+	byte frameDelay; ///< Native delay operand; gameplay also applies the speed factor.
 	byte stepCount;
 	int8 deltaX;
 	int8 deltaY;
@@ -145,7 +145,7 @@ public:
 	/** Decode opcode 0x2A's timer callback table. */
 	bool decodeScheduledCycle(uint16 offset, OldTotScheduledCycle &out) const;
 
-	/** Decode the 18-byte opcode 0x06 animation setup. */
+	/** Decode the 16-byte animation header and its descriptor table. */
 	bool decodeAnimationSetup(uint16 offset, OldTotAnimationSetup &out) const;
 	bool decodeDrawDescriptor(uint16 offset, OldTotDrawDescriptor &out) const;
 	/** Copy one unframed packed-RLE sprite, delimited by decoded pixel count. */

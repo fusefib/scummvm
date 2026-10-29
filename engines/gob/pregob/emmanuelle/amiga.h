@@ -31,7 +31,6 @@
 #include "common/array.h"
 #include "common/scummsys.h"
 #include "common/str.h"
-#include "gob/pregob/emmanuelle/runtime.h"
 
 namespace Gob {
 namespace Emmanuelle {

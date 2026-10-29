@@ -29,11 +29,39 @@
 #define GOB_PREGOB_EMMANUELLE_ACTIVE_H
 #include "common/array.h"
 #include "common/scummsys.h"
-#include "gob/pregob/emmanuelle/gameflow.h"
 #include "gob/surface.h"
 namespace Gob {
 class GobEngine;
 namespace Emmanuelle {
+
+struct SpriteBounds {
+	SpriteBounds() : x(0), y(0), w(0), h(0) {}
+	SpriteBounds(int16 px, int16 py, int16 pw, int16 ph) : x(px), y(py), w(pw), h(ph) {}
+	int16 x, y, w, h;
+};
+
+struct ActiveCompositePlan {
+	SpriteBounds oldRect;
+	SpriteBounds newRect;
+	SpriteBounds dirtyUnion;
+	SpriteBounds alignedUnion;
+};
+
+ActiveCompositePlan planActiveComposite(int16 oldX, int16 oldY,
+										int16 newX, int16 newY, int16 width, int16 height);
+
+struct ActivePairCompositePlan {
+	ActiveCompositePlan first;
+	ActiveCompositePlan second;
+	SpriteBounds dirtyUnion;
+	SpriteBounds alignedUnion;
+};
+
+ActivePairCompositePlan planActivePairComposite(
+	int16 firstOldX, int16 firstOldY, int16 firstNewX, int16 firstNewY,
+	int16 firstWidth, int16 firstHeight, int16 secondOldX, int16 secondOldY,
+	int16 secondNewX, int16 secondNewY, int16 secondWidth, int16 secondHeight);
+
 struct EmmanuelleRendererState;
 
 class ActiveSpriteLayer {

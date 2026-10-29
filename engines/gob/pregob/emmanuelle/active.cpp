@@ -31,6 +31,23 @@
 #include "gob/gob.h"
 namespace Gob {
 namespace Emmanuelle {
+
+static SpriteBounds clip320x200(int left, int top, int right, int bottom) {
+	if (left < 0)
+		left = 0;
+	if (top < 0)
+		top = 0;
+	if (right > 320)
+		right = 320;
+	if (bottom > 200)
+		bottom = 200;
+	if (right < left)
+		right = left;
+	if (bottom < top)
+		bottom = top;
+	return SpriteBounds((int16)left, (int16)top, (int16)(right - left), (int16)(bottom - top));
+}
+
 ActiveSpriteLayer::ActiveSpriteLayer(GobEngine *vm, uint slotCount)
 	: _vm(vm) {
 	_slots.resize(slotCount);
@@ -220,5 +237,52 @@ bool ActiveSpriteLayer::compositePair(
 	second.background = secondBackground;
 	return true;
 }
+ActiveCompositePlan planActiveComposite(int16 oldX, int16 oldY,
+										int16 newX, int16 newY, int16 width, int16 height) {
+	ActiveCompositePlan p;
+	p.oldRect = SpriteBounds(oldX, oldY, width, height);
+	p.newRect = SpriteBounds(newX, newY, width, height);
+	int left = oldX < newX ? oldX : newX;
+	int top = oldY < newY ? oldY : newY;
+	int rightA = oldX + width, rightB = newX + width;
+	int bottomA = oldY + height, bottomB = newY + height;
+	int right = rightA > rightB ? rightA : rightB;
+	int bottom = bottomA > bottomB ? bottomA : bottomB;
+	p.dirtyUnion = clip320x200(left, top, right, bottom);
+	const int alignedLeft = p.dirtyUnion.x & ~3;
+	const int alignedRight = (p.dirtyUnion.x + p.dirtyUnion.w + 3) & ~3;
+	p.alignedUnion = clip320x200(alignedLeft, p.dirtyUnion.y, alignedRight,
+								 p.dirtyUnion.y + p.dirtyUnion.h);
+	return p;
+}
+
+ActivePairCompositePlan planActivePairComposite(
+	int16 firstOldX, int16 firstOldY, int16 firstNewX, int16 firstNewY,
+	int16 firstWidth, int16 firstHeight, int16 secondOldX, int16 secondOldY,
+	int16 secondNewX, int16 secondNewY, int16 secondWidth, int16 secondHeight) {
+	ActivePairCompositePlan p;
+	p.first = planActiveComposite(firstOldX, firstOldY, firstNewX,
+		firstNewY, firstWidth, firstHeight);
+	p.second = planActiveComposite(secondOldX, secondOldY, secondNewX,
+		secondNewY, secondWidth, secondHeight);
+	const int left = p.first.dirtyUnion.x < p.second.dirtyUnion.x ?
+		p.first.dirtyUnion.x : p.second.dirtyUnion.x;
+	const int top = p.first.dirtyUnion.y < p.second.dirtyUnion.y ?
+		p.first.dirtyUnion.y : p.second.dirtyUnion.y;
+	const int firstRight = p.first.dirtyUnion.x + p.first.dirtyUnion.w;
+	const int secondRight = p.second.dirtyUnion.x + p.second.dirtyUnion.w;
+	const int right = firstRight > secondRight ? firstRight : secondRight;
+	const int firstBottom = p.first.dirtyUnion.y + p.first.dirtyUnion.h;
+	const int secondBottom = p.second.dirtyUnion.y + p.second.dirtyUnion.h;
+	const int bottom = firstBottom > secondBottom ? firstBottom : secondBottom;
+	p.dirtyUnion = clip320x200(left, top, right, bottom);
+	const int alignedLeft = p.dirtyUnion.x & ~3;
+	const int alignedRight =
+		(p.dirtyUnion.x + p.dirtyUnion.w + 3) & ~3;
+	p.alignedUnion = clip320x200(alignedLeft, p.dirtyUnion.y, alignedRight,
+		p.dirtyUnion.y + p.dirtyUnion.h);
+	return p;
+}
+
 } // namespace Emmanuelle
 } // namespace Gob

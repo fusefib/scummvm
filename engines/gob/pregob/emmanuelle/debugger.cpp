@@ -26,6 +26,10 @@
  */
 
 #include "gob/console.h"
+#include "gob/gob.h"
+#include "gob/sound/sound.h"
+#include "gob/pregob/emmanuelle/emmanuelle.h"
+#include "graphics/cursorman.h"
 #include "gob/pregob/emmanuelle/debugger.h"
 #include "gob/pregob/emmanuelle/runtime.h"
 
@@ -630,5 +634,99 @@ bool GobConsole::cmd_cpSolve(int argc, const char **argv) {
 		(uint)challenge.second.color);
 	return true;
 }
+
+namespace Emmanuelle {
+
+void PreGob_Emmanuelle::exportDiagnosticSnapshot(
+	OldTotDiagnosticSnapshot &out) const {
+	out = OldTotDiagnosticSnapshot();
+	out.platform = _platformTag;
+	out.module = _moduleFileStem;
+	out.input.key = _pendingInput.peek(out.input.mouseX, out.input.mouseY,
+		out.input.mouseButtons);
+	out.cursorVisible = CursorMan.isVisible();
+	out.saveBoundary = saveBoundaryState();
+	out.traceEnabled = _diagnosticTraceEnabled;
+	out.schedulerAccumulator = _schedulerAccumulator;
+	out.schedulerDebt = _schedulerDebt;
+	out.variables.resize(ARRAYSIZE(_variables));
+	if (_scriptVM) {
+		out.hasVM = true;
+		_scriptVM->exportTransientState(out.vm);
+		_scriptVM->storeVariables(out.variables.data(), out.variables.size());
+	} else {
+		for (uint i = 0; i < ARRAYSIZE(_variables); ++i)
+			out.variables[i] = _variables[i];
+	}
+	if (_executor) {
+		out.hasExecutor = true;
+		_executor->exportState(out.executor);
+	}
+	// Selector resolution updates variables, so use a copy of the snapshot.
+	uint16 policyVariables[ARRAYSIZE(_variables)];
+	out.selector = out.variables[0];
+	for (uint i = 0; i < out.variables.size(); ++i)
+		policyVariables[i] = out.variables[i];
+	out.postPolicySelector = adjustModuleSelector(
+		policyVariables, ARRAYSIZE(policyVariables));
+	const ModuleTransition transition =
+		moduleTransition(out.postPolicySelector);
+	out.nextModule = moduleFileStem(transition.module);
+
+	out.native.audioKind = _audioKind;
+	out.native.audioSlot = _audioSlot;
+	out.native.audioFrequency = _audioFrequency;
+	out.native.audioRepeatCount = _audioRepeatCount;
+	out.native.audioActive = isAudioPlaying(_platformTag, _audioActive,
+		_vm->_sound->blasterPlayingSound());
+	out.native.audioBlocking = _audioBlocking && out.native.audioActive;
+	out.native.sampleBank = _sampleBank;
+	out.native.sampleCount = _sampleCount;
+	out.native.initialInitComplete = _initialInitComplete;
+	out.native.skipIntermediateSequenceNodes = _skipIntermediateSequenceNodes;
+	out.native.colorCycleEnabled = _colorCycleEnabled;
+	out.native.colorCounter = _colorCycleCounter;
+	out.native.activeObjectCount = _active.activeCount();
+	out.native.savedRegionDepth = _renderer.savedRegionDepth();
+	if (_platformTag == kOldTotPlatformAtariST ||
+		_platformTag == kOldTotPlatformAmiga) {
+		out.native.presentationMode = _renderer.presentationMode();
+		out.native.presentationVariant = _renderer.presentationVariant();
+		out.native.presentationPhase = _renderer.presentationPhase();
+		out.native.presentationDirty = _renderer.presentationPending();
+		out.native.presentationActive = _renderer.presentationActive();
+	}
+	if (_platformTag == kOldTotPlatformAtariST)
+		out.native.paletteBlack = _renderer.atariBlack();
+	else if (_platformTag == kOldTotPlatformAmiga) {
+		out.native.paletteTransition = _renderer.amigaPaletteTransitionPending();
+		out.native.paletteBlack = _renderer.amigaBlack();
+		out.native.presentedSnapshot = _renderer.amigaPresentedSnapshotValid();
+		out.native.moduleGeneration = _renderer.amigaModuleGeneration();
+		out.native.presentedGeneration = _renderer.amigaPresentedGeneration();
+	}
+}
+
+bool PreGob_Emmanuelle::queryProtectionHint(
+	ProtectionChallenge &out) const {
+	uint16 node = 0;
+	if (!_tot || !_scriptVM || !_executor ||
+		!_executor->activeInputNode(node) || uint32(node) + 6U > _tot->size())
+		return false;
+
+	uint16 variables[7];
+	for (uint i = 0; i < ARRAYSIZE(variables); ++i)
+		variables[i] = _scriptVM->readVariable(i);
+	return buildProtectionHint(_moduleFileStem.equalsIgnoreCase("INIT"), true,
+		_tot->byteAt(node), _tot->byteAt(node + 5), variables, out);
+}
+
+void PreGob_Emmanuelle::setDiagnosticTraceEnabled(bool enabled) {
+	_diagnosticTraceEnabled = enabled;
+	debugC(1, kDebugGameFlow, "Emmanuelle: diagnostic trace %s",
+		   enabled ? "enabled" : "disabled");
+}
+
+} // End of namespace Emmanuelle
 
 } // End of namespace Gob

@@ -281,28 +281,28 @@ void applyFightRightAction(FightState &state) {
 bool setFightLeftInput(FightState &state, int key) {
 	byte action = 0;
 	switch (key) {
-	case 0x2D:
+	case '-':
 		action = 3;
 		break;
-	case 0x2E:
+	case '.':
 		action = 2;
 		break;
-	case 0x49:
+	case 'I':
 		action = 4;
 		break;
-	case 0x4D:
+	case 'M':
 		action = 5;
 		break;
-	case 0x51:
+	case 'Q':
 		action = 6;
 		break;
-	case 0x47:
+	case 'G':
 		action = 7;
 		break;
-	case 0x4B:
+	case 'K':
 		action = 8;
 		break;
-	case 0x4F:
+	case 'O':
 		action = 9;
 		break;
 	default:
