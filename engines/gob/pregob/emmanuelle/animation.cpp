@@ -33,7 +33,7 @@ namespace Emmanuelle {
 bool planAnimationFrame(const OldTotAnimationSetup &setup, int16 baseX, int16 baseY,
 		uint16 step, byte frame, AnimationFramePlan &out) {
 	uint16 descriptor = 0;
-	if (!setup.hasDescriptor || !setup.descriptorForFrame(frame, descriptor))
+	if (!setup.descriptorForFrame(frame, descriptor))
 		return false;
 	out = AnimationFramePlan();
 	out.descriptorOffset = descriptor;

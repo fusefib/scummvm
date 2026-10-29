@@ -41,7 +41,6 @@ public:
 	explicit ActiveSpriteLayer(GobEngine *vm, uint slotCount = 20);
 	void restoreAll();
 	void discardAll();
-	bool active(uint slot) const;
 	bool bounds(uint slot, SpriteBounds &out) const;
 	uint activeCount() const;
 	bool restore(uint slot);

@@ -45,8 +45,6 @@ OldTotInline::OldTotInline() {
 OldTotScheduledCycle::OldTotScheduledCycle() {
 	randomizeInitial = 0;
 	period = 0;
-
-	memset(reserved, 0, sizeof(reserved));
 }
 
 OldTotAnimationSetup::OldTotAnimationSetup() {
@@ -64,8 +62,6 @@ OldTotAnimationSetup::OldTotAnimationSetup() {
 	height = 0;
 
 	frameMax = 0;
-	hasDescriptor = false;
-	descriptorOffset = 0;
 }
 
 bool OldTotAnimationSetup::descriptorForFrame(byte frame, uint16 &offset) const {
@@ -174,8 +170,6 @@ bool OldTotData::decodeScheduledCycle(uint16 offset, OldTotScheduledCycle &out) 
 	out = OldTotScheduledCycle();
 	out.randomizeInitial = byteAt(offset + 1);
 	out.period = byteAt(offset + 2);
-	for (uint i = 0; i < 7; ++i)
-		out.reserved[i] = byteAt(offset + 3 + i);
 
 	const uint count = byteAt(offset + 10);
 	if (!has(offset + 11, count * 2))
@@ -216,8 +210,6 @@ bool OldTotData::decodeAnimationSetup(uint16 offset, OldTotAnimationSetup &out) 
 				return false;
 			out.frameDescriptors[i] = d;
 		}
-		out.hasDescriptor = true;
-		out.descriptorOffset = out.frameDescriptors[0];
 	}
 
 	return true;

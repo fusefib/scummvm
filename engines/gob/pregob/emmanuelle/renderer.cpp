@@ -1190,7 +1190,7 @@ bool PreGob_Emmanuelle::renderAnimationFrame(
 	const OldTotAnimationSetup &setup, uint16 step, byte frame,
 	int16 baseX, int16 baseY) {
 	if (!_tot || !_scriptVM ||
-		!setup.hasDescriptor || setup.slot >= 20)
+		setup.frameDescriptors.empty() || setup.slot >= 20)
 		return false;
 
 	AnimationFramePlan framePlan;
@@ -1261,7 +1261,7 @@ void PreGob_Emmanuelle::animationNode(uint16 nodeOffset) {
 				 frame <= setup.frameMax && !shouldAbortExecution(); ++frame) {
 				const bool rendered = renderAnimationFrame(
 					setup, step, (byte)frame, baseX, baseY);
-				if (!rendered && setup.hasDescriptor && setup.slot < 20) {
+				if (!rendered && !setup.frameDescriptors.empty() && setup.slot < 20) {
 					failHostOperation("animation frame", nodeOffset);
 					return;
 				}

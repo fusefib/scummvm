@@ -52,7 +52,6 @@ struct OldTotScheduledCycle {
 
 	byte randomizeInitial;
 	byte period;
-	byte reserved[7];
 	Common::Array<uint16> targets;
 };
 
@@ -114,8 +113,6 @@ struct OldTotAnimationSetup {
 	uint16 widthUnits;
 	uint16 height;
 	byte frameMax;
-	bool hasDescriptor;
-	uint16 descriptorOffset; ///< Alias for the first frame descriptor.
 	Common::Array<uint16> frameDescriptors;
 	bool descriptorForFrame(byte frame, uint16 &offset) const;
 };

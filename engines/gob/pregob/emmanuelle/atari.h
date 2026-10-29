@@ -63,7 +63,6 @@ enum AtariStAudioPolicy {
 };
 
 bool getAtariStSampleCommand(byte command, AtariStSampleCommand &out);
-bool atariStHandlesNativeCommand(byte command);
 AtariStAudioPolicy atariStAudioPolicy(bool optionalAudio,
 									 bool anySamplePresent);
 const byte *getAtariStIntroComposition(uint &count);

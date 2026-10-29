@@ -104,8 +104,6 @@ void ActiveSpriteLayer::discardAll() {
 		_slots[i] = Slot();
 }
 
-bool ActiveSpriteLayer::active(uint slot) const { return slot < _slots.size() && _slots[slot].active; }
-
 bool ActiveSpriteLayer::bounds(uint slot, SpriteBounds &out) const {
 	if (slot >= _slots.size() || !_slots[slot].active)
 		return false;

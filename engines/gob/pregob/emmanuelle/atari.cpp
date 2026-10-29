@@ -83,8 +83,6 @@ void PreGob_Emmanuelle::serviceAtariFightFrame(
 }
 
 bool PreGob_Emmanuelle::handleAtariFF0B(byte command) {
-	if (!atariStHandlesNativeCommand(command))
-		return false;
 	switch (command) {
 	case 40:
 		if (_scriptVM && _scriptVM->readVariable(0) == 10)

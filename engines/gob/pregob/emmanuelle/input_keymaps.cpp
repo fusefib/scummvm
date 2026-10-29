@@ -36,6 +36,18 @@
 namespace Gob {
 namespace Emmanuelle {
 
+enum EmmanuelleFightAction {
+	kEmmanuelleFightBack = 0,
+	kEmmanuelleFightForward,
+	kEmmanuelleFightFirstDistraction,
+	kEmmanuelleFightStrike,
+	kEmmanuelleFightSecondDistraction,
+	kEmmanuelleFightDodgeBlow,
+	kEmmanuelleFightDodgePunch,
+	kEmmanuelleFightDodgeHeadbutt,
+	kEmmanuelleFightActionCount
+};
+
 static Common::Action *addKeyAction(Common::Keymap *keymap,
 									 const char *id,
 									 const Common::U32String &description,
@@ -52,23 +64,36 @@ static Common::Action *addKeyAction(Common::Keymap *keymap,
 	return action;
 }
 
-static void addFightAction(Common::Keymap *keymap, const char *id,
-						   const Common::U32String &description,
-						   EmmanuelleFightAction fightAction) {
-	Common::Action *action = addKeyAction(keymap, id, description,
-		emmanuelleFightActionKeyCode(fightAction),
-		emmanuelleFightActionAscii(fightAction),
-		emmanuelleFightKeyboardMapping(fightAction),
-		emmanuelleFightControllerMapping(fightAction));
-	action->addDefaultInputMapping(
-		emmanuelleFightSecondaryKeyboardMapping(fightAction));
+static void addFightAction(Common::Keymap *keymap,
+		const Common::U32String &description, EmmanuelleFightAction fightAction) {
+	static const struct {
+		const char *id;
+		Common::KeyCode key;
+		uint16 ascii;
+		const char *keyboard;
+		const char *controller;
+		const char *secondary;
+	} bindings[] = {
+		{"EMMA_FIGHT_BACK", Common::KEYCODE_LEFT, '-', "LEFT", "JOY_LEFT", "x"},
+		{"EMMA_FIGHT_FORWARD", Common::KEYCODE_RIGHT, '.', "RIGHT", "JOY_RIGHT", "c"},
+		{"EMMA_FIGHT_ATTACK1", Common::KEYCODE_7, 'i', "7", "JOY_X", "KP7"},
+		{"EMMA_FIGHT_ATTACK2", Common::KEYCODE_8, 'm', "8", "JOY_A", "KP8"},
+		{"EMMA_FIGHT_ATTACK3", Common::KEYCODE_9, 'q', "9", "JOY_Y", "KP9"},
+		{"EMMA_FIGHT_DEFEND1", Common::KEYCODE_1, 'g', "1", "JOY_LEFT_SHOULDER", "KP1"},
+		{"EMMA_FIGHT_DEFEND2", Common::KEYCODE_2, 'k', "2", "JOY_DOWN", "KP2"},
+		{"EMMA_FIGHT_DEFEND3", Common::KEYCODE_3, 'o', "3", "JOY_RIGHT_SHOULDER", "KP3"}
+	};
+	Common::Action *action = addKeyAction(keymap, bindings[fightAction].id, description,
+		bindings[fightAction].key, bindings[fightAction].ascii,
+		bindings[fightAction].keyboard, bindings[fightAction].controller);
+	action->addDefaultInputMapping(bindings[fightAction].secondary);
 }
 
 Common::KeymapArray createEmmanuelleKeymaps(Common::Platform platform) {
 	using namespace Common;
 
 	Keymap *common = new Keymap(Keymap::kKeymapTypeGame,
-		emmanuelleCommonKeymapId(), _("Default game keymappings"));
+		"emmanuelle-common", _("Default game keymappings"));
 	Keymap *intro = new Keymap(Keymap::kKeymapTypeGame,
 		emmanuelleInputKeymapId(kEmmanuelleInputIntro),
 		_("Intro keymappings"));
@@ -104,7 +129,7 @@ Common::KeymapArray createEmmanuelleKeymaps(Common::Platform platform) {
 	action->addDefaultInputMapping("KP_ENTER");
 	action->addDefaultInputMapping("MOUSE_MIDDLE");
 	addKeyAction(common, "EMMA_ESCAPE", _("Cancel"), KEYCODE_ESCAPE,
-		ASCII_ESCAPE, "ESCAPE", emmanuelleEscapeControllerMapping());
+		ASCII_ESCAPE, "ESCAPE", "JOY_B");
 	action = new Action(kStandardActionOpenMainMenu, _("Game menu"));
 	action->setCustomEngineActionEvent(
 		(Common::CustomEventType)kEmmanuelleActionOpenMainMenu);
@@ -116,15 +141,15 @@ Common::KeymapArray createEmmanuelleKeymaps(Common::Platform platform) {
 	action = new Action(kStandardActionSkip, _("Skip intro"));
 	action->setCustomEngineActionEvent(
 		(Common::CustomEventType)kEmmanuelleActionSkipIntro);
-	action->addDefaultInputMapping(emmanuelleSkipIntroKeyboardMapping());
-	action->addDefaultInputMapping(emmanuelleSkipIntroControllerMapping());
+	action->addDefaultInputMapping("SPACE");
+	action->addDefaultInputMapping("JOY_BACK");
 	intro->addAction(action);
 
 	action = new Action("EMMA_SELECT", _("Select choice"));
-	action->setEvent(emmanuelleChoiceEventType());
-	action->addDefaultInputMapping(emmanuelleChoiceControllerMapping());
+	action->setEvent(EVENT_LBUTTONDOWN);
+	action->addDefaultInputMapping("JOY_A");
 	choice->addAction(action);
-	if (emmanuelleHasKeyboardCursor(platform)) {
+	if (platform != kPlatformAmiga) {
 		addKeyAction(choice, "EMMA_CURSOR_UP", _("Move cursor up"),
 			KEYCODE_UP, 0, "UP", "JOY_UP");
 		addKeyAction(choice, "EMMA_CURSOR_DOWN", _("Move cursor down"),
@@ -136,37 +161,29 @@ Common::KeymapArray createEmmanuelleKeymaps(Common::Platform platform) {
 	}
 
 	addKeyAction(continuation, "EMMA_CONTINUE", _("Continue"),
-		emmanuelleContinuationKeyCode(), ASCII_RETURN, nullptr,
-		emmanuelleContinuationControllerMapping());
+		KEYCODE_RETURN, ASCII_RETURN, nullptr,
+		"JOY_A");
 
 	// Native movement was X/C on DOS, Up/Down on Atari, and top-row 8/9 on
 	// Amiga. Their action columns were keypad 9/6/3 and dodge columns 7/4/1.
 	// Keep the shared fight loop's ASCII tokens when remapping these actions.
-	addFightAction(fight, emmanuelleFightActionId(kEmmanuelleFightBack),
-		_("Step backward"),
+	addFightAction(fight, _("Step backward"),
 		kEmmanuelleFightBack);
-	addFightAction(fight, emmanuelleFightActionId(kEmmanuelleFightForward),
-		_("Step forward"),
+	addFightAction(fight, _("Step forward"),
 		kEmmanuelleFightForward);
 	addFightAction(fight,
-		emmanuelleFightActionId(kEmmanuelleFightFirstDistraction),
 		_("First distraction"),
 		kEmmanuelleFightFirstDistraction);
-	addFightAction(fight, emmanuelleFightActionId(kEmmanuelleFightStrike),
-		_("Strike opponent"),
+	addFightAction(fight, _("Strike opponent"),
 		kEmmanuelleFightStrike);
 	addFightAction(fight,
-		emmanuelleFightActionId(kEmmanuelleFightSecondDistraction),
 		_("Second distraction"),
 		kEmmanuelleFightSecondDistraction);
-	addFightAction(fight, emmanuelleFightActionId(kEmmanuelleFightDodgeBlow),
-		_("Dodge blow"),
+	addFightAction(fight, _("Dodge blow"),
 		kEmmanuelleFightDodgeBlow);
-	addFightAction(fight, emmanuelleFightActionId(kEmmanuelleFightDodgePunch),
-		_("Dodge punch"),
+	addFightAction(fight, _("Dodge punch"),
 		kEmmanuelleFightDodgePunch);
 	addFightAction(fight,
-		emmanuelleFightActionId(kEmmanuelleFightDodgeHeadbutt),
 		_("Dodge headbutt"),
 		kEmmanuelleFightDodgeHeadbutt);
 

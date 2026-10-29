@@ -54,7 +54,6 @@ struct AmigaSampleCommand {
 };
 
 bool getAmigaSampleCommand(byte command, AmigaSampleCommand &out);
-bool amigaHandlesNativeCommand(byte command);
 
 uint16 amigaNativeRand(uint32 &state);
 uint16 amigaRandomBounded(uint32 &state, uint16 upperExclusive);

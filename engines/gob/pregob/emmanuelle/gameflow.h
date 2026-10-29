@@ -47,7 +47,6 @@ enum ModuleId {
 
 struct ModuleTransition {
 	ModuleTransition() {
-		selector = 0;
 		module = kModuleNone;
 
 		shouldExit = false;
@@ -55,7 +54,6 @@ struct ModuleTransition {
 		usesLocalGraphics = false;
 		reuseCurrent = false;
 	}
-	uint16 selector;
 	ModuleId module;
 	bool shouldExit;
 	bool resetForInit;

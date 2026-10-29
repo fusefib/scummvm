@@ -48,7 +48,6 @@ static SpriteBounds clip320x200(int left, int top, int right, int bottom) {
 
 ModuleTransition moduleTransition(uint16 selector) {
 	ModuleTransition t;
-	t.selector = selector;
 	if (selector == 40) {
 		t.shouldExit = true;
 		return t;

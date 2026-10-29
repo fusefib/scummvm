@@ -64,8 +64,6 @@ void PreGob_Emmanuelle::serviceAmigaFightFrame(
 }
 
 bool PreGob_Emmanuelle::handleAmigaFF0B(byte command) {
-	if (!amigaHandlesNativeCommand(command))
-		return false;
 	switch (command) {
 	case 40:
 		_colorCycleEnabled = false;

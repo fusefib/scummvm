@@ -472,34 +472,6 @@ bool getAtariStSampleCommand(byte command, AtariStSampleCommand &out) {
 	}
 }
 
-bool atariStHandlesNativeCommand(byte command) {
-	switch (command) {
-	case 40:
-	case 41:
-	case 42:
-	case 43:
-	case 44:
-	case 45:
-	case 46:
-	case 47:
-	case 80:
-	case 81:
-	case 82:
-	case 83:
-	case 85:
-	case 86:
-	case 89:
-	case 90:
-	case 91:
-	case 92:
-	case 94:
-	case 201:
-		return true;
-	default:
-		return false;
-	}
-}
-
 AtariStAudioPolicy atariStAudioPolicy(bool optionalAudio,
 									 bool anySamplePresent) {
 	if (optionalAudio && !anySamplePresent)
@@ -721,34 +693,6 @@ bool getAmigaSampleCommand(byte command, AmigaSampleCommand &out) {
 		out.slot = 7;
 		out.mixerRepeatCount = 2;
 		out.postDelay = 100;
-		return true;
-	default:
-		return false;
-	}
-}
-
-bool amigaHandlesNativeCommand(byte command) {
-	switch (command) {
-	case 40:
-	case 41:
-	case 42:
-	case 43:
-	case 44:
-	case 45:
-	case 46:
-	case 47:
-	case 80:
-	case 81:
-	case 82:
-	case 83:
-	case 85:
-	case 86:
-	case 89:
-	case 90:
-	case 91:
-	case 92:
-	case 94:
-	case 201:
 		return true;
 	default:
 		return false;
