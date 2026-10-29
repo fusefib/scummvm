@@ -119,7 +119,7 @@ public:
 		_presentation.setValue(p == "atari" ? 1 : p == "amiga" ? 2 : 0);
 		_animationSlider->setValue(mewiloAnimationFrameMillis(_domain) / 10);
 		updateAnimationLabel();
-		_readability->setState(ConfMan.hasKey("mewilo_presentation_timing", _domain) &&
+		_readability->setState(!ConfMan.hasKey("mewilo_presentation_timing", _domain) ||
 			ConfMan.getBool("mewilo_presentation_timing", _domain));
 	}
 
