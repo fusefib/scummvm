@@ -42,12 +42,11 @@ bool MewiloI00Bank::load(Common::SeekableReadStream &stream, bool cpcZeroPrefix)
 	_tailOffset = 0;
 
 	const int64 streamSize = stream.size();
-	if (streamSize <= 0 || streamSize > 0x7FFFFFFF)
+	if (streamSize <= 0 || streamSize > kMaxDataSize || !stream.seek(0) || stream.err())
 		return false;
 
 	_data.resize((uint32)streamSize);
-	stream.seek(0);
-	if (stream.read(_data.data(), _data.size()) != _data.size()) {
+	if (stream.read(_data.data(), _data.size()) != _data.size() || stream.err()) {
 		_data.clear();
 		return false;
 	}
@@ -67,7 +66,9 @@ bool MewiloI00Bank::load(Common::SeekableReadStream &stream, bool cpcZeroPrefix)
 		if (zeroPrefix)
 			p = 128;
 	}
-	while (p + 2 <= _data.size()) {
+	// Scripts can address only the first 256 records. Keep the full resident
+	// bank, including any remaining bytes, for its resource identity.
+	while (_records.size() < kMaxRecords && p + 2 <= _data.size()) {
 		const uint16 framedSize = READ_BE_UINT16(&_data[p]);
 		if (framedSize < 2 || p + framedSize > _data.size())
 			break;

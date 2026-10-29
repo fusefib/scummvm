@@ -52,7 +52,8 @@ struct MewiloPlatformProfile {
 	MewiloAudioBackend audioBackend;
 };
 
-// Takes ownership even when the input has no valid AMSDOS wrapper.
+// Takes ownership on every path, including failure. A null result destroys the
+// input; an unwrapped input is returned rewound, and a wrapped result owns it.
 Common::SeekableReadStream *normalizeMewiloCpcResource(Common::SeekableReadStream *stream);
 
 bool isValidMewiloPlatform(MewiloPlatform platform);

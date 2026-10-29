@@ -21,7 +21,7 @@
 #include "gob/pregob/mewilo/platform.h"
 
 #include "common/endian.h"
-#include "common/memstream.h"
+#include "common/substream.h"
 #include "common/util.h"
 
 namespace Gob {
@@ -115,51 +115,46 @@ Common::SeekableReadStream *normalizeMewiloCpcResource(Common::SeekableReadStrea
 		return nullptr;
 
 	const int64 streamSize = stream->size();
-	if (streamSize <= 0 || streamSize > 0x7FFFFFFF)
-		return stream;
-
-	byte *raw = (byte *)malloc((uint32)streamSize);
-	if (!raw)
-		return stream;
-	stream->seek(0);
-	const uint32 got = stream->read(raw, (uint32)streamSize);
-	delete stream;
-	if (got != (uint32)streamSize) {
-		free(raw);
+	if (streamSize <= 0 || streamSize > 0x7FFFFFFF || !stream->seek(0) || stream->err()) {
+		delete stream;
 		return nullptr;
 	}
 
-	uint32 payloadOffset = 0;
-	uint32 payloadSize = (uint32)streamSize;
 	if (streamSize >= 128) {
+		byte header[128];
+		if (stream->read(header, sizeof(header)) != sizeof(header) || stream->err()) {
+			delete stream;
+			return nullptr;
+		}
 		uint16 checksum = 0;
 		for (uint i = 0; i < 67; ++i)
-			checksum += raw[i];
-		const uint16 storedChecksum = READ_LE_UINT16(raw + 67);
+			checksum += header[i];
+		const uint16 storedChecksum = READ_LE_UINT16(header + 67);
 		const uint32 realLength =
-			(uint32)raw[64] | ((uint32)raw[65] << 8) | ((uint32)raw[66] << 16);
+			(uint32)header[64] | ((uint32)header[65] << 8) | ((uint32)header[66] << 16);
 
 		// A nonzero real length avoids treating the 128 zero bytes before the
 		// known AMSOAD1.I00 stream as a checksum-valid AMSDOS header. Do not
 		// require the embedded 8.3 name: the shipped AMSOAD7.TOT header names
 		// itself AMSOAD5.TOT despite having a valid checksum and payload length.
 		if (checksum == storedChecksum && realLength && realLength <= (uint32)streamSize - 128) {
-			payloadOffset = 128;
-			payloadSize = realLength;
+			// Let the format reader enforce its size limit before taking its
+			// owned snapshot. Normalization needs no whole-file allocation.
+			Common::SeekableReadStream *payload = new Common::SeekableSubReadStream(
+				stream, 128, 128 + realLength, DisposeAfterUse::YES);
+			if (!payload->seek(0) || payload->err()) {
+				delete payload;
+				return nullptr;
+			}
+			return payload;
 		}
 	}
 
-	if (!payloadOffset)
-		return new Common::MemoryReadStream(raw, payloadSize, DisposeAfterUse::YES);
-
-	byte *payload = (byte *)malloc(payloadSize);
-	if (!payload) {
-		free(raw);
+	if (!stream->seek(0) || stream->err()) {
+		delete stream;
 		return nullptr;
 	}
-	memcpy(payload, raw + payloadOffset, payloadSize);
-	free(raw);
-	return new Common::MemoryReadStream(payload, payloadSize, DisposeAfterUse::YES);
+	return stream;
 }
 
 uint32 mewiloNativeDelayMillis(MewiloPlatform platform, byte operand, bool &calibrated) {
