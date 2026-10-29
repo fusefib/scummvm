@@ -90,39 +90,23 @@ uint16 PreGob_Mewilo::randomModulo(uint16 count) {
 }
 
 void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uint variableCount) {
-	const uint score = variableCount > 0x17 ? (uint16)variables[0x17].word0 : 0;
-
-	// Presentation/VM-adjacent commands are shared across the native ports.
 	switch (command) {
 	case 0:
-		// CPC glyphs overwrite their paper, so old digit strokes cannot remain.
-		if (_profile.platform == kMewiloPlatformAmstradCPC)
-			drawScore(score, 37 * 8, 184, 0, 2);
-		else
-			drawScore(score, 37 * 8, 184, 7);
+	case 9:
+		drawScore(variableCount > 0x17 ? (uint16)variables[0x17].word0 : 0, command == 9);
 		return;
 	case 2:
 		installCrossCursor();
 		showCursor();
-		// Cue ownership follows the native source, independently of sample files.
+		// The source platform owns this cue independently of installed samples.
 		playNativeCue();
 		return;
 	case 7:
 		return;
-	case 9:
-		if (_profile.platform == kMewiloPlatformAmstradCPC) {
-			drawScore(score, 28 * 8, 56, 0, 3);
-			// The native CPC ending repeats the score below the main line.
-			drawScore(score, 19 * 8, 164, 0, 2);
-		} else {
-			drawScore(score, 28 * 8, 56, 1);
-		}
-		return;
 	default:
-		break;
+		playSoundCommand(command);
+		return;
 	}
-
-	playSoundCommand(command);
 }
 
 void PreGob_Mewilo::run() {

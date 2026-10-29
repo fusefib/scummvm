@@ -316,13 +316,24 @@ void PreGob_Mewilo::fillScreen(byte color) {
 	markDirty(0, 0, 320, 200);
 }
 
-void PreGob_Mewilo::drawScore(uint value, int16 x, int16 y, byte color, int16 background) {
+void PreGob_Mewilo::drawScore(uint value, bool ending) {
+	if (!ending) {
+		drawScoreDigits(value, 37 * 8, 184, 0, 2);
+		return;
+	}
+	// Amiga keeps pen 1 for the first ending counter; all others use pen 0.
+	const byte firstPen = _profile.platform == kMewiloPlatformAmiga ? 1 : 0;
+	drawScoreDigits(value, 28 * 8, 56, firstPen, 3);
+	if (!hasError())
+		drawScoreDigits(value, 19 * 8, 164, 0, 2);
+}
+
+void PreGob_Mewilo::drawScoreDigits(uint value, int16 x, int16 y, byte color, byte background) {
 	if (!_vm->_draw->_backSurface) {
 		hostFailure("missing score surface", 0);
 		return;
 	}
-	if (background >= 0)
-		_vm->_draw->_backSurface->fillRect(x, y, x + 15, y + 7, background);
+	_vm->_draw->_backSurface->fillRect(x, y, x + 15, y + 7, background);
 	value = MIN<uint>(99, value);
 	const byte digits[2] = {(byte)('0' + value / 10), (byte)('0' + value % 10)};
 	drawByteString(digits, 2, x, y, color, 8);
