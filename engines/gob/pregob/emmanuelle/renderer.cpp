@@ -81,12 +81,6 @@ OldTotRenderer::OldTotRenderer(GobEngine *vm) :
 	_amigaPaletteValid = false;
 	_amigaBlack = false;
 
-	_dirtyValid = false;
-	_dirtyLeft = 0;
-	_dirtyTop = 0;
-	_dirtyRight = 0;
-	_dirtyBottom = 0;
-
 	// Transitions may start from the preceding module's presented frame.
 	_amigaModuleGeneration = 0;
 	_amigaPresentedGeneration = 0;
@@ -256,11 +250,7 @@ SurfacePtr OldTotRenderer::clonePresentationFrame(
 }
 
 void OldTotRenderer::clearDirtyRect() {
-	_dirtyValid = false;
-	_dirtyLeft = 0;
-	_dirtyTop = 0;
-	_dirtyRight = 0;
-	_dirtyBottom = 0;
+	_presentationDirtyRect.setEmpty();
 }
 
 void OldTotRenderer::notePresentationDirtyRect(int16 left, int16 top,
@@ -282,18 +272,12 @@ void OldTotRenderer::notePresentationDirtyRect(int16 left, int16 top,
 	_presentation.noteChange();
 	if (_presentation.mode() != 43)
 		return;
-	if (!_dirtyValid) {
-		_dirtyLeft = left;
-		_dirtyTop = top;
-		_dirtyRight = right;
-		_dirtyBottom = bottom;
-		_dirtyValid = true;
-		return;
-	}
-	_dirtyLeft = MIN(_dirtyLeft, left);
-	_dirtyTop = MIN(_dirtyTop, top);
-	_dirtyRight = MAX(_dirtyRight, right);
-	_dirtyBottom = MAX(_dirtyBottom, bottom);
+	// Draw calls use inclusive bounds; convert only after clipping to the surface.
+	const Common::Rect dirty(left, top, right + 1, bottom + 1);
+	if (_presentationDirtyRect.isEmpty())
+		_presentationDirtyRect = dirty;
+	else
+		_presentationDirtyRect.extend(dirty);
 }
 
 void OldTotRenderer::copyPresentationRect(const Surface &target,

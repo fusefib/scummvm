@@ -246,15 +246,15 @@ bool OldTotRenderer::presentAmigaMode43Step(byte phase) {
 		!_vm->_draw->_backSurface)
 		return false;
 	Surface &back = *_vm->_draw->_backSurface;
-	if (!_dirtyValid) {
+	if (_presentationDirtyRect.isEmpty()) {
 		finishAmigaTransitionFrame();
 		return true;
 	}
-	const int16 left = (_dirtyLeft / 16) * 16;
-	int16 right = ((_dirtyRight / 16) + 1) * 16 - 1;
+	const int16 left = (_presentationDirtyRect.left / 16) * 16;
+	int16 right = (((_presentationDirtyRect.right - 1) / 16) + 1) * 16 - 1;
 	right = MIN<int16>(right, back.getWidth() - 1);
 	uint32 ordinal = 0;
-	for (int16 y = _dirtyTop; y <= _dirtyBottom; ++y) {
+	for (int16 y = _presentationDirtyRect.top; y < _presentationDirtyRect.bottom; ++y) {
 		for (int16 wordX = left; wordX <= right;
 			 wordX += 16, ++ordinal) {
 			const int16 x = wordX +
@@ -265,7 +265,7 @@ bool OldTotRenderer::presentAmigaMode43Step(byte phase) {
 		}
 	}
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left,
-							_dirtyTop, right, _dirtyBottom);
+							_presentationDirtyRect.top, right, _presentationDirtyRect.bottom - 1);
 	if (phase == 15)
 		finishAmigaTransitionFrame();
 	return true;

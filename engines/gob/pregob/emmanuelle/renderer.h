@@ -29,6 +29,7 @@
 #define GOB_PREGOB_EMMANUELLE_RENDERER_H
 
 #include "common/array.h"
+#include "common/rect.h"
 #include "common/scummsys.h"
 #include "common/str.h"
 #include "common/stream.h"
@@ -245,11 +246,7 @@ private:
 	PresentationState _presentation;
 	SurfacePtr _atariPresentedSurface;
 	SurfacePtr _atariTransitionTarget;
-	bool _dirtyValid;
-	int16 _dirtyLeft;
-	int16 _dirtyTop;
-	int16 _dirtyRight;
-	int16 _dirtyBottom;
+	Common::Rect _presentationDirtyRect;
 	uint16 _amigaLogicalPalette[32];
 	bool _amigaPaletteValid;
 	bool _amigaBlack;
