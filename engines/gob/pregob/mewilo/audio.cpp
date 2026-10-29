@@ -123,6 +123,33 @@ bool PreGob_Mewilo::playAmigaSample(
 		MIN<uint>(volume, 64) * 255 / 64, -127);
 }
 
+bool PreGob_Mewilo::playNativeCue() {
+	Common::Array<byte> pcm;
+	uint16 rate;
+	byte volume = 255;
+	int8 balance = 0;
+	if (_profile.platform == kMewiloPlatformAmiga) {
+		renderMewiloAmigaCue(pcm, rate);
+		volume = 40 * 255 / 64;
+		balance = 127; // Paula channel 0, unlike the file samples on channel 1.
+	} else {
+		return true;
+	}
+	byte *owned = (byte *)malloc(pcm.size());
+	if (!owned) {
+		renderFailure("unable to allocate input cue", 0);
+		return false;
+	}
+	memcpy(owned, pcm.data(), pcm.size());
+	return playSample(owned, pcm.size(), rate, 1, false, volume, balance);
+}
+
+void PreGob_Mewilo::inputFeedback(MewiloInputFeedback reason) {
+	if (_profile.platform == kMewiloPlatformAmiga &&
+		(reason == kMewiloInputEscapeWithoutCallback || reason == kMewiloInputFieldFull))
+		playNativeCue();
+}
+
 bool PreGob_Mewilo::playRawSample(
 	const Common::String &name, uint16 frequency, int16 repetitions, bool music) {
 	Common::SeekableReadStream *stream = openResource(name);
@@ -261,6 +288,8 @@ void PreGob_Mewilo::specialCommand(byte command, const MewiloVar *variables, uin
 	case 2:
 		installCrossCursor();
 		showCursor();
+		// Cue ownership follows the native source, independently of sample files.
+		playNativeCue();
 		return;
 	case 7:
 		return;

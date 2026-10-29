@@ -46,6 +46,8 @@ MewiloAudioBackend chooseMewiloSampleBackend(MewiloAudioBackend preferred,
 bool readMewiloAmigaSample(Common::SeekableReadStream &stream,
 	Common::Array<byte> &pcm, uint16 &rate);
 
+void renderMewiloAmigaCue(Common::Array<byte> &pcm, uint16 &rate);
+
 } // End of namespace Mewilo
 } // End of namespace Gob
 

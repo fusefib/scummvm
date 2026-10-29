@@ -221,6 +221,11 @@ bool MewiloExecutor::stepInput(const MewiloExecFrame &frame) {
 		return false;
 	if (event.key == kMewiloKeyEscape) {
 		const uint16 callback = _tot->uint16BEAt(offset + 1);
+		if (!callback && !mouse) {
+			_host.inputFeedback(kMewiloInputInvalidNumber);
+			if (_host.shouldQuit() || _host.hasError())
+				return false;
+		}
 		return !callback || pushFrame(MewiloExecFrame::kTarget, callback);
 	}
 	MewiloBranch branch;
@@ -237,8 +242,16 @@ bool MewiloExecutor::stepInput(const MewiloExecFrame &frame) {
 		}
 		branch = _tot->branchAt(branchBase + (selected + 1) * 3);
 	} else {
-		if (event.key < '1' || event.key >= uint16('1' + count))
+		if (event.key < '1' || event.key >= uint16('1' + count)) {
+			// Native Thomson polling ignores no-key/mouse events, but rings
+			// BEL for rejected keyboard selections before polling again.
+			if (event.key != kMewiloKeyNone) {
+				_host.inputFeedback(kMewiloInputInvalidNumber);
+				if (_host.shouldQuit() || _host.hasError())
+					return false;
+			}
 			return true;
+		}
 		const uint32 entry = branchBase + (event.key - '1') * 4;
 		const byte value = _tot->byteAt(entry);
 		if (value <= 2)
@@ -482,6 +495,10 @@ bool MewiloExecutor::executeFreeText(uint16 offset, uint depth, uint16 &tailTarg
 						return false;
 					// Native Escape callbacks are side calls here; return to the
 					// modal field unless the engine itself is quitting.
+				} else {
+					_host.inputFeedback(kMewiloInputEscapeWithoutCallback);
+					if (_host.shouldQuit() || _host.hasError())
+						return false;
 				}
 				input.clear();
 			}

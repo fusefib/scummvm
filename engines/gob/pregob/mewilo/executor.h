@@ -44,6 +44,13 @@ enum MewiloInputKey {
 	kMewiloKeyDelete
 };
 
+enum MewiloInputFeedback {
+	kMewiloInputEscapeWithoutCallback,
+	kMewiloInputFieldFull,
+	kMewiloInputInvalidNumber,
+	kMewiloInputEmptyDelete
+};
+
 struct MewiloInputEvent {
 	int16 x;
 	int16 y;
@@ -86,6 +93,7 @@ public:
 	virtual void specialCommand(byte command, const MewiloVar *variables, uint count) = 0;
 	virtual uint16 randomModulo(uint16 count) = 0;
 	virtual void choiceFeedback(byte value) = 0;
+	virtual void inputFeedback(MewiloInputFeedback) {}
 	virtual bool waitInput(MewiloInputEvent &event) = 0;
 	virtual bool editTextField(const MewiloTextField &field, Common::Array<byte> &text) = 0;
 	virtual void showRejectMessage(const byte *text, uint length) = 0;

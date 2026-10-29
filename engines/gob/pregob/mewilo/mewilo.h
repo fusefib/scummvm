@@ -72,6 +72,7 @@ public:
 	void fillScreen(byte color) override;
 	void specialCommand(byte command, const MewiloVar *variables, uint variableCount) override;
 	void choiceFeedback(byte value) override;
+	void inputFeedback(MewiloInputFeedback reason) override;
 	uint16 randomModulo(uint16 count) override;
 	bool waitInput(MewiloInputEvent &event) override;
 	bool editTextField(const MewiloTextField &field, Common::Array<byte> &text) override;
@@ -144,6 +145,7 @@ private:
 	bool playAmigaSample(
 		const Common::String &name, byte volume, int16 repetitions = 1, bool music = false,
 		uint16 rateOffset = 0);
+	bool playNativeCue();
 	bool playCpcMusic(const Common::String &name);
 	void stopMewiloAudio();
 	void installCrossCursor();

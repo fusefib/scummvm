@@ -81,5 +81,19 @@ bool readMewiloAmigaSample(Common::SeekableReadStream &stream,
 	return true;
 }
 
+void renderMewiloAmigaCue(Common::Array<byte> &pcm, uint16 &rate) {
+	// Native $106FE repeats an eight-step triangle on Paula channel 0, period
+	// 300, until its CPU loop disables DMA. Approximate that 28.2 ms gate with
+	// finite signed PCM, including the last partial cycle rather than rounding
+	// to a whole waveform repetition.
+	rate = 11823;
+	pcm.resize(334);
+	for (uint i = 0; i < pcm.size(); ++i) {
+		const int phase = i & 7;
+		const int level = (phase < 4 ? 2 - phase : phase - 6) * 60;
+		pcm[i] = byte(level);
+	}
+}
+
 } // namespace Mewilo
 } // namespace Gob

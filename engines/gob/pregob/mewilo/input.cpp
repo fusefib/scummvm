@@ -170,12 +170,23 @@ bool PreGob_Mewilo::editTextField(const MewiloTextField &field, Common::Array<by
 		if (event.key == kMewiloKeyBackspace || event.key == kMewiloKeyDelete) {
 			if (!text.empty())
 				text.pop_back();
+			else {
+				inputFeedback(kMewiloInputEmptyDelete);
+				if (shouldQuit() || hasError())
+					return false;
+			}
 			drawInputField(field, text, true);
 			continue;
 		}
-		if (event.key > 0 && event.key < 0x100 && text.size() < field.maxChars) {
-			text.push_back((byte)event.key);
-			drawInputField(field, text, true);
+		if (event.key > 0 && event.key < 0x100) {
+			if (text.size() < field.maxChars) {
+				text.push_back((byte)event.key);
+				drawInputField(field, text, true);
+			} else {
+				inputFeedback(kMewiloInputFieldFull);
+				if (shouldQuit() || hasError())
+					return false;
+			}
 		}
 	}
 	return false;
