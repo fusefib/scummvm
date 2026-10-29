@@ -68,6 +68,9 @@ bool buildMewiloThomsonNote(const MewiloThomsonNote &note, byte phase,
 bool renderMewiloThomsonMusic(const Common::Array<MewiloThomsonNote> &notes,
 	Common::Array<byte> &pcm);
 
+// PUTC's finite BEL cue, using the same signed PCM output policy as NOTE.
+bool renderMewiloThomsonBell(Common::Array<byte> &pcm);
+
 } // End of namespace Mewilo
 } // End of namespace Gob
 

@@ -250,6 +250,24 @@ private:
 	int32 _area;
 };
 
+bool renderMewiloThomsonBell(Common::Array<byte> &pcm) {
+	pcm.clear();
+	DacSampler sampler(pcm);
+	uint32 previous = 0;
+	int level = 0;
+	// TO8/TO8D PUTC control7 toggles the six-bit DAC 18 times. Its counted
+	// loop takes 1053 ticks per half-cycle, then restores the PIA controls.
+	for (uint edge = 0; edge < 18; ++edge) {
+		const uint32 cycle = 92 + 1053 * edge;
+		sampler.hold(cycle - previous, level);
+		level = edge & 1 ? -96 : 96;
+		previous = cycle;
+	}
+	sampler.hold(19089 - previous, level);
+	sampler.finish();
+	return true;
+}
+
 bool renderMewiloThomsonMusic(const Common::Array<MewiloThomsonNote> &notes,
 	Common::Array<byte> &pcm) {
 	pcm.clear();

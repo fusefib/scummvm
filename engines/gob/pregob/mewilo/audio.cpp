@@ -132,6 +132,12 @@ bool PreGob_Mewilo::playNativeCue() {
 		renderMewiloAmigaCue(pcm, rate);
 		volume = 40 * 255 / 64;
 		balance = 127; // Paula channel 0, unlike the file samples on channel 1.
+	} else if (_profile.platform == kMewiloPlatformThomsonTO) {
+		if (!renderMewiloThomsonBell(pcm)) {
+			renderFailure("unable to render Thomson BEL", 0);
+			return false;
+		}
+		rate = kMewiloThomsonSampleRate;
 	} else {
 		return true;
 	}
@@ -145,8 +151,11 @@ bool PreGob_Mewilo::playNativeCue() {
 }
 
 void PreGob_Mewilo::inputFeedback(MewiloInputFeedback reason) {
-	if (_profile.platform == kMewiloPlatformAmiga &&
-		(reason == kMewiloInputEscapeWithoutCallback || reason == kMewiloInputFieldFull))
+	const bool amiga = _profile.platform == kMewiloPlatformAmiga;
+	const bool thomson = _profile.platform == kMewiloPlatformThomsonTO;
+	if ((reason == kMewiloInputEscapeWithoutCallback && amiga) ||
+		(reason == kMewiloInputFieldFull && (amiga || thomson)) ||
+		((reason == kMewiloInputInvalidNumber || reason == kMewiloInputEmptyDelete) && thomson))
 		playNativeCue();
 }
 
