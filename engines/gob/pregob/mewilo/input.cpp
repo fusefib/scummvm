@@ -143,7 +143,8 @@ void PreGob_Mewilo::drawInputField(
 	const int16 height = MAX<int16>(8, field.serializedHeight);
 	_vm->_draw->_backSurface->fillRect(x, y, x + width - 1, y + height - 1, field.colorBase);
 	for (uint i = 0; i < text.size() && i < field.maxChars; ++i)
-		_font.drawChar(*_vm->_draw->_backSurface, text[i], x + i * 8, y, field.colorInput);
+		_font.drawChar(*_vm->_draw->_backSurface, text[i], x + i * 8, y, field.colorInput,
+			_profile.platform == kMewiloPlatformAmstradCPC);
 	if (cursor && text.size() < field.maxChars) {
 		const int16 cx = x + text.size() * 8;
 		const int16 cy = y + MIN<int16>(7, MAX<int16>(0, field.lineAdvance - 2));
