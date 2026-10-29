@@ -56,7 +56,8 @@ struct MewiloTimingPlan {
 uint32 mewiloScaleTime(uint32 milliseconds, uint speedFactor);
 uint32 mewiloAnimationDelayMillis(uint32 frameMillis, byte operand);
 uint32 mewiloReadingMillis(const byte *text, uint length);
-// Reviewed scene cues share a frame pace. Other waits retain native timing.
+// Story cues share a frame pace; portrait poses have a half-frame minimum.
+// Other waits retain native timing.
 MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 	Common::Language language, MewiloPlatform platform, uint16 site, byte operand,
 	bool readabilityHolds, uint32 animationFrameMillis);

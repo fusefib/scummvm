@@ -67,8 +67,8 @@ struct TimingSite {
 	uint16 exposureFocus; // Optional image shown beneath an older dialogue.
 };
 
-// Only reviewed story motion uses the shared frame pace. Navigation, scenery
-// and repeated portrait reactions retain their authored waits. Local opcode
+// Reviewed story motion uses the shared frame pace. Navigation and scenery
+// retain their authored waits. Local opcode
 // guards keep wording/art replacements independent of these script cues.
 static const TimingSite kTimingSites[] = {
 	{"LOAD1", Common::DE_DEU, 5, 0x16E2, 0x224A, 50, 0x41, true, "scene-animation", 0x0000},
@@ -226,6 +226,66 @@ static const TimingSite kTimingSites[] = {
 	{"THLOAD8", Common::FR_FRA, 8, 0x0278, 0x1749, 100, 0x41, true, "scene-animation", 0x0000},
 };
 
+struct PortraitSequence {
+	const char *module;
+	Common::Language language;
+	byte platforms;
+	uint16 sequence, firstPose, secondPose;
+};
+
+// Each reaction saves the face, draws two poses, then restores the original.
+// All three poses have FF03(50), including the restored face. CPC omits these
+// cycles. Keep their cadence shorter than story motion without delaying draws.
+static const PortraitSequence kPortraitSequences[] = {
+	{"LOAD1", Common::FR_FRA, 5, 0x17D3, 0x441F, 0x4500},
+	{"LOAD2", Common::FR_FRA, 5, 0x113B, 0x18ED, 0x1986},
+	{"LOAD2", Common::FR_FRA, 5, 0x1233, 0x1B5B, 0x1BF4},
+	{"LOAD3", Common::FR_FRA, 5, 0x0B8E, 0x3C29, 0x3D1A},
+	{"LOAD1", Common::DE_DEU, 5, 0x1803, 0x444F, 0x4530},
+	{"LOAD2", Common::DE_DEU, 5, 0x1151, 0x1903, 0x199C},
+	{"LOAD2", Common::DE_DEU, 5, 0x1249, 0x1B71, 0x1C0A},
+	{"LOAD3", Common::DE_DEU, 5, 0x0B8A, 0x3C25, 0x3D16},
+	{"THLOAD1", Common::FR_FRA, 8, 0x17BC, 0x3497, 0x3578},
+	{"THLOAD2", Common::FR_FRA, 8, 0x113B, 0x1821, 0x18BA},
+	{"THLOAD2", Common::FR_FRA, 8, 0x11C7, 0x19F5, 0x1A8E},
+	{"THLOAD3", Common::FR_FRA, 8, 0x0B8E, 0x3C24, 0x3D15}
+};
+
+static bool portraitRegion(const MewiloTotData &tot, const char *module,
+	Common::Language language, MewiloPlatform platform, uint16 site, Common::Rect &region) {
+	for (uint i = 0; i < ARRAYSIZE(kPortraitSequences); ++i) {
+		const PortraitSequence &r = kPortraitSequences[i];
+		const uint16 start = r.sequence;
+		if ((site != start + 10 && site != start + 15 && site != start + 20) ||
+			!(r.platforms & (1 << platform)) || r.language != language || strcmp(r.module, module))
+			continue;
+		if (!tot.has(start, 23) || !tot.has(r.firstPose, 7) || !tot.has(r.secondPose, 7))
+			return false;
+		const byte *cycle = tot.dataAt(start);
+		if (cycle[0] != 0x1C || cycle[1] != 7 || cycle[2] != 0xFF || cycle[3] != 1 ||
+			tot.uint16BEAt(start + 8) != r.firstPose || tot.uint16BEAt(start + 13) != r.secondPose ||
+			cycle[18] != 0xFF || cycle[19] != 2)
+			return false;
+		for (uint beat = 10; beat <= 20; beat += 5)
+			if (cycle[beat] != 0xFF || cycle[beat + 1] != 3 || cycle[beat + 2] != 50)
+				return false;
+		const int x = cycle[4] * 8, y = cycle[5];
+		region = Common::Rect(x, y, x + cycle[6] * 8, y + cycle[7]);
+		if (region.isEmpty() || region.right > 320 || region.bottom > 200)
+			return false;
+		const uint16 poses[] = {r.firstPose, r.secondPose};
+		for (uint pose = 0; pose < ARRAYSIZE(poses); ++pose) {
+			const byte *image = tot.dataAt(poses[pose]);
+			const Common::Rect bounds(image[3] * 8, image[4],
+				(image[3] + image[5]) * 8, image[4] + image[6]);
+			if (image[0] != 0x41 || bounds.isEmpty() || !region.contains(bounds))
+				return false;
+		}
+		return true;
+	}
+	return false;
+}
+
 MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 	Common::Language language, MewiloPlatform platform, uint16 site, byte operand,
 	bool readabilityHolds, uint32 animationFrameMillis) {
@@ -236,6 +296,19 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 		!tot.has(site, 3) || tot.byteAt(site) != 0xFF || tot.byteAt(site + 1) != 3 ||
 		tot.byteAt(site + 2) != operand)
 		return native;
+	Common::Rect portrait;
+	if (operand == 50 && portraitRegion(tot, module, language, platform, site, portrait)) {
+		MewiloTimingPlan plan = native;
+		plan.rule = "portrait-reaction";
+		plan.animation = true;
+		plan.calibrated = false;
+		plan.region = portrait;
+		// This is a visibility policy, not a new native clock conversion. A low
+		// slider setting must not shorten an already longer authored wait.
+		plan.milliseconds = MAX<uint32>(native.milliseconds, (animationFrameMillis + 1) / 2);
+		plan.minimumDelay = plan.minimumExposure = plan.milliseconds;
+		return plan;
+	}
 	for (uint i = 0; i < ARRAYSIZE(kTimingSites); ++i) {
 		const TimingSite &r = kTimingSites[i];
 		const uint headerSize = r.focusType == 0x1D ? 10 : r.focusType == 0x60 ? 8 : 7;

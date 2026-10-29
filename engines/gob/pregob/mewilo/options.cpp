@@ -100,7 +100,7 @@ public:
 			_dialogLayout + ".AnimationFrameLabel", Common::U32String());
 		_animationSlider = new GUI::SliderWidget(widgetsBoss(),
 			_dialogLayout + ".AnimationFrame",
-			_("Sets the time between story animation poses. Higher values play slower. Takes effect next launch."),
+			_("Sets the time between story animation poses. Portrait reactions use half this time as a minimum. Takes effect next launch."),
 			kAnimationFrameChanged);
 		_animationSlider->setMinValue(10);
 		_animationSlider->setMaxValue(100);
