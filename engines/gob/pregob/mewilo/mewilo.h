@@ -142,7 +142,8 @@ private:
 	void selectSampleAudio();
 	bool samplePlaying() const;
 	bool playAmigaSample(
-		const Common::String &name, byte volume, int16 repetitions = 1, bool music = false);
+		const Common::String &name, byte volume, int16 repetitions = 1, bool music = false,
+		uint16 rateOffset = 0);
 	bool playCpcMusic(const Common::String &name);
 	void stopMewiloAudio();
 	void installCrossCursor();

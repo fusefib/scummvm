@@ -94,7 +94,7 @@ bool PreGob_Mewilo::samplePlaying() const {
 }
 
 bool PreGob_Mewilo::playAmigaSample(
-	const Common::String &name, byte volume, int16 repetitions, bool music) {
+	const Common::String &name, byte volume, int16 repetitions, bool music, uint16 rateOffset) {
 	Common::SeekableReadStream *stream = openAmigaSample(name);
 	Common::Array<byte> pcm;
 	uint16 rate = 0;
@@ -103,6 +103,11 @@ bool PreGob_Mewilo::playAmigaSample(
 	if (!valid || repetitions <= 0) {
 		renderFailure(
 			Common::String::format("missing or invalid Amiga sample %s", name.c_str()).c_str(), 0);
+		return false;
+	}
+	const uint32 effectiveRate = uint32(rate) + rateOffset;
+	if (effectiveRate > 65535) {
+		renderFailure("invalid Amiga sample playback rate", 0);
 		return false;
 	}
 	byte *owned = (byte *)malloc(pcm.size());
@@ -114,7 +119,7 @@ bool PreGob_Mewilo::playAmigaSample(
 	// Native helper $4FBC passes the middle argument as IOAudio cycles, NOT a
 	// channel index. $4A64 asks audio.device for masks {2,4,1,8}: the first free
 	// voice is Paula channel 1 (left). We have no competing Amiga processes.
-	return playSample(owned, pcm.size(), rate, repetitions, music,
+	return playSample(owned, pcm.size(), (uint16)effectiveRate, repetitions, music,
 		MIN<uint>(volume, 64) * 255 / 64, -127);
 }
 
@@ -388,8 +393,10 @@ void PreGob_Mewilo::choiceFeedback(byte value) {
 	}
 
 	if (_audioBackend == kMewiloAudioAmigaSmp) {
-		// All three native feedback call sites select musbon, one cycle.
-		playAmigaSample("musbon.smp", 64);
+		// Native feedback temporarily changes musbon's rate, then restores it.
+		// Keep the adjustment local so resident content and identity stay intact.
+		static const uint16 kRateOffsets[3] = {4000, 2000, 0};
+		playAmigaSample("musbon.smp", 64, 1, false, kRateOffsets[value]);
 		return;
 	}
 
