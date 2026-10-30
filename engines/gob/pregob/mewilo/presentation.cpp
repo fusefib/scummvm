@@ -235,7 +235,7 @@ struct PortraitSequence {
 
 // Each reaction saves the face, draws two poses, then restores the original.
 // All three poses have FF03(50), including the restored face. CPC omits these
-// cycles. Keep their cadence shorter than story motion without delaying draws.
+// cycles. Use the story frame pace without delaying ordinary portrait draws.
 static const PortraitSequence kPortraitSequences[] = {
 	{"LOAD1", Common::FR_FRA, 5, 0x17D3, 0x441F, 0x4500},
 	{"LOAD2", Common::FR_FRA, 5, 0x113B, 0x18ED, 0x1986},
@@ -303,9 +303,7 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 		plan.animation = true;
 		plan.calibrated = false;
 		plan.region = portrait;
-		// This is a visibility policy, not a new native clock conversion. A low
-		// slider setting must not shorten an already longer authored wait.
-		plan.milliseconds = MAX<uint32>(native.milliseconds, (animationFrameMillis + 1) / 2);
+		plan.milliseconds = mewiloAnimationDelayMillis(animationFrameMillis, operand);
 		plan.minimumDelay = plan.minimumExposure = plan.milliseconds;
 		return plan;
 	}
