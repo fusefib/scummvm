@@ -189,7 +189,6 @@ private:
 	uint32 _pausedMillis;
 	uint _pauseDepth;
 	bool _hostFailed;
-	bool _readabilityHolds;
 	uint32 _animationFrameMillis;
 	uint32 _scriptPatchPolicy;
 	MewiloScriptPatchReport _scriptPatchReport;

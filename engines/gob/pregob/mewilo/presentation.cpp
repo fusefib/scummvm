@@ -288,7 +288,7 @@ static bool portraitRegion(const MewiloTotData &tot, const char *module,
 
 MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 	Common::Language language, MewiloPlatform platform, uint16 site, byte operand,
-	bool readabilityHolds, uint32 animationFrameMillis) {
+	uint32 animationFrameMillis) {
 	MewiloTimingPlan native;
 	native.milliseconds = mewiloNativeDelayMillis(platform, operand, native.calibrated);
 	native.minimumDelay = native.milliseconds;
@@ -314,7 +314,7 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 		const uint headerSize = r.focusType == 0x1D ? 10 : r.focusType == 0x60 ? 8 : 7;
 		if (r.site != site || r.operand != operand || !(r.platforms & (1 << platform)) ||
 			r.language != language || strcmp(r.module, module) ||
-			(!r.sceneAnimation && !readabilityHolds) || !tot.has(r.focus, headerSize) ||
+			!tot.has(r.focus, headerSize) ||
 			tot.byteAt(r.focus) != r.focusType)
 			continue;
 		if (r.exposureFocus &&
@@ -349,13 +349,9 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 				plan.exposureRegion.clip(Common::Rect(0, 0, 320, 200));
 				if (plan.exposureRegion.isEmpty())
 					return native;
-				if (!readabilityHolds) {
-					plan.region = plan.exposureRegion;
-					plan.exposureRegion = Common::Rect();
-				}
 			}
 		}
-		if (readabilityHolds && r.focusType == 0x1D) {
+		if (r.focusType == 0x1D) {
 			plan.reading = true;
 			plan.anchor = kMewiloVisibleHold;
 			plan.textNode = r.focus;

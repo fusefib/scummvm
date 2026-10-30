@@ -106,9 +106,6 @@ public:
 		_animationSlider->setMaxValue(100);
 		_animationSlider->setValue(50);
 		updateAnimationLabel();
-		_readability = new GUI::CheckboxWidget(widgetsBoss(), _dialogLayout + ".Timing",
-			_("Improve text readability"),
-			_("Hold short dialogue long enough to read. Takes effect next launch."));
 	}
 
 	void load() override {
@@ -119,8 +116,6 @@ public:
 		_presentation.setValue(p == "atari" ? 1 : p == "amiga" ? 2 : 0);
 		_animationSlider->setValue(mewiloAnimationFrameMillis(_domain) / 10);
 		updateAnimationLabel();
-		_readability->setState(!ConfMan.hasKey("mewilo_presentation_timing", _domain) ||
-			ConfMan.getBool("mewilo_presentation_timing", _domain));
 	}
 
 	bool save() override {
@@ -131,7 +126,6 @@ public:
 			ConfMan.set("mewilo_presentation", profiles[CLIP<int>(_presentation.getValue(), 0, 2)],
 				_domain);
 		}
-		ConfMan.setBool("mewilo_presentation_timing", _readability->getState(), _domain);
 		ConfMan.setInt("mewilo_animation_frame_ms", _animationSlider->getValue() * 10, _domain);
 
 		return true;
@@ -142,7 +136,6 @@ public:
 		_presentation.setEnabled(enabled && _full);
 		_animationLabel->setEnabled(enabled);
 		_animationSlider->setEnabled(enabled);
-		_readability->setEnabled(enabled);
 	}
 
 	void handleCommand(GUI::CommandSender *sender, uint32 cmd, uint32 data) override {
@@ -170,8 +163,7 @@ protected:
 		}
 		layout.addSpace()
 			.addWidget("AnimationFrameLabel", "", -1, layout.getVar("Globals.Line.Height"))
-			.addWidget("AnimationFrame", "Slider")
-			.addWidget("Timing", "Checkbox").closeLayout().closeDialog();
+			.addWidget("AnimationFrame", "Slider").closeLayout().closeDialog();
 	}
 
 private:
@@ -183,7 +175,6 @@ private:
 	GUI::RadiobuttonGroup _wording, _presentation;
 	GUI::StaticTextWidget *_animationLabel;
 	GUI::SliderWidget *_animationSlider;
-	GUI::CheckboxWidget *_readability;
 	bool _full;
 };
 

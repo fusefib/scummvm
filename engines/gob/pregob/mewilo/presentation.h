@@ -45,7 +45,7 @@ struct MewiloTimingPlan {
 	Common::Rect exposureRegion; ///< Optional separate image floor under dialogue.
 	const char *rule;
 	// True identifies a recovered nominal base conversion, not hardware
-	// calibration or the duration of an optional reading hold.
+	// calibration or the duration of a reading hold.
 	bool calibrated;
 	bool animation;
 	bool reading;
@@ -57,10 +57,10 @@ uint32 mewiloScaleTime(uint32 milliseconds, uint speedFactor);
 uint32 mewiloAnimationDelayMillis(uint32 frameMillis, byte operand);
 uint32 mewiloReadingMillis(const byte *text, uint length);
 // Story cues share a frame pace; portrait poses have a half-frame minimum.
-// Other waits retain native timing.
+// Reviewed short text gets a reading hold. Other waits retain native timing.
 MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 	Common::Language language, MewiloPlatform platform, uint16 site, byte operand,
-	bool readabilityHolds, uint32 animationFrameMillis);
+	uint32 animationFrameMillis);
 
 /** Mewilo-only presentation clock, not an interpreter or a frame scheduler.
  *
