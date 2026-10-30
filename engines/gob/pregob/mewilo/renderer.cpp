@@ -36,21 +36,21 @@ namespace Gob {
 namespace Mewilo {
 
 void PreGob_Mewilo::initPalette() {
-	byte palette[(kCursorColor + 1) * 3];
+	byte palette[(kCursorOutlineColor + 1) * 3];
 	buildMewiloDisplayPalette(_presentationPlatform, palette);
 	// Gob's palette fade accepts six-bit staging values, not RGB888.
 	for (uint i = 0; i < 16 * 3; ++i)
 		palette[i] >>= 2;
-	// Keep the cursor's hue, using a nearby shade outside the scene's 16 inks.
-	for (uint i = 0; i < 3; ++i) {
-		const byte component = palette[15 * 3 + i];
-		palette[kCursorColor * 3 + i] = component < 60 ? component + 4 : component - 4;
-	}
-	setPalette(palette, kCursorColor + 1);
-	// A 16-color fade does not upload the spare cursor entry.
-	_vm->_video->setPalElem(kCursorColor, palette[kCursorColor * 3],
-		palette[kCursorColor * 3 + 1], palette[kCursorColor * 3 + 2],
-		-1, _vm->_global->_videoMode);
+	// Amber and opaque black occupy spare inks; index 0 is cursor transparency.
+	palette[kCursorColor * 3] = 63;
+	palette[kCursorColor * 3 + 1] = 48;
+	palette[kCursorColor * 3 + 2] = 0;
+	memset(palette + kCursorOutlineColor * 3, 0, 3);
+	setPalette(palette, kCursorOutlineColor + 1);
+	// A 16-color fade does not upload the spare cursor entries.
+	for (uint ink = kCursorColor; ink <= kCursorOutlineColor; ++ink)
+		_vm->_video->setPalElem(ink, palette[ink * 3], palette[ink * 3 + 1],
+			palette[ink * 3 + 2], -1, _vm->_global->_videoMode);
 }
 
 void PreGob_Mewilo::markDirty(int16 x, int16 y, int16 width, int16 height) {
@@ -359,13 +359,29 @@ void PreGob_Mewilo::endGameCursor() {
 	removeCursor();
 }
 
+void PreGob_Mewilo::outlineCursor(Surface &cursor) {
+	const int width = cursor.getWidth(), height = cursor.getHeight();
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			if (cursor.getData(x, y)[0] != kCursorColor)
+				continue;
+			// Only amber pixels seed the outline, so it cannot grow as we paint.
+			for (int ny = MAX(0, y - 1); ny <= MIN(height - 1, y + 1); ++ny)
+				for (int nx = MAX(0, x - 1); nx <= MIN(width - 1, x + 1); ++nx)
+					if (!cursor.getData(nx, ny)[0])
+						cursor.putPixel(nx, ny, kCursorOutlineColor);
+		}
+	}
+}
+
 void PreGob_Mewilo::installCrossCursor() {
 	if (!_crossCursor) {
-		_crossCursor.reset(new Surface(16, 16, 1));
+		_crossCursor.reset(new Surface(15, 15, 1));
 		_crossCursor->clear();
-		_crossCursor->drawLine(7, 0, 7, 15, kCursorColor);
-		_crossCursor->drawLine(0, 7, 15, 7, kCursorColor);
+		_crossCursor->drawLine(7, 0, 7, 14, kCursorColor);
+		_crossCursor->drawLine(0, 7, 14, 7, kCursorColor);
 		_crossCursor->drawRect(5, 5, 9, 9, kCursorColor);
+		outlineCursor(*_crossCursor);
 	}
 	setCursor(*_crossCursor, 7, 7);
 }
@@ -380,6 +396,7 @@ void PreGob_Mewilo::installWaitCursor() {
 				_waitCursor->putPixel(x, y,
 					pixels[y * cursor->getWidth() + x] == 1 ? kCursorColor : 0);
 		delete cursor;
+		outlineCursor(*_waitCursor);
 	}
 	// Use the surface overload so the existing game palette stays in force.
 	setCursor(*_waitCursor, 7, 13);

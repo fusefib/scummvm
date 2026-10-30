@@ -84,7 +84,7 @@ public:
 		const MewiloTotData &tot, uint16 node, const byte *text, uint length) override;
 
 private:
-	enum { kCursorColor = 16, kWaitCursorThresholdMillis = 200 };
+	enum { kCursorColor = 16, kCursorOutlineColor = 17, kWaitCursorThresholdMillis = 200 };
 
 	enum CursorPhase {
 		kCursorInactive,
@@ -147,6 +147,7 @@ private:
 	void drawScoreDigits(uint value, int16 x, int16 y, byte color, byte background);
 	void beginGameCursor();
 	void endGameCursor();
+	void outlineCursor(Surface &cursor);
 	void installCrossCursor();
 	void installWaitCursor();
 	void resetWaitCursor();
