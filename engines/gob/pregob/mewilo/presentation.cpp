@@ -454,6 +454,81 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 	return native;
 }
 
+struct VisionSequence {
+	const char *module;
+	Common::Language language;
+	byte platforms;
+	uint16 sequence, targets[9], finalImage, finalTarget;
+};
+
+static const VisionSequence kVisionSequences[] = {
+	{"LOAD2", Common::FR_FRA, 5, 0x12F7,
+		{0x09D0, 0x1CF3, 0x2808, 0x2A8B, 0x1CF3, 0x2D78, 0x3333, 0x33A0, 0x0953}, 0x33D8, 0x1543},
+	{"LOAD2", Common::DE_DEU, 5, 0x130D,
+		{0x0015, 0x1D09, 0x281E, 0x2AA1, 0x1D09, 0x2D8E, 0x3349, 0x33B6, 0x09B2}, 0x33EE, 0x1559},
+	{"AMSOAD2", Common::FR_FRA, 2, 0x11EE,
+		{0x09D0, 0x1730, 0x1738, 0x18CA, 0x1730, 0x1AA4, 0x1E2E, 0x1E7D, 0x0953}, 0x1EAC, 0x13F3},
+	{"THLOAD2", Common::FR_FRA, 8, 0x124A,
+		{0x09D0, 0x20C9, 0x2BDE, 0x2E61, 0x20C9, 0x314E, 0x3709, 0x3776, 0x0953}, 0x37AE, 0x147E}
+};
+
+bool mewiloVisionTimingPlan(const MewiloTotData &tot, const char *module,
+	Common::Language language, MewiloPlatform platform, uint16 sequenceOffset, uint16 site,
+	uint32 animationFrameMillis, MewiloTimingPlan &plan) {
+	if (!module || !isValidMewiloPlatform(platform))
+		return false;
+	for (uint i = 0; i < ARRAYSIZE(kVisionSequences); ++i) {
+		const VisionSequence &r = kVisionSequences[i];
+		const uint16 start = r.sequence;
+		if (sequenceOffset != start + 1 || site < start + 6 || site > start + 16 ||
+			(site - start) % 2 || !(r.platforms & (1 << platform)) ||
+			r.language != language || strcmp(r.module, module))
+			continue;
+		// This one sequence replaces six complete poses without any FF03.
+		// Guard its whole script and image headers; ordinary composition has
+		// no synthetic cost. The last pose keeps its existing text/audio holds.
+		static const byte actions[] = {0xFF, 11, 6, 0xFF, 3, 200, 0xFF, 3, 200,
+			0xFF, 7, 23, 3, 0xFF, 11, 0, 0xFF, 5, 2, 0, 0xFF, 2};
+		if (!tot.has(start, 46) || tot.byteAt(start) != 0x1C || tot.byteAt(start + 1) != 18 ||
+			memcmp(tot.dataAt(start + 20), actions, sizeof(actions)) ||
+			tot.uint16BEAt(start + 42) != r.finalImage || tot.uint16BEAt(start + 44) != r.finalTarget)
+			return false;
+		for (uint target = 0; target < ARRAYSIZE(r.targets); ++target)
+			if (tot.uint16BEAt(start + 2 + target * 2) != r.targets[target])
+				return false;
+		static const byte bounds[7][4] = {
+			{20, 48, 14, 128}, {27, 48, 7, 56}, {27, 48, 7, 64}, {20, 48, 14, 128},
+			{27, 48, 7, 112}, {27, 160, 7, 40}, {27, 188, 7, 12}
+		};
+		static const uint16 sizes[2][7] = {
+			{0x0B15, 0x0283, 0x02ED, 0x0B15, 0x05BB, 0x006D, 0x0038},
+			{0x06C1, 0x0192, 0x01DA, 0x06C1, 0x038A, 0x004F, 0x002F}
+		};
+		const bool cpc = platform == kMewiloPlatformAmstradCPC;
+		for (uint pose = 0; pose < 7; ++pose) {
+			const uint16 image = r.targets[pose + 1];
+			// CPC's first/repeated base pose is I00 record 2, not an inline image.
+			const bool external = cpc && (pose == 0 || pose == 3);
+			if (!tot.has(image, external ? 8 : sizes[cpc][pose]) ||
+				tot.byteAt(image) != (external ? 0x60 : 0x41) ||
+				tot.uint16BEAt(image + 1) != sizes[cpc][pose] ||
+				memcmp(tot.dataAt(image + 3), bounds[pose], 4) ||
+				(external && tot.byteAt(image + 7) != 2))
+				return false;
+		}
+		const uint pose = (site - start - 6) / 2;
+		MewiloTimingPlan matched;
+		matched.rule = "arnaud-vision";
+		matched.animation = true;
+		matched.milliseconds = matched.minimumDelay = matched.minimumExposure = animationFrameMillis;
+		matched.region = Common::Rect(bounds[pose][0] * 8, bounds[pose][1],
+			(bounds[pose][0] + bounds[pose][2]) * 8, bounds[pose][1] + bounds[pose][3]);
+		plan = matched;
+		return true;
+	}
+	return false;
+}
+
 MewiloPresentation::MewiloPresentation() {
 	reset();
 }

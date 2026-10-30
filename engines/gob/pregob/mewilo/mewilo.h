@@ -60,6 +60,7 @@ public:
 	bool hasError() const override { return _hostFailed; }
 
 	void serviceEvents() override;
+	bool beforeSequenceTarget(const MewiloTotData &tot, uint16 sequenceOffset, uint16 site) override;
 	void drawTextNode(const MewiloTotData &tot, uint16 nodeOffset) override;
 	void drawInlineImage(const MewiloTotData &tot, uint16 nodeOffset) override;
 	void drawExternalImage(const MewiloTotData &tot, uint16 nodeOffset) override;

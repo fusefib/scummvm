@@ -155,5 +155,13 @@ void PreGob_Mewilo::waitOrDelayAt(const MewiloTotData &tot, uint16 site, byte ar
 	waitPresentation(plan, site);
 }
 
+bool PreGob_Mewilo::beforeSequenceTarget(const MewiloTotData &tot, uint16 sequenceOffset, uint16 site) {
+	MewiloTimingPlan plan;
+	if (mewiloVisionTimingPlan(tot, _moduleStem.c_str(), _vm->_language,
+		_profile.platform, sequenceOffset, site, _animationFrameMillis, plan))
+		waitPresentation(plan, site);
+	return !shouldQuit() && !hasError() && !_pendingRestore;
+}
+
 } // End of namespace Mewilo
 } // End of namespace Gob

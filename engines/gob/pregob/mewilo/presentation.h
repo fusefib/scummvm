@@ -62,6 +62,12 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 	Common::Language language, MewiloPlatform platform, uint16 site, byte operand,
 	uint32 animationFrameMillis);
 
+// Arnaud's consecutive images have no FF03 between completed poses. The
+// sequence offset points at its count byte, as in the executor continuation.
+bool mewiloVisionTimingPlan(const MewiloTotData &tot, const char *module,
+	Common::Language language, MewiloPlatform platform, uint16 sequenceOffset, uint16 site,
+	uint32 animationFrameMillis, MewiloTimingPlan &plan);
+
 /** Mewilo-only presentation clock, not an interpreter or a frame scheduler.
  *
  * Direct pixel comparisons detect changes, not just repeated dirty calls. A

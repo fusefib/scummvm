@@ -82,6 +82,8 @@ public:
 	virtual bool shouldQuit() const = 0;
 	virtual bool hasError() const { return false; }
 	virtual void serviceEvents() {}
+	// Count-byte sequence offset and target-call site; false unwinds before dispatch.
+	virtual bool beforeSequenceTarget(const MewiloTotData &, uint16, uint16) { return true; }
 	virtual void drawTextNode(const MewiloTotData &tot, uint16 offset) = 0;
 	virtual void drawInlineImage(const MewiloTotData &tot, uint16 offset) = 0;
 	virtual void drawExternalImage(const MewiloTotData &tot, uint16 offset) = 0;
