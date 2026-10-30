@@ -305,6 +305,68 @@ static bool portraitRegion(const MewiloTotData &tot, const char *module,
 	return false;
 }
 
+struct KokoCaptionSequence {
+	const char *module;
+	Common::Language language;
+	byte platforms;
+	uint16 sequence, images[4];
+};
+
+// These three speech bubbles contain raster lettering, not text nodes. Give
+// them the ordinary reading floor while preserving longer native waits.
+static const KokoCaptionSequence kKokoCaptionSequences[] = {
+	{"LOAD1", Common::FR_FRA, 5, 0x1778, {0x3CE6, 0x3F25, 0x3FCA, 0x40E7}},
+	{"LOAD1", Common::DE_DEU, 5, 0x17A8, {0x3D16, 0x3F55, 0x3FFA, 0x4117}},
+	{"AMSOAD1", Common::FR_FRA, 2, 0x1750, {0x1F22, 0x1F2A, 0x1F96, 0x2084}},
+	{"THLOAD1", Common::FR_FRA, 8, 0x1761, {0x2D5E, 0x2F9D, 0x3042, 0x315F}}
+};
+
+static bool kokoCaptionRegion(const MewiloTotData &tot, const char *module,
+	Common::Language language, MewiloPlatform platform, uint16 site,
+	Common::Rect &region, const char *&caption) {
+	static const byte coordinates[][4] = {
+		{27, 72, 7, 56}, {28, 88, 5, 16}, {28, 80, 5, 32}, {27, 72, 7, 56}
+	};
+	static const uint16 fullLengths[] = {575, 165, 285, 824};
+	static const uint16 cpcLengths[] = {415, 108, 238, 434};
+	static const char *const captions[] = {"KOKO!", "KOKO!!!", "36-15@KOKO"};
+	for (uint i = 0; i < ARRAYSIZE(kKokoCaptionSequences); ++i) {
+		const KokoCaptionSequence &r = kKokoCaptionSequences[i];
+		const uint16 start = r.sequence;
+		if ((site != start + 4 && site != start + 9 && site != start + 14) ||
+			!(r.platforms & (1 << platform)) || r.language != language || strcmp(r.module, module))
+			continue;
+		if (!tot.has(start, 22) || tot.byteAt(start) != 0x1C || tot.byteAt(start + 1) != 8 ||
+			tot.uint16BEAt(start + 19) != start + 21 || tot.byteAt(start + 21) != 0x1B)
+			return false;
+		const bool cpc = platform == kMewiloPlatformAmstradCPC;
+		for (uint pose = 0; pose < 4; ++pose) {
+			const uint16 image = r.images[pose];
+			const bool external = cpc && (pose == 0 || pose == 3);
+			if (tot.uint16BEAt(start + 2 + pose * 5) != image ||
+				!tot.has(image, external ? 8 : 7) || tot.byteAt(image) != (external ? 0x60 : 0x41))
+				return false;
+			const uint16 length = cpc ? cpcLengths[pose] : fullLengths[pose];
+			if (tot.uint16BEAt(image + 1) != length || (!external && !tot.has(image, length)) ||
+				(external && tot.byteAt(image + 7) != (pose == 0 ? 15 : 16)))
+				return false;
+			for (uint coord = 0; coord < 4; ++coord)
+				if (tot.byteAt(image + 3 + coord) != coordinates[pose][coord])
+					return false;
+			if (pose < 3 && (tot.byteAt(start + 4 + pose * 5) != 0xFF ||
+				tot.byteAt(start + 5 + pose * 5) != 3 || tot.byteAt(start + 6 + pose * 5) != 200))
+				return false;
+		}
+		const uint beat = (site - start - 4) / 5;
+		const byte *bounds = coordinates[beat];
+		region = Common::Rect(bounds[0] * 8, bounds[1], (bounds[0] + bounds[2]) * 8,
+			bounds[1] + bounds[3]);
+		caption = captions[beat];
+		return true;
+	}
+	return false;
+}
+
 MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 	Common::Language language, MewiloPlatform platform, uint16 site, byte operand,
 	uint32 animationFrameMillis) {
@@ -324,6 +386,18 @@ MewiloTimingPlan mewiloTimingPlan(const MewiloTotData &tot, const char *module,
 		plan.region = portrait;
 		plan.milliseconds = mewiloAnimationDelayMillis(animationFrameMillis, operand);
 		plan.minimumDelay = plan.minimumExposure = plan.milliseconds;
+		return plan;
+	}
+	Common::Rect captionRegion;
+	const char *caption = nullptr;
+	if (operand == 200 && kokoCaptionRegion(tot, module, language, platform, site, captionRegion, caption)) {
+		MewiloTimingPlan plan = native;
+		plan.rule = "raster-caption";
+		plan.reading = true;
+		plan.anchor = kMewiloVisibleHold;
+		plan.region = captionRegion;
+		plan.milliseconds = MAX<uint32>(plan.milliseconds,
+			mewiloReadingMillis(reinterpret_cast<const byte *>(caption), strlen(caption)));
 		return plan;
 	}
 	for (uint i = 0; i < ARRAYSIZE(kTimingSites); ++i) {
