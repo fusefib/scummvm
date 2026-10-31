@@ -27,6 +27,7 @@
 #include "wizardry/data/ucsd_disk.h"
 #include "wizardry/vm/console.h"
 #include "wizardry/vm/disk_transport.h"
+#include "wizardry/vm/loader_keyboard.h"
 #include "wizardry/vm/timing.h"
 
 namespace Wizardry {
@@ -158,6 +159,8 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 	_frames.clear();
 	_literals.clear();
 	clearKeys();
+	_loaderKeys.clear();
+	_loaderData.clear();
 	_error.clear();
 	_heap = 0x6000;
 	_np = 0xf000;
@@ -303,6 +306,95 @@ void PCodeMachine::clearKeys() {
 	_keyPosition = 0;
 }
 
+bool PCodeMachine::loaderKeyboardProfile() const {
+	return _diskPolicy == kResidentCOM && _originalMemory && (_nativeRevision == 4 || _nativeRevision == 5);
+}
+
+bool PCodeMachine::loadLoaderCom(const Common::Array<byte> &com, Common::String &error) {
+	error.clear();
+	if (!loaderKeyboardProfile() || _instructions || !_loaderKeys.empty()) {
+		error = "Resident challenge data can only be supplied at fresh paired IV/V startup";
+		return false;
+	}
+	return LoaderKeyboard::extractData(_nativeRevision, com, _loaderData, error);
+}
+
+bool PCodeMachine::prepareLoaderKeys() {
+	if (!loaderKeyboardProfile() || !_loaderKeys.empty())
+		return true;
+	const LoaderKeyboard::Action action = LoaderKeyboard::match(_nativeRevision, _console->vram());
+	if (action == LoaderKeyboard::kValidationCode || action == LoaderKeyboard::kMagicWord) {
+		if (_loaderData.empty()) {
+			fail("Resident challenge requires the matching WIZ4.COM or WIZ5.COM at startup");
+			return false;
+		}
+		LoaderKeyboard::challengeKeys(_nativeRevision, _console->vram(), _loaderData, _loaderKeys);
+		return true;
+	}
+	if (action == LoaderKeyboard::kExit || action == LoaderKeyboard::kAuxiliary) {
+		fail(action == LoaderKeyboard::kExit ? "Resident loader process-exit action is not implemented" : "Resident loader auxiliary SAVE-file chooser is not implemented");
+		return false;
+	}
+	LoaderKeyboard::enqueue(action, _loaderKeys);
+	if (action == LoaderKeyboard::kSelectSave)
+		_diskSelectedSave = true;
+	return true;
+}
+
+bool PCodeMachine::replayLoaderEvents(uint32 begin, uint32 end) {
+	if (!loaderKeyboardProfile())
+		return true;
+	const Common::Array<NativeServiceReplay::Event> &events = _services.events();
+	for (uint32 i = begin; i < end; ++i) {
+		const NativeServiceReplay::Event &event = events[i];
+		if (event.type != NativeServiceReplay::kKey && event.type != NativeServiceReplay::kBiosAX)
+			continue;
+		if (!prepareLoaderKeys())
+			return false;
+		if (_loaderKeys.empty())
+			continue;
+		if (event.type == NativeServiceReplay::kKey) {
+			if (!event.value) {
+				fail("Original keyboard replay hides a resident loader key");
+				return false;
+			}
+		} else {
+			if (event.value != _loaderKeys[0]) {
+				fail("Original keyboard replay differs from the resident loader BIOS word");
+				return false;
+			}
+			_loaderKeys.remove_at(0);
+		}
+	}
+	return true;
+}
+
+byte PCodeMachine::inputKey() const {
+	return _loaderKeys.empty() ? _keys[_keyPosition] : byte(_loaderKeys[0]);
+}
+
+void PCodeMachine::consumeInputKey() {
+	if (_loaderKeys.empty())
+		++_keyPosition;
+	else
+		_loaderKeys.remove_at(0);
+}
+
+bool PCodeMachine::flushLoaderKeys() {
+	if (!loaderKeyboardProfile())
+		return true;
+	// INT16/AH=1 reruns the matcher whenever its queue is empty. A flush
+	// cannot terminate while a matching screen keeps reinserting keys.
+	_loaderKeys.clear();
+	if (!prepareLoaderKeys())
+		return false;
+	if (!_loaderKeys.empty()) {
+		fail("Resident keyboard flush cannot finish while a loader prompt remains visible");
+		return false;
+	}
+	return true;
+}
+
 void PCodeMachine::fail(const Common::String &message) {
 	if (_state == kFault)
 		return;
@@ -332,16 +424,21 @@ void PCodeMachine::delay(uint16 ticks) {
 		_console->getRngState(rng);
 		bool available;
 		Common::String error;
+		const uint32 begin = _services.position();
 		if (!_services.call(19, ticks, _console->rngAlgorithm(), rng, available, error)) {
 			fail(error);
 			return;
 		}
+		if (!replayLoaderEvents(begin, _services.position()))
+			return;
 		_console->setRngState(rng);
 		_waitRemainingUs = 0;
 		_soundPattern = 0xffff;
 		_state = kDelayed;
 		return;
 	}
+	if (!prepareLoaderKeys())
+		return;
 	if (_state != kFault) {
 		_waitRemainingUs = NativeTiming::delayMicroseconds(ticks);
 		_soundPattern = 0xffff;
@@ -382,26 +479,30 @@ bool PCodeMachine::setInputReplay(const Common::Array<NativeServiceReplay::Event
 
 bool PCodeMachine::graphicsInit(bool first) {
 	Common::String error;
+	const uint32 begin = _services.position();
 	if (!_services.graphicsInit(_nativeRevision, first, error)) {
 		fail(error);
 		return false;
 	}
-	return true;
+	return replayLoaderEvents(begin, _services.position());
 }
 
 bool PCodeMachine::pollKeyboard() {
 	if (_state == kFault)
 		return false;
 	if (!_services.enabled())
-		return keyAvailable();
+		return prepareLoaderKeys() && keyAvailable();
 	uint16 rng[4];
 	_console->getRngState(rng);
 	bool available;
 	Common::String error;
+	const uint32 begin = _services.position();
 	if (!_services.call(11, 0, _console->rngAlgorithm(), rng, available, error)) {
 		fail(error);
 		return false;
 	}
+	if (!replayLoaderEvents(begin, _services.position()))
+		return false;
 	_console->setRngState(rng);
 	return available;
 }
@@ -1283,13 +1384,19 @@ void PCodeMachine::standardProcedure(byte n) {
 		if (a == 1 || a == 2) {
 			if (_services.inputMode()) {
 				Common::String error;
+				const uint32 begin = _services.position();
 				if (!_services.flushInput(a, error)) {
 					fail(error);
 					break;
 				}
+				if (!replayLoaderEvents(begin, _services.position()))
+					break;
 				setIoResult(0);
-			} else if (!_scriptedInput) {
-				clearKeys();
+			} else if (!_scriptedInput || loaderKeyboardProfile()) {
+				if (!flushLoaderKeys())
+					break;
+				if (!_scriptedInput)
+					clearKeys();
 				setIoResult(0);
 			}
 		}
@@ -1366,6 +1473,7 @@ void PCodeMachine::unitIO(bool write) {
 			Common::Array<byte> bytes;
 			Common::String error;
 			const bool modeAware = _services.modeAwareRead();
+			const uint32 replayBegin = _services.position();
 			if (unit == 1 && modeAware) {
 				NativeServiceReplay next = _services;
 				if (!next.readInput(unit, y, bytes, error, w, address, readByte(0xe130))) {
@@ -1379,7 +1487,24 @@ void PCodeMachine::unitIO(bool write) {
 				request.kind = 3;
 				request.mode = w;
 				uint consumed;
-				if (!consumeConsoleInput(request, bytes, true, true, consumed))
+				if (loaderKeyboardProfile()) {
+					uint keyIndex = 0;
+					for (uint32 i = replayBegin; i < next.position(); ++i) {
+						if (_services.events()[i].type != NativeServiceReplay::kBiosAX)
+							continue;
+						if (!replayLoaderEvents(i, i + 1))
+							return;
+						Common::Array<byte> one;
+						one.push_back(bytes[keyIndex]);
+						if (!consumeConsoleInput(keyIndex ? _input : request, one, !keyIndex, false, consumed))
+							return;
+						++keyIndex;
+					}
+					if (_input.active || keyIndex != bytes.size()) {
+						fail("Incomplete resident unit-1 input replay");
+						return;
+					}
+				} else if (!consumeConsoleInput(request, bytes, true, true, consumed))
 					return;
 				_services = Common::move(next);
 				return;
@@ -1388,6 +1513,8 @@ void PCodeMachine::unitIO(bool write) {
 				fail(error);
 				return;
 			}
+			if (!replayLoaderEvents(replayBegin, _services.position()))
+				return;
 			if (modeAware)
 				prepareInput(w);
 			for (uint i = 0; i < bytes.size(); ++i) {
@@ -1411,6 +1538,13 @@ void PCodeMachine::unitIO(bool write) {
 			request.count = y;
 			request.kind = 3;
 			request.mode = w;
+			if (loaderKeyboardProfile()) {
+				Common::Array<byte> empty;
+				uint consumed;
+				if (consumeConsoleInput(request, empty, true, false, consumed))
+					completeInput();
+				return;
+			}
 			const uint available = MIN<uint>(y, _keys.size() - _keyPosition);
 			Common::Array<byte> bytes;
 			for (uint i = 0; i < available; ++i)
@@ -1626,6 +1760,24 @@ bool PCodeMachine::writeConsoleOutput(uint16 unit, uint16 address, uint16 count,
 
 void PCodeMachine::completeInput() {
 	if (_input.kind == 3) {
+		if (loaderKeyboardProfile()) {
+			while (_input.active) {
+				if (!prepareLoaderKeys())
+					return;
+				if (!keyAvailable()) {
+					yieldForInput();
+					return;
+				}
+				Common::Array<byte> one;
+				one.push_back(inputKey());
+				uint consumed;
+				if (!consumeConsoleInput(_input, one, false, false, consumed))
+					return;
+				if (consumed)
+					consumeInputKey();
+			}
+			return;
+		}
 		const uint available = MIN<uint>(_input.count - _input.position, _keys.size() - _keyPosition);
 		Common::Array<byte> bytes;
 		for (uint i = 0; i < available; ++i)
@@ -1639,11 +1791,14 @@ void PCodeMachine::completeInput() {
 		return;
 	}
 	while (_input.position < _input.count) {
+		if (!prepareLoaderKeys())
+			return;
 		if (!keyAvailable()) {
 			yieldForInput();
 			return;
 		}
-		const byte key = _keys[_keyPosition++];
+		const byte key = inputKey();
+		consumeInputKey();
 		if (_observer)
 			_observer->beforeInput(key);
 		if (_input.kind == 2)

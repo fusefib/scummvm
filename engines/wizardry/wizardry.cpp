@@ -39,7 +39,7 @@ namespace Wizardry {
 
 WizardryEngine::WizardryEngine(OSystem *system, const WizardryGameDescription *description) : Engine(system), _description(description) {
 	memset(_pixels, 0, sizeof(_pixels));
-	if (_description->gameNumber == 1)
+	if (_description->gameNumber >= 1 && _description->gameNumber <= 5)
 		_machine.setObserver(this);
 }
 
@@ -52,8 +52,8 @@ bool WizardryEngine::hasFeature(EngineFeature feature) const {
 }
 
 Common::Error WizardryEngine::run() {
-	if (_description->gameNumber < 1 || _description->gameNumber > 3)
-		return Common::Error(Common::kUnsupportedGameidError, "Wizardry IV and V are not supported yet");
+	if (_description->gameNumber < 1 || _description->gameNumber > 5)
+		return Common::Error(Common::kUnsupportedGameidError, "Unsupported Wizardry game number");
 	const Common::String name = Common::String::format("WIZ%u.DSK", _description->gameNumber);
 	Common::File file;
 	if (!file.open(Common::Path(name)))
@@ -68,7 +68,8 @@ Common::Error WizardryEngine::run() {
 	Common::Array<byte> program;
 	if (!disk.loadBytes(bytes, message) || !disk.readFile("SYSTEM.PASCAL", program, message))
 		return Common::Error(Common::kReadingFailed, message);
-	const bool useOriginalSave = ConfMan.hasKey("original_save_disk") && ConfMan.getBool("original_save_disk");
+	const bool useOriginalSave = (_description->gameNumber >= 4 ||
+								  (ConfMan.hasKey("original_save_disk") && ConfMan.getBool("original_save_disk")));
 	_machine.setOriginalMemory(useOriginalSave);
 	if (useOriginalSave) {
 		const Common::String saveName = Common::String::format("SAVE%u.DSK", _description->gameNumber);
@@ -76,7 +77,7 @@ Common::Error WizardryEngine::run() {
 		if (!saveFile.open(Common::Path(saveName))) {
 			debug(1, "Wizardry: original save disk rejected: missing %s", saveName.c_str());
 			return Common::Error(Common::kNoGameDataFoundError,
-								 Common::String::format("The original save disk option requires %s", saveName.c_str()));
+								 Common::String::format("Starting this game requires %s", saveName.c_str()));
 		}
 		if (saveFile.size() != 1280 * 512) {
 			debug(1, "Wizardry: original save disk rejected: unexpected size for %s", saveName.c_str());
@@ -93,6 +94,20 @@ Common::Error WizardryEngine::run() {
 		}
 	} else if (!_machine.boot(program, bytes, message)) {
 		return Common::Error(Common::kReadingFailed, message);
+	}
+	if (_description->gameNumber >= 4) {
+		const Common::String comName = Common::String::format("WIZ%u.COM", _description->gameNumber);
+		Common::File comFile;
+		if (!comFile.open(Common::Path(comName)))
+			return Common::Error(Common::kNoGameDataFoundError,
+								 Common::String::format("Starting this game requires %s", comName.c_str()));
+		if (comFile.size() <= 0 || comFile.size() > 65536)
+			return Common::Error(Common::kReadingFailed, "The resident loader file has an unexpected size");
+		Common::Array<byte> comBytes(uint32(comFile.size()));
+		if (comFile.read(comBytes.data(), comBytes.size()) != comBytes.size())
+			return Common::kReadingFailed;
+		if (!_machine.loadLoaderCom(comBytes, message))
+			return Common::Error(Common::kReadingFailed, message);
 	}
 	debug(1, "Wizardry %u: loaded %u p-code segments from %s", _description->gameNumber,
 		  _machine.codeFile().segments().size(), name.c_str());

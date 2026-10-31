@@ -62,6 +62,7 @@ public:
 	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk, Common::String &error);
 	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk,
 			  const Common::Array<byte> &saveDisk, Common::String &error);
+	bool loadLoaderCom(const Common::Array<byte> &com, Common::String &error);
 	State run(uint32 instructionBudget = 20000);
 	void queueKey(byte key);
 	void clearKeys();
@@ -109,6 +110,8 @@ public:
 	const Common::Array<byte> &saveDisk() const { return _saveDisk; }
 	DiskPolicy diskPolicy() const { return _diskPolicy; }
 	bool diskSelectedSave() const { return _diskSelectedSave; }
+	const Common::Array<uint16> &loaderKeys() const { return _loaderKeys; }
+	const Common::Array<byte> &loaderData() const { return _loaderData; }
 	uint32 sourceDiskCRC() const { return _sourceDiskCRC; }
 	uint32 sourceSaveDiskCRC() const { return _sourceSaveDiskCRC; }
 	const PCodeFile &codeFile() const { return _code; }
@@ -124,7 +127,7 @@ public:
 	bool readDisk(uint32 block, uint32 size, byte *destination) override;
 	bool readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) override;
 	uint16 diskCapacity() const override { return _diskPolicy == kLegacy632 ? 632 : 1272; }
-	bool keyAvailable() const override { return _keyPosition < _keys.size(); }
+	bool keyAvailable() const override { return !_loaderKeys.empty() || _keyPosition < _keys.size(); }
 	bool pollKeyboard() override;
 	bool tracedInput() const override { return _services.inputMode(); }
 	bool graphicsInit(bool first) override;
@@ -183,6 +186,8 @@ private:
 	Common::Array<Frame> _frames;
 	Common::Array<Literal> _literals;
 	Common::Array<byte> _keys;
+	Common::Array<uint16> _loaderKeys; // Original COM synthetic BIOS words, before physical input.
+	Common::Array<byte> _loaderData;   // Optional authenticated IV/V challenge tables and glyphs.
 	uint32 _keyPosition = 0;
 	uint32 _ip = 0;
 	uint16 _heap = 0x6000;
@@ -231,6 +236,12 @@ private:
 	uint16 codeWord(byte segment, uint16 offset) const;
 	bool originalProcedure(byte segment, byte procedure, PCodeProcedure &result) const;
 	bool originalServiceProfile() const;
+	bool loaderKeyboardProfile() const;
+	bool prepareLoaderKeys();
+	bool replayLoaderEvents(uint32 begin, uint32 end);
+	byte inputKey() const;
+	void consumeInputKey();
+	bool flushLoaderKeys();
 	int32 walk(byte levels);
 	uint16 localAddress(int32 frame, uint16 word);
 	uint16 literal(uint16 offset, uint16 length);
