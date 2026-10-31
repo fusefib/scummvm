@@ -25,6 +25,12 @@
 #include "wizardry/vm/console.h"
 #include "wizardry/vm/timing.h"
 
+#include "common/md5.h"
+
+#include "common/memstream.h"
+
+#include "wizardry/data/ucsd_disk.h"
+
 namespace Wizardry {
 
 static uint16 packedFieldMask(uint16 width, byte revision) {
@@ -41,6 +47,37 @@ static uint16 packedFieldMask(uint16 width, byte revision) {
 	default:
 		return 0;
 	}
+}
+
+static bool identifyNativeRevision(const Common::Array<byte> &disk, byte &revision, Common::String &error,
+								   byte *firstByte = nullptr) {
+	revision = 0;
+	if (firstByte)
+		*firstByte = 0;
+	UcsdDisk volume;
+	Common::String ignored;
+	if (!volume.loadBytes(disk, ignored) || !volume.find("SYSTEM.INTERP"))
+		return true;
+	Common::Array<byte> interpreter;
+	if (!volume.readFile("SYSTEM.INTERP", interpreter, error))
+		return false;
+	Common::MemoryReadStream stream(interpreter.data(), interpreter.size());
+	const Common::String digest = Common::computeStreamMD5AsString(stream);
+	if (interpreter.size() == 16384) {
+		if (digest == "1b83a5e540a9c4556729b79cd5222c8c")
+			revision = 1;
+		else if (digest == "0ad1552cdd9316f943fa9935a04bec95")
+			revision = 4;
+		else if (digest == "9459ba0c1ece8616fb408ff09ba746e8")
+			revision = 5;
+	}
+	if (!revision) {
+		error = "Unrecognized SYSTEM.INTERP revision; native service profile is unknown";
+		return false;
+	}
+	if (firstByte)
+		*firstByte = interpreter[0];
+	return true;
 }
 
 PCodeMachine::PCodeMachine() {
@@ -60,6 +97,11 @@ bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byt
 		error = "Invalid Wizardry program or linear disk image";
 		return false;
 	}
+	byte revision, originalWordHighInitial;
+	if (!identifyNativeRevision(disk, revision, error, &originalWordHighInitial))
+		return false;
+	_nativeRevision = revision;
+	_originalWordHighByte = originalWordHighInitial;
 	_code = Common::move(parsed);
 	_disk = disk;
 	_sourceDiskCRC = wizardryCrc32(disk.data(), disk.size());
@@ -95,33 +137,75 @@ bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byt
 			_disk[off + 4] = _disk[off + 5] = 0;
 		}
 	}
+	if (_originalMemory && !initializeOriginalMemory(code, error)) {
+		_state = kFault;
+		return false;
+	}
 	_segment = 1;
 	_ip = 0;
-	push(0);
-	push(0);
+	if (_originalMemory && !loadSegment(1)) {
+		error = _error;
+		return false;
+	}
+	push(_originalMemory ? segmentBase(1) : 0);
+	push(_originalMemory ? segmentBase(1) : 0);
 	enter(1, 1, kRoot);
 	if (_state == kFault) {
 		error = _error;
 		return false;
 	}
-	writeWord(_frames[0].base, 0x0700);
-	writeWord(_frames[0].base + 2, 0);
+	writeWord(_frames[0].base, _originalMemory ? 0xe0de : 0x0700);
+	if (_originalMemory) {
+		writeWord(0x0600, _frames[0].base - 12);
+		writeWord(0x060a, readWord(0x0608));
+	} else
+		writeWord(_frames[0].base + 2, 0);
 	error.clear();
 	return true;
 }
 
 uint16 PCodeMachine::readWord(uint16 address) const {
-	return uint16(_memory[address] | (uint16(_memory[uint16(address + 1)]) << 8));
+	const byte high = _originalMemory && address == 0xffff ? _originalWordHighByte : _memory[uint16(address + 1)];
+	return uint16(_memory[address] | (uint16(high) << 8));
 }
 
 void PCodeMachine::writeWord(uint16 address, uint16 value) {
 	_memory[address] = byte(value);
-	_memory[uint16(address + 1)] = byte(value >> 8);
+	if (_originalMemory && address == 0xffff)
+		_originalWordHighByte = byte(value >> 8);
+	else
+		_memory[uint16(address + 1)] = byte(value >> 8);
+	if (_originalMemory) {
+		if (address >= 0x0601 && address <= 0x0603)
+			_np = readWord(0x0602);
+		if (address >= 0x0603 && address <= 0x0605)
+			_heap = readWord(0x0604);
+		if (address >= 0xe0dd && address <= 0xe0df)
+			_ioResult = readWord(0xe0de);
+	}
+}
+
+void PCodeMachine::writeByte(uint16 address, byte value) {
+	_memory[address] = value;
+	if (_originalMemory) {
+		if (address == 0x0602 || address == 0x0603)
+			_np = readWord(0x0602);
+		if (address == 0x0604 || address == 0x0605)
+			_heap = readWord(0x0604);
+		if (address == 0xe0de || address == 0xe0df)
+			_ioResult = readWord(0xe0de);
+	}
+}
+
+void PCodeMachine::setIoResult(uint16 value) {
+	_ioResult = value;
+	if (_originalMemory)
+		writeWord(0xe0de, value);
 }
 
 bool PCodeMachine::readDisk(uint32 block, uint32 size, byte *destination) {
 	if (block > _disk.size() / 512 || size > _disk.size() - block * 512) {
-		_ioResult = 10;
+		setIoResult(10);
 		return false;
 	}
 	if (size)
@@ -215,11 +299,11 @@ const PCodeProcedure *PCodeMachine::activeProcedure() const {
 
 byte PCodeMachine::fetchByte() {
 	const PCodeSegment *s = _code.segment(_segment);
-	if (!s || _ip >= s->code.size()) {
+	if (!s || _ip >= s->code.size() || (_originalMemory && !segmentReferences(_segment))) {
 		fail("Instruction fetch outside segment");
 		return 0;
 	}
-	return s->code[_ip++];
+	return _originalMemory ? readByte(uint16(segmentBase(_segment) + _ip++)) : s->code[_ip++];
 }
 
 uint16 PCodeMachine::fetchWord() {
@@ -249,14 +333,20 @@ uint16 PCodeMachine::pop() {
 }
 
 void PCodeMachine::push(uint16 value) {
-	if (_stack.size() >= 16384) {
+	if (_stack.size() >= (_originalMemory ? (0xf7feU - 0xe01cU) / 2 : 16384U)) {
 		fail("Evaluation stack overflow");
 		return;
 	}
 	_stack.push_back(value);
+	if (_originalMemory)
+		writeWord(originalStackPointer(), value);
 }
 
-void PCodeMachine::enter(byte sn, byte pn, StaticMode mode) {
+void PCodeMachine::enter(byte sn, byte pn, StaticMode mode, bool external) {
+	if (_originalMemory) {
+		enterOriginal(sn, pn, mode, external);
+		return;
+	}
 	const PCodeProcedure *p = _code.procedure(sn, pn);
 	if (!p) {
 		fail("Call to missing procedure");
@@ -279,6 +369,8 @@ void PCodeMachine::enter(byte sn, byte pn, StaticMode mode) {
 	f.base = _np;
 	for (uint i = 0; i < p->parameterBytes / 2; ++i)
 		writeWord(f.base + 2 * i, pop());
+	// The abstract allocator can clear locals because it does not overlay
+	// code in the same memory, unlike the original interpreter.
 	if (!_preserveLocals) {
 		for (uint i = p->parameterBytes; i < bytes; ++i)
 			_memory[uint16(f.base + i)] = 0;
@@ -304,6 +396,10 @@ void PCodeMachine::enter(byte sn, byte pn, StaticMode mode) {
 }
 
 void PCodeMachine::leave(byte nret) {
+	if (_originalMemory) {
+		leaveOriginal(nret);
+		return;
+	}
 	if (_frames.empty()) {
 		fail("Return with no activation frame");
 		return;
@@ -327,8 +423,18 @@ void PCodeMachine::leave(byte nret) {
 
 int32 PCodeMachine::walk(byte levels) {
 	int32 f = int32(_frames.size()) - 1;
-	while (levels-- && f >= 0)
-		f = _frames[f].staticFrame;
+	while (levels-- && f >= 0) {
+		if (_originalMemory) {
+			const uint16 target = readWord(_frames[f].base - 12);
+			f = -1;
+			for (uint i = 0; i < _frames.size(); ++i)
+				if (_frames[i].base - 12 == target) {
+					f = i;
+					break;
+				}
+		} else
+			f = _frames[f].staticFrame;
+	}
 	if (f < 0 || f >= int32(_frames.size())) {
 		fail("Invalid static link");
 		return -1;
@@ -346,6 +452,14 @@ uint16 PCodeMachine::localAddress(int32 frame, uint16 word) {
 }
 
 uint16 PCodeMachine::literal(uint16 offset, uint16 length) {
+	if (_originalMemory) {
+		const PCodeSegment *s = _code.segment(_segment);
+		if (!s || offset > s->code.size() || length > s->code.size() - offset || !segmentReferences(_segment)) {
+			fail("Invalid resident literal extent");
+			return 0;
+		}
+		return uint16(segmentBase(_segment) + offset);
+	}
 	for (uint i = 0; i < _literals.size(); ++i)
 		if (_literals[i].segment == _segment && _literals[i].offset == offset)
 			return _literals[i].address;
@@ -642,7 +756,7 @@ void PCodeMachine::execute(byte op) {
 			fail("Invalid packed field");
 			break;
 		}
-		push((readWord(a) >> c) & packedFieldMask(b, 0));
+		push((readWord(a) >> c) & packedFieldMask(b, _originalMemory ? _nativeRevision : 0));
 		break;
 	case 0xbb:
 		d = pop();
@@ -654,7 +768,7 @@ void PCodeMachine::execute(byte op) {
 			break;
 		}
 		{
-			uint32 mask = uint32(packedFieldMask(b, 0)) << c;
+			uint32 mask = uint32(packedFieldMask(b, _originalMemory ? _nativeRevision : 0)) << c;
 			writeWord(a, (readWord(a) & ~mask) | ((uint32(d) << c) & mask));
 		}
 		break;
@@ -684,7 +798,7 @@ void PCodeMachine::execute(byte op) {
 		break;
 	case 0xc1:
 		// INTERP op_RBP restores the previous base context, then shares
-		// RNP's return sequence. The supplied I-III programs use only RBP 0
+		// RNP's return sequence. The I-III programs use only RBP 0
 		// in WIZARDRY:1, returning to the host rather than another Pascal
 		// base program. Other base-return contexts need a separate model.
 		a = fetchByte();
@@ -742,7 +856,7 @@ void PCodeMachine::execute(byte op) {
 	case 0xcd:
 		a = fetchByte();
 		b = fetchByte();
-		enter(a ? a : _segment, b, kSearch);
+		enter(_originalMemory ? a : (a ? a : _segment), b, kSearch, a != 0);
 		break;
 	case 0xce:
 		enter(_segment, fetchByte(), kLocal);
@@ -771,12 +885,13 @@ void PCodeMachine::jump(bool take) {
 	} else {
 		const PCodeProcedure *p = activeProcedure();
 		const PCodeSegment *s = _code.segment(_segment);
-		const int slot = p ? int(p->anchor) + int(displacement) - 256 : -1;
+		const int anchor = _originalMemory ? int(readWord(0x0608)) - segmentBase(_segment) : (p ? p->anchor : -1);
+		const int slot = anchor >= 0 ? anchor + int(displacement) - 256 : -1;
 		if (!s || slot < 0 || slot + 2 > int(s->code.size())) {
 			fail("Invalid backward jump slot");
 			return;
 		}
-		const int target = slot - READ_LE_UINT16(s->code.data() + slot);
+		const int target = slot - codeWord(_segment, slot);
 		if (target < 0) {
 			fail("Invalid backward jump target");
 			return;
@@ -799,7 +914,7 @@ void PCodeMachine::caseJump() {
 		fail("Invalid case jump table");
 		return;
 	}
-	const uint32 relative = READ_LE_UINT16(s->code.data() + slot);
+	const uint32 relative = codeWord(_segment, slot);
 	if (relative > slot) {
 		fail("Invalid case jump target");
 		return;
@@ -870,6 +985,21 @@ void PCodeMachine::standardProcedure(byte n) {
 	uint16 a = 0, b = 0, c = 0, d = 0, e = 0;
 	switch (n) {
 	case 1:
+		if (_originalMemory) {
+			flushOriginalHeap();
+			if (_state == kFault)
+				break;
+			b = pop();
+			a = pop();
+			const uint32 next = uint32(_heap) + uint16(2U * b);
+			if (next >= _np) {
+				fail("Heap/arena collision in NEW");
+				break;
+			}
+			writeWord(a, _heap);
+			setHeapTop(next);
+			break;
+		}
 		b = pop();
 		a = pop();
 		if (uint32(_heap) + 2U * b + 64 > _np) {
@@ -886,7 +1016,18 @@ void PCodeMachine::standardProcedure(byte n) {
 		c = pop();
 		b = pop();
 		a = pop();
-		moveBytes(uint16(c + d), uint16(a + b), e, n == 3);
+		if (_originalMemory && n == 2 && uint16(a - uint16(c + d)) == 2 && !(e & 1)) {
+			// Preserve the original MOVELEFT shortcut, including its unusual
+			// continuation. It compares the *base* source argument, fills
+			// words from LODSW, then reaches fetch with SI still at source+2.
+			// Ordinary MOVELEFT, including odd counts, restores its old SI.
+			const uint16 value = readWord(uint16(a + b));
+			for (uint32 i = 0; i < e; i += 2)
+				writeWord(uint16(c + d + i), value);
+			_ip = uint16(a + b + 2 - segmentBase(_segment));
+		} else {
+			moveBytes(uint16(c + d), uint16(a + b), e, n == 3);
+		}
 		break;
 	case 4: {
 		b = pop();
@@ -896,6 +1037,27 @@ void PCodeMachine::standardProcedure(byte n) {
 			--index;
 		if (index < 0) {
 			fail("EXIT target not on dynamic call chain");
+			break;
+		}
+		if (_originalMemory) {
+			for (int i = int(_frames.size()) - 1; i > index; --i) {
+				const Frame &caller = _frames[i - 1];
+				PCodeProcedure p;
+				if (!originalProcedure(caller.segment, caller.procedure, p)) {
+					fail("Invalid resident EXIT procedure");
+					break;
+				}
+				_frames[i].returnIP = p.exit;
+				writeWord(_frames[i].base - 4, segmentBase(caller.segment) + p.exit);
+			}
+			PCodeProcedure p;
+			if (_state == kFault)
+				break;
+			if (!originalProcedure(_segment, currentProcedure(), p)) {
+				fail("Invalid resident EXIT procedure");
+				break;
+			}
+			_ip = p.exit;
 			break;
 		}
 		while (int(_frames.size()) - 1 > index) {
@@ -923,21 +1085,42 @@ void PCodeMachine::standardProcedure(byte n) {
 		if (int16(c) > 0)
 			fillMemory(uint16(a + b), byte(d), c);
 		break;
+	case 21:
+	case 22:
+		if (!_originalMemory) {
+			fail("Explicit segment lifetime requires original memory mode");
+			break;
+		}
+		a = pop();
+		if (a >= 32) {
+			fail("Invalid explicit code segment number");
+			break;
+		}
+		if (n == 21)
+			loadSegment(a);
+		else
+			releaseSegment(a);
+		break;
 	case 32:
-		writeWord(pop(), _heap);
+		if (_originalMemory)
+			flushOriginalHeap();
+		if (_state != kFault)
+			writeWord(pop(), _heap);
 		break;
 	case 33:
 		a = readWord(pop());
 		// WIZARDRY:18 also uses RELEASE to move the heap frontier forward.
 		// It is a frontier assignment, not necessarily a monotonic free.
-		if (a < 0x6000 || uint32(a) + 64 > _np) {
+		if (a < (_originalMemory ? 0x0732 : 0x6000) || uint32(a) + (_originalMemory ? 0 : 64) > _np) {
 			fail("Invalid RELEASE mark");
 			break;
 		}
-		_heap = a;
+		setHeapTop(a);
+		if (_originalMemory)
+			writeWord(0xe0e6, 0);
 		break;
 	case 34:
-		push(_ioResult);
+		push(_originalMemory ? readWord(0xe0de) : _ioResult);
 		break;
 	case 38:
 		a = pop();
@@ -945,7 +1128,8 @@ void PCodeMachine::standardProcedure(byte n) {
 			clearKeys();
 		break;
 	case 40:
-		push((_np - _heap) / 2);
+		a = _originalMemory && readWord(0xe0e6) ? readWord(0xe0e6) : _heap;
+		push(uint16(_np - a) / 2);
 		break;
 	default:
 		fail(Common::String::format("Unimplemented standard procedure %u", n));
@@ -964,7 +1148,7 @@ void PCodeMachine::unitIO(bool write) {
 		// I-III report 632 accessible blocks even in the larger SAVE images.
 		if (z >= 632 || y > _disk.size() || uint32(z) * 512 > _disk.size() - y ||
 			uint32(z) * 512 + y > 632U * 512) {
-			_ioResult = 10;
+			setIoResult(10);
 			return;
 		}
 		for (uint32 i = 0; i < y; ++i) {
@@ -973,9 +1157,9 @@ void PCodeMachine::unitIO(bool write) {
 			else
 				writeByte(uint16(address + i), _disk[uint32(z) * 512 + i]);
 		}
-		_ioResult = 0;
+		setIoResult(0);
 	} else if (unit == 1 || unit == 2) {
-		_ioResult = 0;
+		setIoResult(0);
 		if (!write) {
 			_input.active = true;
 			_input.address = address;
@@ -984,7 +1168,7 @@ void PCodeMachine::unitIO(bool write) {
 			completeInput();
 		}
 	} else {
-		_ioResult = 2;
+		setIoResult(2);
 	}
 }
 
@@ -1001,7 +1185,7 @@ void PCodeMachine::completeInput() {
 		_idleSnapshot = false;
 	}
 	_input.active = false;
-	_ioResult = 0;
+	setIoResult(0);
 }
 
 } // namespace Wizardry

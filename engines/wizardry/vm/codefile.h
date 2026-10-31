@@ -38,13 +38,14 @@ struct PCodeProcedure {
 
 struct PCodeSegment {
 	byte number = 0;
+	uint16 fileBlock = 0;
 	Common::String name;
 	Common::Array<byte> code;
 	// Index zero is deliberately unused: Pascal procedures start at one.
 	Common::Array<PCodeProcedure> procedures;
 };
 
-/** The I-III linked UCSD codefile format, not a generic p-System loader. */
+/** The supplied I-V linked UCSD codefiles, not a generic p-System loader. */
 class PCodeFile {
 public:
 	bool load(const Common::Array<byte> &data, Common::String &error);

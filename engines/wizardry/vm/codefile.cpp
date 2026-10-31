@@ -61,6 +61,7 @@ bool PCodeFile::load(const Common::Array<byte> &data, Common::String &error) {
 		starts[slot] = start;
 		ends[slot] = start + length;
 		PCodeSegment s;
+		s.fileBlock = start / 512;
 		for (uint j = 0; j < 8; ++j) {
 			byte ch = data[0x40 + 8 * slot + j];
 			if (!ch)

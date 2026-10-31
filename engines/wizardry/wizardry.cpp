@@ -48,7 +48,7 @@ bool WizardryEngine::hasFeature(EngineFeature feature) const {
 
 Common::Error WizardryEngine::run() {
 	if (_description->gameNumber < 1 || _description->gameNumber > 3)
-		return Common::Error(Common::kUnsupportedGameidError, "Wizardry IV and V require their revised native drivers");
+		return Common::Error(Common::kUnsupportedGameidError, "Wizardry IV and V are not supported yet");
 	const Common::String name = Common::String::format("WIZ%u.DSK", _description->gameNumber);
 	Common::File file;
 	if (!file.open(Common::Path(name)))

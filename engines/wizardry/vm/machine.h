@@ -55,8 +55,18 @@ public:
 	void queueKey(byte key);
 	void clearKeys();
 	void setScriptedInput(bool scripted) { _scriptedInput = scripted; }
-	// Diagnostic experiment: physical DOS overlay/stack reuse is not modeled.
+	// Memory policy is selected before boot.
 	void setPreserveLocals(bool preserve) { _preserveLocals = preserve; }
+	void setOriginalMemory(bool original) {
+		if (_frames.empty())
+			_originalMemory = original;
+	}
+	bool originalMemory() const { return _originalMemory; }
+	uint16 currentFrameBase() const { return _frames.empty() ? 0 : _frames.back().base; }
+	uint16 arenaTop() const { return _np; }
+	uint16 heapTop() const { return _heap; }
+	uint16 segmentBase(byte segment) const;
+	uint16 segmentReferences(byte segment) const;
 	void setRealtime(bool realtime) { _realtime = realtime; }
 	void setBiosModifiers(byte flags) { _biosModifiers = flags; }
 	void advanceTime(uint32 milliseconds);
@@ -78,11 +88,11 @@ public:
 
 	byte readByte(uint16 address) const override { return _memory[address]; }
 	uint16 readWord(uint16 address) const override;
-	void writeByte(uint16 address, byte value) override { _memory[address] = value; }
+	void writeByte(uint16 address, byte value) override;
 	void writeWord(uint16 address, uint16 value) override;
 	bool readDisk(uint32 block, uint32 size, byte *destination) override;
 	bool keyAvailable() const override { return _keyPosition < _keys.size(); }
-	void setIoResult(uint16 value) override { _ioResult = value; }
+	void setIoResult(uint16 value) override;
 	void yieldForInput() override;
 	void delay(uint16 ticks) override;
 	void sound(uint16, uint16 pattern, uint16) override;
@@ -121,6 +131,7 @@ private:
 	Common::Array<byte> _disk;
 	uint32 _sourceDiskCRC = 0;
 	byte _memory[65536];
+	byte _originalWordHighByte = 0;
 	Common::Array<uint16> _stack;
 	Common::Array<Frame> _frames;
 	Common::Array<Literal> _literals;
@@ -138,6 +149,8 @@ private:
 	PendingInput _input;
 	bool _scriptedInput = false;
 	bool _preserveLocals = false;
+	bool _originalMemory = false;
+	byte _nativeRevision = 0;
 	bool _realtime = false;
 	byte _biosModifiers = 0;
 	uint16 _soundPattern = 0xffff;
@@ -154,8 +167,21 @@ private:
 	void push(uint16 value);
 	bool requireStack(uint32 count);
 	const PCodeProcedure *activeProcedure() const;
-	void enter(byte segment, byte procedure, StaticMode mode);
+	void enter(byte segment, byte procedure, StaticMode mode, bool external = false);
 	void leave(byte returnWords);
+	bool initializeOriginalMemory(const Common::Array<byte> &code, Common::String &error);
+	bool loadSegment(byte segment);
+	bool releaseSegment(byte segment);
+	void enterOriginal(byte segment, byte procedure, StaticMode mode, bool external);
+	void leaveOriginal(byte returnWords);
+	void syncOriginalRegisters();
+	void setArenaTop(uint16 value);
+	void setHeapTop(uint16 value);
+	bool checkOriginalSpace(uint32 frontier);
+	void flushOriginalHeap();
+	uint16 originalStackPointer() const;
+	uint16 codeWord(byte segment, uint16 offset) const;
+	bool originalProcedure(byte segment, byte procedure, PCodeProcedure &result) const;
 	int32 walk(byte levels);
 	uint16 localAddress(int32 frame, uint16 word);
 	uint16 literal(uint16 offset, uint16 length);
