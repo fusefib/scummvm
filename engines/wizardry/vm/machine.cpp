@@ -23,6 +23,7 @@
 #include "common/endian.h"
 #include "common/util.h"
 #include "wizardry/vm/console.h"
+#include "wizardry/vm/timing.h"
 
 namespace Wizardry {
 
@@ -72,6 +73,8 @@ bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byt
 	_np = 0xf000;
 	_literalNext = 0x0800;
 	_ioResult = _delayTicks = 0;
+	_waitRemainingUs = 0;
+	_soundPattern = 0xffff;
 	_instructions = 0;
 	_input = PendingInput();
 	_idleSnapshot = false;
@@ -172,11 +175,34 @@ void PCodeMachine::delay(uint16 ticks) {
 	if (_observer)
 		_observer->onDelay(ticks);
 	_delayTicks = ticks;
-	if (_state != kFault)
+	if (_state != kFault) {
+		_waitRemainingUs = NativeTiming::delayMicroseconds(ticks);
+		_soundPattern = 0xffff;
 		_state = kDelayed;
+	}
 }
 
 void PCodeMachine::sound(uint16, uint16 pattern, uint16) {
+	if (_realtime && _state != kFault && pattern <= 2 && !(_biosModifiers & 0x40)) {
+		_soundPattern = pattern;
+		_waitRemainingUs = NativeTiming::soundMicroseconds(pattern);
+		_state = kPlayingSound;
+	}
+}
+
+void PCodeMachine::advanceTime(uint32 milliseconds) {
+	if (_state != kDelayed && _state != kPlayingSound)
+		return;
+	if (_state == kDelayed && (keyAvailable() || (_biosModifiers & 0x1f))) {
+		_waitRemainingUs = 0;
+		return;
+	}
+	const uint64 elapsed = uint64(milliseconds) * 1000;
+	_waitRemainingUs = elapsed >= _waitRemainingUs ? 0 : _waitRemainingUs - uint32(elapsed);
+}
+
+uint32 PCodeMachine::soundElapsedUs() const {
+	return _state == kPlayingSound ? NativeTiming::soundMicroseconds(_soundPattern) - _waitRemainingUs : 0;
 }
 
 byte PCodeMachine::currentProcedure() const {
@@ -380,8 +406,15 @@ Common::String PCodeMachine::pascalString(uint16 address) const {
 PCodeMachine::State PCodeMachine::run(uint32 budget) {
 	if (_state == kHalted || _state == kFault)
 		return _state;
+	if (_realtime && (_state == kDelayed || _state == kPlayingSound)) {
+		advanceTime(0);
+		if (_waitRemainingUs)
+			return _state;
+	}
 	_state = kRunning;
 	_delayTicks = 0;
+	_waitRemainingUs = 0;
+	_soundPattern = 0xffff;
 	if (_input.active)
 		completeInput();
 	for (uint32 n = 0; n < budget && _state == kRunning; ++n) {

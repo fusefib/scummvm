@@ -40,11 +40,14 @@ public:
 /** Cooperative p-machine for the Wizardry I-V DOS interpreters. */
 class PCodeMachine : public MachineHost {
 public:
-	enum State { kRunning,
-				 kWaitingForInput,
-				 kDelayed,
-				 kHalted,
-				 kFault };
+	enum State {
+		kRunning,
+		kWaitingForInput,
+		kDelayed,
+		kHalted,
+		kFault,
+		kPlayingSound
+	};
 	PCodeMachine();
 	~PCodeMachine() override;
 	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk, Common::String &error);
@@ -52,12 +55,18 @@ public:
 	void queueKey(byte key);
 	void clearKeys();
 	void setScriptedInput(bool scripted) { _scriptedInput = scripted; }
-	void setObserver(MachineObserver *observer) { _observer = observer; }
+	// Diagnostic experiment: physical DOS overlay/stack reuse is not modeled.
 	void setPreserveLocals(bool preserve) { _preserveLocals = preserve; }
+	void setRealtime(bool realtime) { _realtime = realtime; }
+	void setBiosModifiers(byte flags) { _biosModifiers = flags; }
+	void advanceTime(uint32 milliseconds);
+	uint32 waitRemainingUs() const { return _waitRemainingUs; }
+	uint16 soundPattern() const { return _soundPattern; }
+	uint32 soundElapsedUs() const;
+	void setObserver(MachineObserver *observer) { _observer = observer; }
 	State state() const { return _state; }
 	const Common::String &error() const { return _error; }
 	uint64 instructions() const { return _instructions; }
-	uint16 delayTicks() const { return _delayTicks; }
 	byte currentSegment() const { return _segment; }
 	uint32 currentIP() const { return _ip; }
 	byte currentProcedure() const;
@@ -129,6 +138,10 @@ private:
 	PendingInput _input;
 	bool _scriptedInput = false;
 	bool _preserveLocals = false;
+	bool _realtime = false;
+	byte _biosModifiers = 0;
+	uint16 _soundPattern = 0xffff;
+	uint32 _waitRemainingUs = 0;
 	bool _idleSnapshot = false;
 	Common::String _error;
 	PCodeConsole *_console = nullptr;

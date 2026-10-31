@@ -6,6 +6,7 @@ MODULE_OBJS := \
 	data/ucsd_disk.o \
 	vm/codefile.o \
 	vm/machine.o \
+	vm/timing.o \
 	vm/console.o
 
 ifeq ($(ENABLE_WIZARDRY), DYNAMIC_PLUGIN)

@@ -20,6 +20,8 @@
  */
 
 #include "wizardry/wizardry.h"
+#include "audio/audiostream.h"
+#include "audio/decoders/raw.h"
 #include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/events.h"
@@ -30,12 +32,15 @@
 #include "graphics/paletteman.h"
 #include "wizardry/data/ucsd_disk.h"
 #include "wizardry/vm/console.h"
+#include "wizardry/vm/timing.h"
 
 namespace Wizardry {
 
 WizardryEngine::WizardryEngine(OSystem *system, const WizardryGameDescription *description) : Engine(system), _description(description) {
 	memset(_pixels, 0, sizeof(_pixels));
 }
+
+WizardryEngine::~WizardryEngine() { stopSound(); }
 
 bool WizardryEngine::hasFeature(EngineFeature feature) const {
 	return feature == kSupportsReturnToLauncher;
@@ -65,19 +70,24 @@ Common::Error WizardryEngine::run() {
 	CursorMan.showMouse(false);
 	const byte palette[] = {0, 0, 0, 0, 170, 170, 170, 0, 0, 255, 255, 255};
 	_system->getPaletteManager()->setPalette(palette, 0, 4);
+	syncSoundSettings();
+	_machine.setRealtime(true);
+	_lastClock = _system->getMillis();
+	_ready = true;
 	PCodeMachine::State previousState = PCodeMachine::kHalted;
 	while (!shouldQuit()) {
 		processEvents();
 		if (shouldQuit())
 			break;
-		if (_machine.keyAvailable())
-			_delayEnd = 0; // CONUNIT WR19 ends early on buffered input.
-		if (_delayEnd && int32(_system->getMillis() - _delayEnd) < 0) {
-			_system->delayMillis(10);
-			continue;
-		}
-		_delayEnd = 0;
+		updateTime();
 		PCodeMachine::State state = _machine.run(20000);
+		_lastClock = _system->getMillis();
+		if (state == PCodeMachine::kPlayingSound) {
+			if (!_soundActive || _soundInstruction != _machine.instructions())
+				startSound();
+		}
+		// Guest sound waits may expire before the next mixer callback. Let the
+		// persistent queue drain naturally, including the 3.645 ms click.
 		present();
 		if (state != previousState && state == PCodeMachine::kWaitingForInput)
 			debug(2, "Wizardry: input wait at segment %u, procedure %u, IP 0x%04x",
@@ -87,14 +97,11 @@ Common::Error WizardryEngine::run() {
 			return Common::Error(Common::kUnknownError, _machine.error());
 		if (state == PCodeMachine::kHalted)
 			break;
-		if (state == PCodeMachine::kDelayed && !_machine.keyAvailable()) {
-			// Native WR19 waits for 2*z BIOS ticks (18.2 ticks/second).
-			uint32 milliseconds = uint32(_machine.delayTicks()) * 110;
-			_delayEnd = _system->getMillis() + milliseconds;
-		}
 		if (state != PCodeMachine::kRunning)
-			_system->delayMillis(10);
+			_system->delayMillis(state == PCodeMachine::kPlayingSound ? 1 : 10);
 	}
+	stopSound();
+	_ready = false;
 	return Common::kNoError;
 }
 
@@ -143,6 +150,78 @@ void WizardryEngine::processEvents() {
 		if (key)
 			_machine.queueKey(key);
 	}
+	const int modifiers = _eventMan->getModifierState();
+	byte bios = 0;
+	if (modifiers & Common::KBD_SHIFT)
+		bios |= 3;
+	if (modifiers & Common::KBD_CTRL)
+		bios |= 4;
+	if (modifiers & Common::KBD_ALT)
+		bios |= 8;
+	if (modifiers & Common::KBD_SCRL)
+		bios |= 0x10;
+	if (modifiers & Common::KBD_NUM)
+		bios |= 0x20;
+	if (modifiers & Common::KBD_CAPS)
+		bios |= 0x40;
+	_machine.setBiosModifiers(bios);
+}
+
+void WizardryEngine::updateTime() {
+	const uint32 now = _system->getMillis();
+	if (_ready && !_paused)
+		_machine.advanceTime(now - _lastClock);
+	_lastClock = now;
+}
+
+void WizardryEngine::pauseEngineIntern(bool pause) {
+	if (pause)
+		updateTime();
+	Engine::pauseEngineIntern(pause);
+	_paused = pause;
+	_lastClock = _system->getMillis();
+}
+
+void WizardryEngine::startSound() {
+	_soundActive = true;
+	_soundInstruction = _machine.instructions();
+	if (!_mixer || !_mixer->isReady())
+		return;
+	Common::Array<byte> pcm;
+	NativeTiming::renderSound(_machine.soundPattern(), _machine.soundElapsedUs(), pcm);
+	if (pcm.empty())
+		return;
+	byte *samples = static_cast<byte *>(malloc(pcm.size()));
+	if (!samples)
+		return;
+	memcpy(samples, pcm.data(), pcm.size());
+	if (!_speakerStream) {
+		_speakerStream = Audio::makeQueuingAudioStream(NativeTiming::kSpeakerRate, false);
+		_speakerStream->queueBuffer(samples, pcm.size(), DisposeAfterUse::YES,
+									Audio::FLAG_16BITS | Audio::FLAG_LITTLE_ENDIAN);
+		// Keep ownership even if the mixer has no free channel. Its queue
+		// remains valid until we detach the handle and delete it explicitly.
+		_mixer->playStream(Audio::Mixer::kSFXSoundType, &_speakerHandle, _speakerStream,
+						   -1, Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO);
+		if (!_mixer->isSoundHandleActive(_speakerHandle)) {
+			delete _speakerStream;
+			_speakerStream = nullptr;
+			return;
+		}
+		if (_paused)
+			_mixer->pauseHandle(_speakerHandle, true);
+	} else {
+		_speakerStream->queueBuffer(samples, pcm.size(), DisposeAfterUse::YES,
+									Audio::FLAG_16BITS | Audio::FLAG_LITTLE_ENDIAN);
+	}
+}
+
+void WizardryEngine::stopSound() {
+	if (_mixer)
+		_mixer->stopHandle(_speakerHandle);
+	delete _speakerStream;
+	_speakerStream = nullptr;
+	_soundActive = false;
 }
 
 void WizardryEngine::present() {

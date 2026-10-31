@@ -21,25 +21,42 @@
 
 #ifndef WIZARDRY_WIZARDRY_H
 #define WIZARDRY_WIZARDRY_H
+#include "audio/mixer.h"
 #include "engines/engine.h"
 #include "wizardry/detection.h"
 #include "wizardry/vm/machine.h"
+
+namespace Audio {
+class QueuingAudioStream;
+}
 
 namespace Wizardry {
 
 class WizardryEngine : public Engine {
 public:
 	WizardryEngine(OSystem *system, const WizardryGameDescription *description);
+	~WizardryEngine() override;
 	Common::Error run() override;
 	bool hasFeature(EngineFeature feature) const override;
+	void pauseEngineIntern(bool pause) override;
 
 private:
 	const WizardryGameDescription *_description;
 	PCodeMachine _machine;
 	byte _pixels[320 * 200];
-	uint32 _delayEnd = 0;
+	uint32 _lastClock = 0;
+	bool _ready = false;
+	bool _paused = false;
+	bool _soundActive = false;
+	uint64 _soundInstruction = 0;
+	Audio::SoundHandle _speakerHandle;
+	// Engine-owned; the mixer borrows it until stopSound detaches the handle.
+	Audio::QueuingAudioStream *_speakerStream = nullptr;
 	void present();
 	void processEvents();
+	void updateTime();
+	void startSound();
+	void stopSound();
 };
 
 } // namespace Wizardry
