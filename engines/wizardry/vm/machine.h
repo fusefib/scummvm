@@ -23,6 +23,7 @@
 #define WIZARDRY_VM_MACHINE_H
 
 #include "wizardry/vm/codefile.h"
+#include "wizardry/vm/graphics_residue.h"
 #include "wizardry/vm/host.h"
 #include "wizardry/vm/ram_cache.h"
 #include "wizardry/vm/services.h"
@@ -118,6 +119,7 @@ public:
 	bool diskSelectedSave() const { return _diskSelectedSave; }
 	const Common::Array<byte> &diskDMABuffer() const { return _diskDMABuffer; }
 	const RamDiskCache &ramCache() const { return _ramCache; }
+	const GraphicsResidue &graphicsResidue() const { return _graphicsResidue; }
 	const Common::Array<uint16> &loaderKeys() const { return _loaderKeys; }
 	const Common::Array<byte> &loaderData() const { return _loaderData; }
 	uint32 sourceDiskCRC() const { return _sourceDiskCRC; }
@@ -189,6 +191,7 @@ private:
 	Common::Array<byte> _diskDMABuffer;
 	TransferDisks _transfer;
 	RamDiskCache _ramCache;
+	GraphicsResidue _graphicsResidue;
 	uint32 _sourceDiskCRC = 0;
 	uint32 _sourceSaveDiskCRC = 0;
 	DiskPolicy _diskPolicy = kLegacy632;
@@ -293,6 +296,8 @@ private:
 		const Common::Array<byte> &saveDisk, byte revision, Common::String &error) const;
 	bool readUncached(uint16 unit, uint16 block, uint16 count, byte *external,
 		uint16 address, uint16 physicalBase, uint16 &result, Common::String &error) override;
+	bool readRetained(uint16 unit, uint16 block, uint16 count, byte *external,
+		uint16 address, uint16 physicalBase, uint16 knownPrefix, uint16 &result, Common::String &error) override;
 	bool readGuestDisk(uint16 unit, uint16 block, uint16 count, uint16 address,
 		uint16 &result, Common::String &error);
 };

@@ -154,6 +154,7 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 	_diskSelectedSave = false;
 	_diskDMABuffer.clear();
 	_ramCache.initialize(_originalMemory ? revision : 0, _diskPolicy == kResidentCOM);
+	_graphicsResidue.initialize(_originalMemory ? revision : 0);
 	_sourceSaveDiskCRC = saveDisk ? wizardryCrc32(saveDisk->data(), saveDisk->size()) : 0;
 	_sourceDiskCRC = wizardryCrc32(disk.data(), disk.size());
 	memset(_memory, 0, sizeof(_memory));
@@ -264,12 +265,17 @@ bool PCodeMachine::readDisk(uint32 block, uint32 size, byte *destination) {
 bool PCodeMachine::readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) {
 	Common::String error;
 	uint16 result = 0;
-	if (block > 65535 || size > 65535 || !_ramCache.read(*this, *this, unit, block, size,
-		destination, physicalOffset, result, error)) {
+	const bool retained = _graphicsResidue.contains(physicalOffset, size);
+	byte *buffer = retained ? _graphicsResidue.data(physicalOffset) : destination;
+	if (block > 65535 || size > 65535 || !_ramCache.read(*this, *this, unit, block, size, buffer, physicalOffset, result, error)) {
 		fail(error.empty() ? "Native graphics disk request is too large" : error);
 		return false;
 	}
 	setIoResult(result);
+	if (!result && retained && size) {
+		_graphicsResidue.establish(physicalOffset, size);
+		memcpy(destination, buffer, size);
+	}
 	return result == 0;
 }
 
@@ -290,21 +296,32 @@ bool PCodeMachine::readGuestDisk(uint16 unit, uint16 block, uint16 count, uint16
 }
 
 bool PCodeMachine::readUncached(uint16 unit, uint16 block, uint16 count, byte *external,
-		uint16 address, uint16 physicalBase, uint16 &result, Common::String &error) {
+	uint16 address, uint16 physicalBase, uint16 &result, Common::String &error) {
+	return readRetained(unit, block, count, external, address, physicalBase, 0, result, error);
+}
+
+bool PCodeMachine::readRetained(uint16 unit, uint16 block, uint16 count, byte *external,
+	uint16 address, uint16 physicalBase, uint16 knownPrefix, uint16 &result, Common::String &error) {
 	error.clear();
 	result = 0;
 	if (_diskPolicy == kResidentCOM) {
 		ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave, activeTransferDisk(), &_diskDMABuffer);
 		if (physicalBase)
-			return transport.readCacheBuffer(block, count, external, physicalBase, result, error);
-		return external ? transport.readBuffer(unit, block, count, external, address, result, error) :
-			transport.unitIO(false, unit, address, count, block, 0, result, error);
+			return transport.readCacheBuffer(block, count, external, physicalBase, result, error, knownPrefix);
+		if (external && _graphicsResidue.contains(address, count))
+			return transport.readBuffer(unit, block, count, external, address, result, error,
+				_graphicsResidue.known(address));
+		return external ? transport.readBuffer(unit, block, count, external, address, result, error) : transport.unitIO(false, unit, address, count, block, 0, result, error);
 	}
 	const uint32 offset = uint32(block) * 512;
 	const uint32 available = offset < _disk.size() ? MIN<uint32>(count, _disk.size() - offset) : 0;
 	if (external) {
-		if (available != count) { result = 10; return true; }
-		if (count) memcpy(external, _disk.data() + offset, count);
+		if (available != count) {
+			result = 10;
+			return true;
+		}
+		if (count)
+			memcpy(external, _disk.data() + offset, count);
 		return true;
 	}
 	if (_diskPolicy == kRaw0880) {
@@ -316,7 +333,8 @@ bool PCodeMachine::readUncached(uint16 unit, uint16 block, uint16 count, byte *e
 		result = 10;
 		return true;
 	}
-	for (uint32 i = 0; i < available; ++i) writeByte(uint16(address + i), _disk[offset + i]);
+	for (uint32 i = 0; i < available; ++i)
+		writeByte(uint16(address + i), _disk[offset + i]);
 	return true;
 }
 

@@ -9,6 +9,7 @@ MODULE_OBJS := \
 	vm/machine.o \
 	vm/disk_transport.o \
 	vm/ram_cache.o \
+	vm/graphics_residue.o \
 	vm/transfer.o \
 	vm/loader_keyboard.o \
 	vm/arena.o \

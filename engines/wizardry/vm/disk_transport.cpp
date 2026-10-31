@@ -25,20 +25,21 @@
 namespace Wizardry {
 
 bool ResidentDiskTransport::unitIO(bool write, uint16 unit, uint16 address,
-								   uint16 count, uint16 block, uint16 mode, uint16 &ioResult, Common::String &error) {
+								   uint16 count, uint16 block, uint16, uint16 &ioResult, Common::String &error) {
 	Buffer buffer(_host, address);
 	return transfer(write, unit, block, count, buffer, ioResult, error);
 }
 
 bool ResidentDiskTransport::readBuffer(uint16 unit, uint16 block, uint16 count,
-									   byte *destination, uint16 physicalOffset, uint16 &ioResult, Common::String &error) {
-	Buffer buffer(_host, physicalOffset, destination);
+									   byte *destination, uint16 physicalOffset, uint16 &ioResult, Common::String &error,
+									   byte *known) {
+	Buffer buffer(_host, physicalOffset, destination, 0, known);
 	return transfer(false, unit, block, count, buffer, ioResult, error);
 }
 
 bool ResidentDiskTransport::readCacheBuffer(uint16 block, uint16 count, byte *destination,
-											uint16 physicalBase, uint16 &ioResult, Common::String &error) {
-	Buffer buffer(_host, 0, destination, physicalBase);
+											uint16 physicalBase, uint16 &ioResult, Common::String &error, uint16 knownPrefix) {
+	Buffer buffer(_host, 0, destination, physicalBase, nullptr, knownPrefix);
 	return transfer(false, 4, block, count, buffer, ioResult, error);
 }
 
@@ -151,8 +152,12 @@ bool ResidentDiskTransport::callback(bool write, byte drive, uint16 block,
 		return false;
 	}
 	if (!write && !dmaBounce && buffer.external && available != bytes) {
-		error = "Short graphics disk read requires unmodeled interpreter-CS residue";
-		return false;
+		for (uint32 i = available; i < bytes; ++i) {
+			if (!buffer.established(offset + i)) {
+				error = "Short external disk read requires unknown original memory residue";
+				return false;
+			}
+		}
 	}
 	if (!write && dmaBounce)
 		_dmaBuffer.resize(512);
