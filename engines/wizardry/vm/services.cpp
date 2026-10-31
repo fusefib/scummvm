@@ -24,7 +24,13 @@
 namespace Wizardry {
 
 static bool readEvent(const Common::Array<NativeServiceReplay::Event> &events,
-					  uint32 &position, byte type, uint16 &value, Common::String &error) {
+	uint32 &position, byte type, uint16 &value, Common::String &error) {
+	// The resident III hook consumes physical source choices inside the BIOS
+	// call before returning its generated Return. Machine validates these
+	// metadata events against the live chooser and applies their disk effects.
+	if (type == NativeServiceReplay::kKey || type == NativeServiceReplay::kBiosAX)
+		while (position < events.size() && events[position].type == NativeServiceReplay::kTransferKey)
+			++position;
 	if (position == events.size() || events[position].type != type) {
 		error = Common::String::format("Native service replay expected event %u at index %u", type, position);
 		return false;
@@ -235,24 +241,26 @@ bool NativeServiceReplay::executeGraphicsInit(const Common::Array<Event> &events
 }
 
 bool NativeServiceReplay::configure(const Common::Array<Event> &events, uint32 position,
-									Common::String &error, bool inputMode) {
+	Common::String &error, bool inputMode) {
 	error.clear();
 	if (events.size() > kMaxEvents || position > events.size()) {
 		error = "Native service replay exceeds its bounded event storage";
 		return false;
 	}
+	bool transferInput = false;
 	for (uint i = 0; i < events.size(); ++i) {
 		const Event &event = events[i];
-		if (event.type < kCall || event.type > (inputMode ? kCheckpoint : kEnd) ||
+		if (event.type < kCall || event.type > (inputMode ? kTransferKey : kEnd) ||
 			(event.type == kCall && event.value != 11 && event.value != 19 &&
-			 (!inputMode || (event.value != kReadInput && event.value != kFlushInput &&
-							 (event.value != kGraphicsInit && event.value != kReadInputMode)))) ||
+				(!inputMode || (event.value != kReadInput && event.value != kFlushInput && event.value != kGraphicsInit && event.value != kReadInputMode))) ||
 			(event.type == kKey && event.value > 1) ||
 			(event.type == kModifiers && event.value > 255) ||
+			(event.type == kTransferKey && event.value > 255) ||
 			(event.type == kEnd && event.value) || (event.type == kCheckpoint && !event.value)) {
 			error = "Invalid native service replay event";
 			return false;
 		}
+		transferInput |= event.type == kTransferKey;
 	}
 	uint32 cursor = 0;
 	uint32 consumedCalls = 0;
@@ -281,7 +289,10 @@ bool NativeServiceReplay::configure(const Common::Array<Event> &events, uint32 p
 		const uint16 selector = events[cursor].value;
 		const uint16 request = cursor + 1 < events.size() ? events[cursor + 1].value : 0;
 		if (inputMode && selector == kGraphicsInit) {
-			const byte next = cursor + 1 < events.size() ? events[cursor + 1].type : 0;
+			uint32 look = cursor + 1;
+			while (look < events.size() && events[look].type == kTransferKey)
+				++look;
+			const byte next = look < events.size() ? events[look].type : 0;
 			if (!executeGraphicsInit(events, cursor, next == kKey, next != kEnd, error))
 				return false;
 			extendedInput = true;
@@ -322,6 +333,7 @@ bool NativeServiceReplay::configure(const Common::Array<Event> &events, uint32 p
 	_inputMode = inputMode;
 	_extendedInput = extendedInput;
 	_unit1Input = unit1Input;
+	_transferInput = transferInput;
 	return true;
 }
 

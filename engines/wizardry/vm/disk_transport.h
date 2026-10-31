@@ -34,7 +34,7 @@ namespace Wizardry {
 class ResidentDiskTransport {
 public:
 	ResidentDiskTransport(MachineHost &host, Common::Array<byte> &master,
-						  Common::Array<byte> &save, bool &selectedSave) : _host(host), _master(master), _save(save), _selectedSave(selectedSave) {}
+						  Common::Array<byte> &save, bool &selectedSave, Common::Array<byte> *auxiliary = nullptr) : _host(host), _master(master), _save(save), _selectedSave(selectedSave), _auxiliary(auxiliary) {}
 
 	bool unitIO(bool write, uint16 unit, uint16 address, uint16 count,
 				uint16 block, uint16 mode, uint16 &ioResult, Common::String &error);
@@ -58,6 +58,7 @@ private:
 	MachineHost &_host;
 	Common::Array<byte> &_master, &_save;
 	bool &_selectedSave;
+	Common::Array<byte> *_auxiliary;
 
 	bool transfer(bool write, uint16 unit, uint16 block, uint16 count,
 				  Buffer &buffer, uint16 &ioResult, Common::String &error);

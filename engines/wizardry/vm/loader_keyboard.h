@@ -36,8 +36,12 @@ public:
 				  kExit,
 				  kAuxiliary,
 				  kMagicWord,
-				  kValidationCode };
+				  kValidationCode,
+				  kTransferSource,
+				  kTransferClose };
 	static Action match(byte revision, const byte *vram);
+	static void drawTransferChoice(byte *vram, byte profile = 3);
+	static bool transferChoice(byte profile, byte key, byte &source, Common::Array<uint16> &keys);
 	static bool validQueue(const Common::Array<uint16> &keys);
 	static bool validQueue(const Common::Array<uint16> &keys, byte revision, const Common::Array<byte> &data);
 	static void enqueue(Action action, Common::Array<uint16> &keys);

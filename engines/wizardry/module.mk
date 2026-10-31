@@ -8,6 +8,7 @@ MODULE_OBJS := \
 	vm/codefile.o \
 	vm/machine.o \
 	vm/disk_transport.o \
+	vm/transfer.o \
 	vm/loader_keyboard.o \
 	vm/arena.o \
 	vm/timing.o \

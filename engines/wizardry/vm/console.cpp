@@ -20,6 +20,7 @@
  */
 
 #include "wizardry/vm/console.h"
+#include "wizardry/vm/loader_keyboard.h"
 
 namespace Wizardry {
 
@@ -130,6 +131,17 @@ void PCodeConsole::renderText(byte *pixels, uint pitch, const byte *font) const 
 	}
 }
 
+const byte *PCodeConsole::keyboardVram() const {
+	if (!_state.textOutput)
+		return _state.vram;
+	_textVram.resize(kVramSize);
+	for (uint i = 0; i < kVramSize; i += 2) {
+		_textVram[i] = i / 2 < kTextCells ? _state.text[i / 2] : ' ';
+		_textVram[i + 1] = 7;
+	}
+	return _textVram.data();
+}
+
 static uint16 classicBase(byte revision) {
 	return revision == 4 ? 0x73a2 : 0x7252;
 }
@@ -177,6 +189,10 @@ void PCodeConsole::setRngState(const uint16 state[4]) {
 	memcpy(_state.rng, state, sizeof(_state.rng));
 	if (_rngAlgorithm == NativeRandom::kThreeWord)
 		_state.rng[3] = 0;
+}
+
+void PCodeConsole::drawTransferChoice(byte profile) {
+	LoaderKeyboard::drawTransferChoice(_state.vram, profile);
 }
 
 void PCodeConsole::advanceRandom(uint16 buffer) {

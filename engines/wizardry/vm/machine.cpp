@@ -161,6 +161,7 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 	clearKeys();
 	_loaderKeys.clear();
 	_loaderData.clear();
+	_transfer = TransferDisks();
 	_error.clear();
 	_heap = 0x6000;
 	_np = 0xf000;
@@ -263,7 +264,7 @@ bool PCodeMachine::readDiskAt(uint32 block, uint32 size, byte *destination, uint
 	if (_diskPolicy == kResidentCOM) {
 		Common::String error;
 		uint16 result = 0;
-		ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave);
+		ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave, activeTransferDisk());
 		if (block > 65535 || size > 65535 || !transport.readBuffer(unit, block, size, destination, physicalOffset, result, error)) {
 			fail(error.empty() ? "Resident graphics disk request is too large" : error);
 			return false;
@@ -310,6 +311,55 @@ bool PCodeMachine::loaderKeyboardProfile() const {
 	return _diskPolicy == kResidentCOM && _originalMemory && (_nativeRevision == 4 || _nativeRevision == 5);
 }
 
+byte PCodeMachine::transferProfile() const {
+	if (_diskPolicy != kResidentCOM || !_originalMemory || (_nativeRevision != 1 && _nativeRevision != 5))
+		return 0;
+	const byte scenario = TransferDisks::scenario(_code.checksum());
+	return scenario == 2 || scenario == 3 || scenario == 5 ? scenario : 0;
+}
+
+byte PCodeMachine::keyboardMatchProfile() const {
+	const byte transfer = transferProfile();
+	return transfer ? transfer : _nativeRevision;
+}
+
+bool PCodeMachine::loadTransferSource(byte source, const Common::Array<byte> &image, Common::String &error) {
+	if (_instructions || _state != kRunning) {
+		error = "Transfer sources can only be supplied before the fresh game executes";
+		return false;
+	}
+	return _transfer.attach(transferProfile(), source, image, error);
+}
+
+bool PCodeMachine::transferOwnerActive() const {
+	for (uint i = 0; i < _frames.size(); ++i)
+		if (_frames[i].segment == 21 && _frames[i].procedure == (transferProfile() == 5 ? 2 : 16))
+			return true;
+	return false;
+}
+
+void PCodeMachine::finishTransferTransaction() {
+	// GAMEUTIL:16 (II/III) or :2 (V) retains records after closing SOURCE. Destination
+	// rejection can still reopen SOURCE and restore them. Commit only after
+	// the owning guest procedure has returned or executed its nonlocal EXIT.
+	if (_transfer.transaction && !_transfer.active && !_transfer.choosing && !transferOwnerActive())
+		_transfer.transaction = false;
+}
+
+void PCodeMachine::consumeTransferChoice(byte key) {
+	assert(_transfer.choosing && (transferProfile() == 3 || transferProfile() == 5));
+	byte source = 0;
+	if (!LoaderKeyboard::transferChoice(transferProfile(), key, source, _loaderKeys))
+		return;
+	_transfer.choosing = false;
+	if (_transfer.present(source))
+		_transfer.active = source;
+	else if (transferProfile() != 5)
+		_transfer.active = 0;
+	if (source)
+		_diskSelectedSave = true;
+}
+
 bool PCodeMachine::keyboardScreenProfile() const {
 	// The classic COMs share one exit predicate, including compatibility mode.
 	// Their other loader actions and queues are not part of this profile.
@@ -328,13 +378,47 @@ bool PCodeMachine::loadLoaderCom(const Common::Array<byte> &com, Common::String 
 bool PCodeMachine::prepareLoaderKeys() {
 	if (!keyboardScreenProfile() || !_loaderKeys.empty())
 		return true;
-	const LoaderKeyboard::Action action = LoaderKeyboard::match(_nativeRevision, _console->vram());
+	if (_transfer.choosing) {
+		if (_services.inputMode())
+			return true; // Physical Q events are applied in replay order.
+		while (_transfer.choosing && _keyPosition < _keys.size())
+			consumeTransferChoice(_keys[_keyPosition++]);
+		if (_transfer.choosing) {
+			yieldForInput();
+			return false;
+		}
+		return true;
+	}
+	const LoaderKeyboard::Action action = LoaderKeyboard::match(keyboardMatchProfile(), _console->keyboardVram());
+	if (action == LoaderKeyboard::kTransferSource || action == LoaderKeyboard::kAuxiliary) {
+		if (!transferProfile()) {
+			fail("Resident transfer requires an authenticated original program");
+			return false;
+		}
+		_transfer.transaction = true;
+		if (transferProfile() == 3 || transferProfile() == 5) {
+			_transfer.choosing = true;
+			_console->drawTransferChoice(transferProfile());
+			return prepareLoaderKeys();
+		}
+		_transfer.active = _transfer.present(1) ? 1 : 0;
+		_loaderKeys.push_back(0x1c0d); // DOS open failure also queues Return.
+		return true;
+	}
+	if (action == LoaderKeyboard::kTransferClose) {
+		_transfer.active = 0;
+		if (transferProfile() == 3 || _nativeRevision == 5)
+			_diskSelectedSave = true;
+		_loaderKeys.push_back(0x1c0d);
+		finishTransferTransaction();
+		return true;
+	}
 	if (action == LoaderKeyboard::kValidationCode || action == LoaderKeyboard::kMagicWord) {
 		if (_loaderData.empty()) {
 			fail("Resident challenge requires the matching WIZ4.COM or WIZ5.COM at startup");
 			return false;
 		}
-		LoaderKeyboard::challengeKeys(_nativeRevision, _console->vram(), _loaderData, _loaderKeys);
+		LoaderKeyboard::challengeKeys(_nativeRevision, _console->keyboardVram(), _loaderData, _loaderKeys);
 		return true;
 	}
 	if (action == LoaderKeyboard::kExit) {
@@ -342,10 +426,6 @@ bool PCodeMachine::prepareLoaderKeys() {
 		// through DOS 4C00h without returning to the pending guest service.
 		// Our images are private; the frontend commits them on normal exit.
 		_state = kHalted;
-		return false;
-	}
-	if (action == LoaderKeyboard::kAuxiliary) {
-		fail("Resident loader auxiliary SAVE-file chooser is not implemented");
 		return false;
 	}
 	LoaderKeyboard::enqueue(action, _loaderKeys);
@@ -360,10 +440,24 @@ bool PCodeMachine::replayLoaderEvents(uint32 begin, uint32 end) {
 	const Common::Array<NativeServiceReplay::Event> &events = _services.events();
 	for (uint32 i = begin; i < end; ++i) {
 		const NativeServiceReplay::Event &event = events[i];
+		if (event.type == NativeServiceReplay::kTransferKey) {
+			if (!prepareLoaderKeys())
+				return false;
+			if (!_transfer.choosing) {
+				fail("Transfer choice replay is outside the original III chooser");
+				return false;
+			}
+			consumeTransferChoice(byte(event.value));
+			continue;
+		}
 		if (event.type != NativeServiceReplay::kKey && event.type != NativeServiceReplay::kBiosAX)
 			continue;
 		if (!prepareLoaderKeys())
 			return false;
+		if (_transfer.choosing) {
+			fail("Original III keyboard replay lacks a physical transfer choice");
+			return false;
+		}
 		if (_loaderKeys.empty())
 			continue;
 		if (event.type == NativeServiceReplay::kKey) {
@@ -450,8 +544,17 @@ void PCodeMachine::delay(uint16 ticks) {
 		_state = kDelayed;
 		return;
 	}
-	if (!prepareLoaderKeys())
+	if (!prepareLoaderKeys()) {
+		if (_transfer.choosing) {
+			_input.active = true;
+			_input.address = ticks;
+			_input.count = 1;
+			_input.position = 0;
+			_input.mode = 8;
+			_input.kind = 6;
+		}
 		return;
+	}
 	if (_state != kFault) {
 		_waitRemainingUs = NativeTiming::delayMicroseconds(ticks);
 		_soundPattern = 0xffff;
@@ -483,6 +586,10 @@ bool PCodeMachine::setInputReplay(const Common::Array<NativeServiceReplay::Event
 		return false;
 	if (next.unit1Input() && !_originalMemory) {
 		error = "Original unit-1 replay requires original memory";
+		return false;
+	}
+	if (next.transferInput() && transferProfile() != 3 && transferProfile() != 5) {
+		error = "Physical transfer choice replay requires original paired Wizardry III or V";
 		return false;
 	}
 	_services = Common::move(next);
@@ -812,6 +919,7 @@ PCodeMachine::State PCodeMachine::run(uint32 budget) {
 			push(readWord(uint16(pop() + 2 * (op - 0xf8))));
 		else
 			execute(op);
+		finishTransferTransaction();
 		if (!executionStopped() && _services.checkpoint()) {
 			_idleSnapshot = false;
 			yieldForInput();
@@ -1406,14 +1514,31 @@ void PCodeMachine::standardProcedure(byte n) {
 					break;
 				setIoResult(0);
 			} else if (!_scriptedInput || loaderKeyboardProfile()) {
-				if (!flushLoaderKeys())
+				if (!flushLoaderKeys()) {
+					if (_transfer.choosing) {
+						_input.active = true;
+						_input.address = a;
+						_input.count = 1;
+						_input.position = 0;
+						_input.mode = 8;
+						_input.kind = 5;
+					}
 					break;
+				}
 				if (!_scriptedInput)
 					clearKeys();
 				setIoResult(0);
 			} else if (_nativeRevision == 1) {
-				// Legacy diagnostic scripts retain type-ahead and IORESULT.
+				// Scripted input retains type-ahead and IORESULT.
 				prepareLoaderKeys();
+				if (_transfer.choosing) {
+					_input.active = true;
+					_input.address = a;
+					_input.count = 1;
+					_input.position = 0;
+					_input.mode = 8;
+					_input.kind = 5;
+				}
 			}
 		}
 		break;
@@ -1433,12 +1558,19 @@ void PCodeMachine::unitIO(bool write) {
 	const uint16 w = pop(), z = pop(), y = pop(), x = pop(), ptr = pop(), unit = pop();
 	const uint16 address = ptr + x;
 	if (unit == 13) {
-		_console->call(write, address, y, z, w);
+		if (!_console->call(write, address, y, z, w) && _transfer.choosing && !write && y == 11) {
+			_input.active = true;
+			_input.address = address;
+			_input.count = 1;
+			_input.position = 0;
+			_input.mode = 8;
+			_input.kind = 4;
+		}
 	} else if (unit == 4 || unit == 5 || (unit >= 9 && unit <= 12)) {
 		if (_diskPolicy == kResidentCOM) {
 			Common::String error;
 			uint16 result;
-			ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave);
+			ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave, activeTransferDisk());
 			if (!transport.unitIO(write, unit, address, y, z, w, result, error)) {
 				fail(error);
 				return;
@@ -1505,13 +1637,23 @@ void PCodeMachine::unitIO(bool write) {
 				uint consumed;
 				if (keyboardScreenProfile()) {
 					Common::Array<uint16> biosWords;
-					for (uint32 i = replayBegin; i < next.position(); ++i)
+					Common::Array<NativeServiceReplay::Event> keyboardEvents;
+					for (uint32 i = replayBegin; i < next.position(); ++i) {
 						if (_services.events()[i].type == NativeServiceReplay::kBiosAX)
 							biosWords.push_back(_services.events()[i].value);
-					if (!validateConsoleInput(request, true, &bytes, &biosWords))
+						if (_services.events()[i].type == NativeServiceReplay::kBiosAX ||
+							_services.events()[i].type == NativeServiceReplay::kTransferKey)
+							keyboardEvents.push_back(_services.events()[i]);
+					}
+					if (!validateConsoleInput(request, true, &bytes, &biosWords, &keyboardEvents))
 						return;
 					uint keyIndex = 0;
 					for (uint32 i = replayBegin; i < next.position(); ++i) {
+						if (_services.events()[i].type == NativeServiceReplay::kTransferKey) {
+							if (!replayLoaderEvents(i, i + 1))
+								return;
+							continue;
+						}
 						if (_services.events()[i].type != NativeServiceReplay::kBiosAX)
 							continue;
 						if (!replayLoaderEvents(i, i + 1))
@@ -1757,7 +1899,8 @@ bool PCodeMachine::consumeConsoleInput(const PendingInput &request, const Common
 }
 
 bool PCodeMachine::validateConsoleInput(const PendingInput &request, bool begin,
-										const Common::Array<byte> *replayBytes, const Common::Array<uint16> *biosWords) {
+	const Common::Array<byte> *replayBytes, const Common::Array<uint16> *biosWords,
+	const Common::Array<NativeServiceReplay::Event> *keyboardEvents) {
 	if (replayBytes && (!biosWords || biosWords->size() != replayBytes->size())) {
 		fail("Original unit-1 replay has an inconsistent BIOS word count");
 		return false;
@@ -1769,16 +1912,25 @@ bool PCodeMachine::validateConsoleInput(const PendingInput &request, bool begin,
 	Common::Array<uint16> queued(_loaderKeys);
 	PendingInput next = request;
 	uint position = 0;
+	uint physical = _keyPosition, replayEvent = 0;
+	bool choosing = _transfer.choosing;
 	bool first = begin;
 	// A failed later echo must not expose an earlier key or a DLE prefix.
 	// Stage the whole available sequence, including screen-dependent keys.
 	while (next.position < next.count) {
-		if (queued.empty()) {
-			const LoaderKeyboard::Action action = LoaderKeyboard::match(_nativeRevision, console.vram());
+		if (queued.empty() && !choosing) {
+			const LoaderKeyboard::Action action = LoaderKeyboard::match(keyboardMatchProfile(), console.keyboardVram());
 			if (action == LoaderKeyboard::kExit)
 				return true;
-			if (action == LoaderKeyboard::kAuxiliary) {
-				fail("Resident loader auxiliary SAVE-file chooser is not implemented");
+			if ((action == LoaderKeyboard::kTransferSource && transferProfile() == 3) ||
+				(action == LoaderKeyboard::kAuxiliary && transferProfile() == 5)) {
+				choosing = true;
+				console.drawTransferChoice(transferProfile());
+			} else if (action == LoaderKeyboard::kTransferSource || action == LoaderKeyboard::kTransferClose) {
+				queued.push_back(0x1c0d);
+			}
+			if (action == LoaderKeyboard::kAuxiliary && transferProfile() != 5) {
+				fail("Resident transfer requires an authenticated original program");
 				return false;
 			}
 			if (action == LoaderKeyboard::kValidationCode || action == LoaderKeyboard::kMagicWord) {
@@ -1786,15 +1938,44 @@ bool PCodeMachine::validateConsoleInput(const PendingInput &request, bool begin,
 					fail("Resident challenge requires the matching WIZ4.COM or WIZ5.COM at startup");
 					return false;
 				}
-				LoaderKeyboard::challengeKeys(_nativeRevision, console.vram(), _loaderData, queued);
-			} else {
+				LoaderKeyboard::challengeKeys(_nativeRevision, console.keyboardVram(), _loaderData, queued);
+			} else if (queued.empty()) {
 				LoaderKeyboard::enqueue(action, queued);
 			}
+		}
+		if (replayBytes && keyboardEvents) {
+			while (replayEvent < keyboardEvents->size() &&
+				(*keyboardEvents)[replayEvent].type == NativeServiceReplay::kTransferKey) {
+				if (!choosing) {
+					fail("Transfer choice replay is outside an original source chooser");
+					return false;
+				}
+				const byte choice = (*keyboardEvents)[replayEvent++].value;
+				byte source = 0;
+				if (LoaderKeyboard::transferChoice(transferProfile(), choice, source, queued))
+					choosing = false;
+			}
+		} else if (choosing) {
+			while (choosing && physical < _keys.size()) {
+				const byte choice = _keys[physical++];
+				byte source = 0;
+				if (LoaderKeyboard::transferChoice(transferProfile(), choice, source, queued))
+					choosing = false;
+			}
+		}
+		if (choosing) {
+			if (replayBytes) {
+				fail("Original keyboard replay lacks a physical source choice");
+				return false;
+			}
+			break;
 		}
 		byte key;
 		if (replayBytes) {
 			if (position == replayBytes->size())
 				break;
+			if (keyboardEvents)
+				++replayEvent;
 			if (!queued.empty() && (*biosWords)[position] != queued[0]) {
 				fail("Original keyboard replay differs from the resident loader BIOS word");
 				return false;
@@ -1803,9 +1984,9 @@ bool PCodeMachine::validateConsoleInput(const PendingInput &request, bool begin,
 		} else if (!queued.empty()) {
 			key = byte(queued[0]);
 		} else {
-			if (position == _keys.size() - _keyPosition)
+			if (physical == _keys.size())
 				break;
-			key = _keys[_keyPosition + position++];
+			key = _keys[physical++];
 		}
 		Common::Array<byte> one;
 		one.push_back(key);
@@ -1852,6 +2033,27 @@ bool PCodeMachine::writeConsoleOutput(uint16 unit, uint16 address, uint16 count,
 }
 
 void PCodeMachine::completeInput() {
+	if (_input.kind >= 4) {
+		const PendingInput pending = _input;
+		if (!prepareLoaderKeys())
+			return;
+		_input = PendingInput();
+		if (pending.kind == 4)
+			_console->call(false, pending.address, 11, 0, 0);
+		else if (pending.kind == 6)
+			delay(pending.address);
+		else if (!_scriptedInput || loaderKeyboardProfile()) {
+			if (!flushLoaderKeys()) {
+				if (_transfer.choosing)
+					_input = pending;
+				return;
+			}
+			if (!_scriptedInput)
+				clearKeys();
+			setIoResult(0);
+		}
+		return;
+	}
 	if (_input.kind == 3) {
 		if (keyboardScreenProfile()) {
 			if (!validateConsoleInput(_input, false))

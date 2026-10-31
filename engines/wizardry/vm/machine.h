@@ -25,6 +25,7 @@
 #include "wizardry/vm/codefile.h"
 #include "wizardry/vm/host.h"
 #include "wizardry/vm/services.h"
+#include "wizardry/vm/transfer.h"
 
 namespace Wizardry {
 
@@ -63,6 +64,10 @@ public:
 	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk,
 			  const Common::Array<byte> &saveDisk, Common::String &error);
 	bool loadLoaderCom(const Common::Array<byte> &com, Common::String &error);
+	bool loadTransferSource(byte source, const Common::Array<byte> &image, Common::String &error);
+	const TransferDisks &transferDisks() const { return _transfer; }
+	bool transferInProgress() const { return _transfer.transaction; }
+	byte transferProfile() const;
 	State run(uint32 instructionBudget = 20000);
 	void queueKey(byte key);
 	void clearKeys();
@@ -130,6 +135,7 @@ public:
 	bool keyAvailable() const override { return !_loaderKeys.empty() || _keyPosition < _keys.size(); }
 	bool pollKeyboard() override;
 	bool executionStopped() const override { return _state == kHalted || _state == kFault; }
+	bool keyboardBlocked() const override { return _transfer.choosing; }
 	bool tracedInput() const override { return _services.inputMode(); }
 	bool graphicsInit(bool first) override;
 	void diskWritten() override {
@@ -176,6 +182,7 @@ private:
 	PCodeFile _code;
 	Common::Array<byte> _disk;
 	Common::Array<byte> _saveDisk;
+	TransferDisks _transfer;
 	uint32 _sourceDiskCRC = 0;
 	uint32 _sourceSaveDiskCRC = 0;
 	DiskPolicy _diskPolicy = kLegacy632;
@@ -239,6 +246,11 @@ private:
 	bool originalServiceProfile() const;
 	bool loaderKeyboardProfile() const;
 	bool keyboardScreenProfile() const;
+	byte keyboardMatchProfile() const;
+	bool transferOwnerActive() const;
+	void finishTransferTransaction();
+	void consumeTransferChoice(byte key);
+	Common::Array<byte> *activeTransferDisk() { return _transfer.active ? &_transfer.images[_transfer.active - 1] : nullptr; }
 	bool prepareLoaderKeys();
 	bool replayLoaderEvents(uint32 begin, uint32 end);
 	byte inputKey() const;
@@ -258,8 +270,9 @@ private:
 	bool consumeConsoleInput(const PendingInput &request, const Common::Array<byte> &keys,
 		bool begin, bool requireComplete, uint &consumed);
 	bool validateConsoleInput(const PendingInput &request, bool begin,
-							  const Common::Array<byte> *replayBytes = nullptr,
-							  const Common::Array<uint16> *biosWords = nullptr);
+		const Common::Array<byte> *replayBytes = nullptr,
+		const Common::Array<uint16> *biosWords = nullptr,
+		const Common::Array<NativeServiceReplay::Event> *keyboardEvents = nullptr);
 	void prepareInput(uint16 mode);
 	void finishInput();
 	void moveBytes(uint16 destination, uint16 source, uint32 size, bool backward = false);

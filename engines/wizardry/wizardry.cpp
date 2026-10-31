@@ -69,7 +69,7 @@ Common::Error WizardryEngine::run() {
 	if (!disk.loadBytes(bytes, message) || !disk.readFile("SYSTEM.PASCAL", program, message))
 		return Common::Error(Common::kReadingFailed, message);
 	const bool useOriginalSave = (_description->gameNumber >= 4 ||
-								  (ConfMan.hasKey("original_save_disk") && ConfMan.getBool("original_save_disk")));
+												  (ConfMan.hasKey("original_save_disk") && ConfMan.getBool("original_save_disk")));
 	_machine.setOriginalMemory(useOriginalSave);
 	if (useOriginalSave) {
 		const Common::String saveName = Common::String::format("SAVE%u.DSK", _description->gameNumber);
@@ -94,6 +94,23 @@ Common::Error WizardryEngine::run() {
 		}
 	} else if (!_machine.boot(program, bytes, message)) {
 		return Common::Error(Common::kReadingFailed, message);
+	}
+	// Earlier scenarios are optional, immutable inputs. The original Move
+	// Characters command mutates private copies, committed with the target.
+	if (_machine.transferProfile()) {
+		for (byte source = 1; source <= TransferDisks::sourceCount(_machine.transferProfile()); ++source) {
+			const Common::String sourceName = Common::String::format("SAVE%u.DSK", source);
+			if (!Common::File::exists(Common::Path(sourceName)))
+				continue;
+			Common::File sourceFile;
+			if (!sourceFile.open(Common::Path(sourceName)) || sourceFile.size() != 1280 * 512)
+				return Common::Error(Common::kReadingFailed, "An earlier-scenario transfer disk could not be read");
+			Common::Array<byte> sourceBytes(uint32(sourceFile.size()));
+			if (sourceFile.read(sourceBytes.data(), sourceBytes.size()) != sourceBytes.size())
+				return Common::kReadingFailed;
+			if (!_machine.loadTransferSource(source, sourceBytes, message))
+				return Common::Error(Common::kReadingFailed, message);
+		}
 	}
 	if (_description->gameNumber >= 4) {
 		const Common::String comName = Common::String::format("WIZ%u.COM", _description->gameNumber);

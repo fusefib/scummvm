@@ -31,19 +31,26 @@ namespace Wizardry {
 /** Finite BIOS inputs for original keyboard-poll and delay service replay. */
 class NativeServiceReplay {
 public:
-	enum Type { kCall = 1,
-				kArgument,
-				kTick,
-				kKey,
-				kModifiers,
-				kEnd,
-				kBiosAX,
-				kCheckpoint };
-	enum { kGraphicsInit = 1,
-		   kReadInput = 256,
-		   kFlushInput = 257,
-		   kReadInputMode = 258 };
-	enum { kMaxEvents = 262144 };
+	enum Type {
+		kCall = 1,
+		kArgument,
+		kTick,
+		kKey,
+		kModifiers,
+		kEnd,
+		kBiosAX,
+		kCheckpoint,
+		kTransferKey
+	};
+	enum {
+		kGraphicsInit = 1,
+		kReadInput = 256,
+		kFlushInput = 257,
+		kReadInputMode = 258
+	};
+	enum {
+		kMaxEvents = 262144
+	};
 	struct Event {
 		byte type;
 		uint16 value;
@@ -52,7 +59,7 @@ public:
 	bool configure(const Common::Array<Event> &events, uint32 position, Common::String &error,
 		bool inputMode = false);
 	void clear() {
-		_enabled = _inputMode = _extendedInput = _unit1Input = false;
+		_enabled = _inputMode = _extendedInput = _unit1Input = _transferInput = false;
 		_events.clear();
 		_position = _calls = 0;
 		_checkpoint = 0;
@@ -61,6 +68,7 @@ public:
 	bool inputMode() const { return _inputMode; }
 	bool extendedInput() const { return _extendedInput; }
 	bool unit1Input() const { return _unit1Input; }
+	bool transferInput() const { return _transferInput; }
 	bool modeAwareRead() const { return _inputMode && nextType() == kCall && nextValue() == kReadInputMode; }
 	uint32 position() const { return _position; }
 	uint32 calls() const { return _calls; }
@@ -83,6 +91,7 @@ private:
 	bool _inputMode = false;
 	bool _extendedInput = false;
 	bool _unit1Input = false;
+	bool _transferInput = false;
 	uint32 _position = 0;
 	uint32 _calls = 0;
 	uint16 _checkpoint = 0;

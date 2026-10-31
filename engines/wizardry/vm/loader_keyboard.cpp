@@ -113,6 +113,56 @@ LoaderKeyboard::Action LoaderKeyboard::match(byte revision, const byte *vram) {
 	return kNone;
 }
 
+void LoaderKeyboard::drawTransferChoice(byte *vram, byte profile) {
+	// Original WIZ3.COM:0813 and WIZ5.COM:38B7 overlays bypass the guest's
+	// logical screen and modify only the two interlaced CGA banks.
+	assert(profile == 3 || profile == 5);
+	for (uint row = 0; row < (profile == 5 ? 4U : 12U); ++row) {
+		for (uint bank = 0; bank <= 0x2000; bank += 0x2000) {
+			if (profile == 5) {
+				memset(vram + 0x0a02 + bank + row * 80, 0, 4);
+				memset(vram + 0x0f02 + bank + row * 80, 0, 54);
+			} else {
+				memset(vram + 0x078c + bank + row * 80, 0, 56);
+			}
+		}
+	}
+	const LoaderTile *tiles = profile == 5 ? kVAuxiliaryChoiceTiles : kTransferChoiceTiles;
+	const uint count = profile == 5 ? ARRAYSIZE(kVAuxiliaryChoiceTiles) : ARRAYSIZE(kTransferChoiceTiles);
+	for (uint i = 0; i < count; ++i) {
+		const LoaderTile &tile = tiles[i];
+		const byte *pixels = kLoaderPixels[tile.pixels];
+		for (uint row = 0; row < 4; ++row) {
+			memcpy(vram + tile.offset + row * 80, pixels + row * 4, 2);
+			memcpy(vram + tile.offset + row * 80 + 0x2000, pixels + row * 4 + 2, 2);
+		}
+	}
+}
+
+bool LoaderKeyboard::transferChoice(byte profile, byte key, byte &source, Common::Array<uint16> &keys) {
+	assert(keys.empty() && (profile == 3 || profile == 5));
+	if (profile == 3) {
+		if (key != '1' && key != '2')
+			return false;
+		source = key - '0';
+	} else {
+		if (key >= 'a' && key < 'z')
+			key &= 0xdf;
+		if (key == 27) {
+			source = 0;
+			keys.push_back(27);
+			return true;
+		}
+		if (key < 'A' || key > 'C')
+			return false;
+		source = key - 'A' + 1;
+		keys.push_back(0x1e61);
+		keys.push_back(0x3062);
+	}
+	keys.push_back(0x1c0d);
+	return true;
+}
+
 bool LoaderKeyboard::validQueue(const Common::Array<uint16> &keys) {
 	if (keys.size() > 3)
 		return false;
@@ -123,6 +173,10 @@ bool LoaderKeyboard::validQueue(const Common::Array<uint16> &keys) {
 }
 
 bool LoaderKeyboard::validQueue(const Common::Array<uint16> &keys, byte revision, const Common::Array<byte> &data) {
+	if (revision == 5 && ((keys.size() == 1 && keys[0] == 27) ||
+						  (keys.size() == 2 && keys[0] == 0x3062 && keys[1] == 0x1c0d) ||
+						  (keys.size() == 3 && keys[0] == 0x1e61 && keys[1] == 0x3062 && keys[2] == 0x1c0d)))
+		return true;
 	if (validQueue(keys))
 		return true;
 	if (keys.empty() || keys.size() > 5 || data.size() != challengeDataSize(revision) || !challengeDataSize(revision))
@@ -202,7 +256,7 @@ void LoaderKeyboard::enqueue(Action action, Common::Array<uint16> &keys) {
 		keys.push_back(0x0332);
 		keys.push_back(0x1c0d);
 	}
-	if (action == kStart || action == kReturn || action == kSelectSave)
+	if (action == kStart || action == kReturn || action == kSelectSave || action == kTransferClose)
 		keys.push_back(0x1c0d);
 }
 

@@ -117,9 +117,10 @@ bool ResidentDiskTransport::callback(bool write, byte drive, uint16 block,
 		}
 		cylinder = 39;
 	}
-	Common::Array<byte> &image = drive || _selectedSave ? _save : _master;
+	Common::Array<byte> &image = _auxiliary ? *_auxiliary : drive || _selectedSave ? _save
+																				   : _master;
 	// COM opens WIZ with access mode 0 and masks DOS access-denied errors.
-	if (write && !drive && !_selectedSave)
+	if (write && !_auxiliary && !drive && !_selectedSave)
 		return true;
 	const uint32 position = (uint32(cylinder) * 16 + head * 8 + sector) * 512;
 	const uint32 bytes = uint32(count) * 512;

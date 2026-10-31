@@ -54,6 +54,8 @@ public:
 	byte textRow() const { return _state.textRow; }
 	void renderText(byte *pixels, uint pitch, const byte *font) const;
 	const byte *vram() const { return _state.vram; }
+	const byte *keyboardVram() const;
+	void drawTransferChoice(byte profile = 3);
 	uint16 visibleCell(uint index) const;
 	uint16 visibleAt(uint index) const { return visibleCell(index); }
 	void getRngState(uint16 state[4]) const;
