@@ -22,6 +22,7 @@
 #ifndef WIZARDRY_VM_CONSOLE_H
 #define WIZARDRY_VM_CONSOLE_H
 
+#include "wizardry/data/huffman.h"
 #include "wizardry/vm/host.h"
 
 namespace Wizardry {
@@ -65,6 +66,7 @@ private:
 	};
 	MachineHost &_host;
 	State _state;
+	HuffmanDecoder _huffman;
 	bool _failed;
 
 	bool fail(const char *message);
@@ -90,6 +92,8 @@ private:
 	void title(uint16 block);
 	void appendString(uint16 destination, uint16 source);
 	void stringPosition(uint16 buffer, uint16 pattern, uint16 text);
+	void loadHuffman(uint16 table);
+	void decodeHuffman(uint16 source, uint16 destination);
 };
 
 } // namespace Wizardry

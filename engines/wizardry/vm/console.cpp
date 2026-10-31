@@ -167,6 +167,12 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 	case 30:
 		putString(buffer, z);
 		break;
+	case 32:
+		loadHuffman(buffer);
+		break;
+	case 33:
+		decodeHuffman(buffer, z);
+		break;
 	default:
 		_host.fail(Common::String::format("CONUNIT: unsupported write selector %u", selector));
 		_failed = true;
@@ -516,6 +522,29 @@ void PCodeConsole::stringPosition(uint16 buffer, uint16 pattern, uint16 text) {
 		}
 	}
 	_host.writeWord(buffer, position);
+}
+
+void PCodeConsole::loadHuffman(uint16 table) {
+	byte bytes[HuffmanDecoder::kTableSize];
+	for (uint i = 0; i < sizeof(bytes); ++i)
+		bytes[i] = _host.readByte(uint16(table + i));
+	Common::String message;
+	if (!_huffman.load(bytes, sizeof(bytes), message))
+		fail(message.c_str());
+}
+
+void PCodeConsole::decodeHuffman(uint16 source, uint16 destination) {
+	Common::Array<byte> encoded(_huffman.maxEncodedSize()), decoded;
+	for (uint i = 0; i < encoded.size(); ++i)
+		encoded[i] = _host.readByte(uint16(source + i));
+	Common::String message;
+	uint32 bits = 0;
+	if (!_huffman.decodePascal(encoded.data(), encoded.size(), decoded, bits, message)) {
+		fail(message.c_str());
+		return;
+	}
+	for (uint i = 0; i < decoded.size(); ++i)
+		_host.writeByte(uint16(destination + i), decoded[i]);
 }
 
 } // namespace Wizardry
