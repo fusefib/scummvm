@@ -97,6 +97,44 @@ bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byt
 	return bootInternal(code, disk, &saveDisk, error);
 }
 
+bool PCodeMachine::loadCampaignImages(const Common::Array<byte> &master,
+	const Common::Array<byte> &save, Common::String &error) {
+	error.clear();
+	if (_instructions || _state != kRunning || _frames.size() != 1 || _services.enabled() ||
+		master.size() != _disk.size() || save.size() != _saveDisk.size()) {
+		error = "Campaign images can only be installed before a matching fresh boot executes";
+		return false;
+	}
+	if (master.size() < 5 || READ_LE_UINT16(master.data() + 3) != READ_LE_UINT16(_disk.data() + 3)) {
+		error = "Campaign disk geometry differs from the installed game";
+		return false;
+	}
+	UcsdDisk source, working;
+	if (!source.loadBytes(_disk, error) || !working.loadBytes(master, error))
+		return false;
+	Common::Array<byte> program;
+	const char *const files[] = {"SYSTEM.PASCAL", "SYSTEM.INTERP"};
+	for (uint i = 0; i < ARRAYSIZE(files); ++i) {
+		const char *name = files[i];
+		Common::Array<byte> first, second;
+		const UcsdDisk::Entry *a = source.find(name), *b = working.find(name);
+		if (!a || !b || a->firstBlock != b->firstBlock || a->size() != b->size() ||
+			!source.readFile(name, first, error) || !working.readFile(name, second, error) ||
+			first.size() != second.size() || memcmp(first.data(), second.data(), first.size())) {
+			error = "Campaign program or interpreter differs from the installed game";
+			return false;
+		}
+		if (!strcmp(name, "SYSTEM.PASCAL"))
+			program = first;
+	}
+	if (_diskPolicy == kResidentCOM && !validateDiskPair(program, master, save, _nativeRevision, error))
+		return false;
+	// Keep immutable source CRCs so ordinary ScummVM snapshots retain their identity.
+	_disk = master;
+	_saveDisk = save;
+	return true;
+}
+
 bool PCodeMachine::validateDiskPair(const Common::Array<byte> &code, const Common::Array<byte> &disk,
 	const Common::Array<byte> &saveDisk, byte revision, Common::String &error) const {
 	const uint32 masterSize = (revision == 5 ? 1280 : 640) * 512;
@@ -416,6 +454,16 @@ bool PCodeMachine::loadTransferSource(byte source, const Common::Array<byte> &im
 		return false;
 	}
 	return _transfer.attach(transferProfile(), source, image, error);
+}
+
+bool PCodeMachine::loadCampaignTransfers(const TransferDisks &transfer, Common::String &error) {
+	if (_instructions || _state != kRunning || !transfer.validate(transferProfile(), true, error)) {
+		if (error.empty())
+			error = "Campaign transfer disks require a matching fresh game";
+		return false;
+	}
+	_transfer = transfer;
+	return true;
 }
 
 bool PCodeMachine::transferOwnerActive() const {

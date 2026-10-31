@@ -2,6 +2,7 @@ MODULE := engines/wizardry
 
 MODULE_OBJS := \
 	wizardry.o \
+	campaign.o \
 	metaengine.o \
 	data/ucsd_disk.o \
 	data/huffman.o \

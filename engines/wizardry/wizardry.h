@@ -24,6 +24,7 @@
 
 #include "audio/mixer.h"
 #include "engines/engine.h"
+#include "wizardry/campaign.h"
 #include "wizardry/detection.h"
 #include "wizardry/vm/machine.h"
 
@@ -62,11 +63,22 @@ private:
 	Audio::SoundHandle _speakerHandle;
 	// Engine-owned; the mixer borrows it until stopSound detaches the handle.
 	Audio::QueuingAudioStream *_speakerStream = nullptr;
+	CampaignStore *_campaign = nullptr;
+	bool _campaignDirty = false, _campaignWarned = false;
+	bool _campaignRecoveryPending = false;
+	bool _campaignSelectionPending = false;
+	uint32 _nextCampaignRetry = 0;
 	void present();
 	void processEvents();
 	void updateTime();
 	void startSound();
 	void stopSound();
+	void onDiskWrite() override { _campaignDirty = true; }
+	bool onStateLoad(const PCodeMachine &candidate, Common::String &error) override;
+	CampaignStore::Identity campaignIdentity(const PCodeMachine &machine) const;
+	bool configureCampaign(Common::String &error);
+	bool flushCampaign(Common::String &error, bool force = false);
+	void campaignWarning(const Common::String &message);
 };
 
 } // namespace Wizardry

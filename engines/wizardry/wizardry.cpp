@@ -50,6 +50,7 @@ WizardryEngine::WizardryEngine(OSystem *system, const WizardryGameDescription *d
 
 WizardryEngine::~WizardryEngine() {
 	stopSound();
+	delete _campaign;
 }
 
 bool WizardryEngine::hasFeature(EngineFeature feature) const {
@@ -170,6 +171,9 @@ Common::Error WizardryEngine::run() {
 		Common::Error result = loadGameState(ConfMan.getInt("save_slot"));
 		if (result.getCode() != Common::kNoError)
 			return result;
+	} else if (!configureCampaign(message)) {
+		warning("Wizardry: campaign initialization failed: %s", message.c_str());
+		return Common::Error(Common::kReadingFailed, message);
 	}
 	debug(1, "Wizardry: memory policy %s, disk policy %u",
 		  _machine.originalMemory() ? "original" : "compatibility", unsigned(_machine.diskPolicy()));
@@ -180,6 +184,8 @@ Common::Error WizardryEngine::run() {
 			break;
 		updateTime();
 		PCodeMachine::State state = _machine.run(20000);
+		if (!flushCampaign(message) && !_campaignWarned)
+			campaignWarning(message);
 		_lastClock = _system->getMillis();
 		if (state == PCodeMachine::kPlayingSound) {
 			if (!_soundActive || _soundInstruction != _machine.instructions())
@@ -193,6 +199,7 @@ Common::Error WizardryEngine::run() {
 				  _machine.currentSegment(), _machine.currentProcedure(), _machine.currentIP());
 		previousState = state;
 		if (state == PCodeMachine::kFault) {
+			flushCampaign(message, true);
 			return Common::Error(Common::kUnknownError, _machine.error());
 		}
 		if (state == PCodeMachine::kHalted)
@@ -204,7 +211,127 @@ Common::Error WizardryEngine::run() {
 		saveAutosaveIfEnabled();
 	stopSound();
 	_ready = false;
+	if (!flushCampaign(message, true))
+		return Common::Error(Common::kWritingFailed, message);
 	return Common::kNoError;
+}
+
+bool WizardryEngine::configureCampaign(Common::String &error) {
+	error.clear();
+	delete _campaign;
+	_campaign = nullptr;
+	_campaignDirty = _campaignWarned = false;
+	_campaignRecoveryPending = false;
+	_campaignSelectionPending = false;
+	_nextCampaignRetry = 0;
+	if (_description->gameNumber < 1 || _description->gameNumber > 5)
+		return true;
+	if (_description->gameNumber >= 4 && _machine.diskPolicy() != PCodeMachine::kResidentCOM)
+		return true;
+	CampaignStore::Identity identity = campaignIdentity(_machine);
+	if (!CampaignStore::readSelectedCampaignId(*_saveFileMan, _targetName, identity, error))
+		return false;
+	CampaignStore *candidate = new CampaignStore(*_saveFileMan, _targetName, identity);
+	Common::Array<byte> master, save;
+	TransferDisks transfer = _machine.transferDisks();
+	const CampaignStore::LoadResult loaded = candidate->load(master, save, error, &transfer);
+	if (loaded == CampaignStore::kEmpty && identity.campaign)
+		error = "The selected Wizardry campaign is missing; restore a ScummVM saved game";
+	if (loaded == CampaignStore::kError || !error.empty() || (loaded != CampaignStore::kEmpty && (!_machine.loadCampaignImages(master, save, error) || !_machine.loadCampaignTransfers(transfer, error)))) {
+		delete candidate;
+		return false;
+	}
+	_campaign = candidate;
+	_machine.setCampaignID(identity.campaign);
+	_campaignDirty = loaded == CampaignStore::kEmpty || !_machine.transferDisks().empty();
+	debug(1, "Wizardry: campaign profile %u, generation %llu, %s", unsigned(identity.profile),
+		  static_cast<unsigned long long>(_campaign->generation()),
+		  loaded == CampaignStore::kEmpty ? "new" : "restored");
+	if (loaded == CampaignStore::kRecovered) {
+		campaignWarning("One Wizardry campaign copy was damaged. The last complete copy has been recovered.");
+		_campaignWarned = false;
+	}
+	return true;
+}
+
+CampaignStore::Identity WizardryEngine::campaignIdentity(const PCodeMachine &machine) const {
+	CampaignStore::Identity identity;
+	identity.gameNumber = _description->gameNumber;
+	identity.campaign = machine.campaignID();
+	identity.profile = machine.diskPolicy() == PCodeMachine::kResidentCOM ? CampaignStore::kPaired : (machine.originalMemory() ? CampaignStore::kOriginal : CampaignStore::kCompatibility);
+	identity.masterCRC = machine.sourceDiskCRC();
+	identity.saveCRC = machine.sourceSaveDiskCRC();
+	identity.masterSize = machine.disk().size();
+	identity.saveSize = machine.saveDisk().size();
+	return identity;
+}
+
+bool WizardryEngine::onStateLoad(const PCodeMachine &machine, Common::String &error) {
+	CampaignStore *candidate = new CampaignStore(*_saveFileMan, _targetName, campaignIdentity(machine));
+	Common::Array<byte> master, save;
+	const CampaignStore::LoadResult loaded = candidate->load(master, save, error);
+	const bool pending = machine.transferInProgress();
+	if (!pending) {
+		const bool saved = loaded == CampaignStore::kError ? candidate->recoverFromSnapshot(machine.disk(), machine.saveDisk(), error, &machine.transferDisks()) : candidate->commit(machine.disk(), machine.saveDisk(), error, &machine.transferDisks());
+		if (!saved || !candidate->select(error)) {
+			delete candidate;
+			return false;
+		}
+	}
+	delete _campaign;
+	_campaign = candidate;
+	_campaignRecoveryPending = pending && loaded == CampaignStore::kError;
+	_campaignSelectionPending = _campaignDirty = pending;
+	_campaignWarned = false;
+	_nextCampaignRetry = 0;
+	error.clear();
+	return true;
+}
+
+bool WizardryEngine::flushCampaign(Common::String &error, bool force) {
+	error.clear();
+	if (!_campaign || !_campaignDirty)
+		return true;
+	// Source deletion and destination insertion are one original operation.
+	// Even a forced quit/fault flush must not persist only half of that move.
+	if (_machine.transferInProgress())
+		return true;
+	const uint32 now = _system->getMillis();
+	if (!force && _nextCampaignRetry && int32(now - _nextCampaignRetry) < 0)
+		return true;
+	bool saved;
+	if (_campaignRecoveryPending) {
+		saved = _campaign->recoverFromSnapshot(_machine.disk(), _machine.saveDisk(), error,
+											   &_machine.transferDisks());
+		// The store retains permission to retry a failed recovery write after
+		// preserving the old raw copies. Keep recovery pending until verified.
+		if (!saved) {
+			_nextCampaignRetry = now + 5000;
+			return false;
+		}
+		_campaignRecoveryPending = false;
+	} else {
+		saved = _campaign->commit(_machine.disk(), _machine.saveDisk(), error, &_machine.transferDisks());
+	}
+	if (!saved || (_campaignSelectionPending && !_campaign->select(error))) {
+		_nextCampaignRetry = now + 5000;
+		return false;
+	}
+	_campaignSelectionPending = false;
+	_campaignDirty = _campaignWarned = false;
+	_nextCampaignRetry = 0;
+	debug(2, "Wizardry: campaign committed, generation %llu",
+		  static_cast<unsigned long long>(_campaign->generation()));
+	return true;
+}
+
+void WizardryEngine::campaignWarning(const Common::String &message) {
+	_campaignWarned = true;
+	warning("Wizardry: %s", message.c_str());
+	PauseToken pause = pauseEngine();
+	const Common::U32String text(message);
+	GUI::MessageDialog dialog(text);
+	dialog.runModal();
 }
 
 void WizardryEngine::processEvents() {

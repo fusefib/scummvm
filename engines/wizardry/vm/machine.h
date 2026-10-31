@@ -68,8 +68,11 @@ public:
 	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk, Common::String &error);
 	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk,
 		const Common::Array<byte> &saveDisk, Common::String &error);
+	bool loadCampaignImages(const Common::Array<byte> &master, const Common::Array<byte> &save,
+		Common::String &error);
 	bool loadLoaderCom(const Common::Array<byte> &com, Common::String &error);
 	bool loadTransferSource(byte source, const Common::Array<byte> &image, Common::String &error);
+	bool loadCampaignTransfers(const TransferDisks &transfer, Common::String &error);
 	const TransferDisks &transferDisks() const { return _transfer; }
 	bool transferInProgress() const { return _transfer.transaction; }
 	byte transferProfile() const;
