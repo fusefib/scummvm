@@ -26,6 +26,7 @@
 #include "common/util.h"
 #include "wizardry/data/ucsd_disk.h"
 #include "wizardry/vm/console.h"
+#include "wizardry/vm/disk_transport.h"
 #include "wizardry/vm/timing.h"
 
 namespace Wizardry {
@@ -87,6 +88,44 @@ PCodeMachine::~PCodeMachine() {
 }
 
 bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byte> &disk, Common::String &error) {
+	return bootInternal(code, disk, nullptr, error);
+}
+
+bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byte> &disk,
+						const Common::Array<byte> &saveDisk, Common::String &error) {
+	return bootInternal(code, disk, &saveDisk, error);
+}
+
+bool PCodeMachine::validateDiskPair(const Common::Array<byte> &code, const Common::Array<byte> &disk,
+	const Common::Array<byte> &saveDisk, byte revision, Common::String &error) const {
+	const uint32 masterSize = (revision == 5 ? 1280 : 640) * 512;
+	if (!_originalMemory || (revision != 1 && revision != 4 && revision != 5) ||
+		disk.size() != masterSize || saveDisk.size() != 1280 * 512 ||
+		READ_LE_UINT16(disk.data() + 3) != 0x0880 || READ_LE_UINT16(saveDisk.data() + 3) != 0x0880) {
+		error = "Resident paired disks require original memory and verified I-V image geometry";
+		return false;
+	}
+	UcsdDisk master, secondary;
+	if (!master.loadBytes(disk, error) || !secondary.loadBytes(saveDisk, error))
+		return false;
+	const char *const files[] = {"SYSTEM.PASCAL", "SYSTEM.INTERP"};
+	for (uint i = 0; i < ARRAYSIZE(files); ++i) {
+		const char *name = files[i];
+		const UcsdDisk::Entry *a = master.find(name), *b = secondary.find(name);
+		Common::Array<byte> first, second;
+		if (!a || !b || a->firstBlock != b->firstBlock || a->size() != b->size() ||
+			!master.readFile(name, first, error) || !secondary.readFile(name, second, error) ||
+			first.size() != second.size() || memcmp(first.data(), second.data(), first.size()) ||
+			(!strcmp(name, "SYSTEM.PASCAL") && (first.size() != code.size() || memcmp(first.data(), code.data(), code.size())))) {
+			error = "Paired disks must contain the same program and interpreter at matching blocks";
+			return false;
+		}
+	}
+	return true;
+}
+
+bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::Array<byte> &disk,
+								const Common::Array<byte> *saveDisk, Common::String &error) {
 	PCodeFile parsed;
 	if (!parsed.load(code, error))
 		return false;
@@ -101,15 +140,18 @@ bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byt
 		error = "Wizardry boot requires a verified SYSTEM.INTERP native service profile";
 		return false;
 	}
+	if (saveDisk && !validateDiskPair(code, disk, *saveDisk, revision, error))
+		return false;
 	_code = Common::move(parsed);
 	_nativeRevision = revision;
 	_originalWordHighByte = originalWordHighInitial;
-	// The supplied boot sectors pass DX=0880 (URD21=1272). IV/V can use
-	// that observed raw transport. I-III retain the 632-block control policy
-	// until the COM callback's separate SAVE-image switch is implemented.
-	_suppliedGeometry = revision >= 4 && READ_LE_UINT16(disk.data() + 3) == 0x0880;
+	_defaultDiskPolicy = revision >= 4 && READ_LE_UINT16(disk.data() + 3) == 0x0880 ? kRaw0880 : kLegacy632;
+	_diskPolicy = saveDisk ? kResidentCOM : _defaultDiskPolicy;
 	_services.clear();
 	_disk = disk;
+	_saveDisk = saveDisk ? *saveDisk : Common::Array<byte>();
+	_diskSelectedSave = false;
+	_sourceSaveDiskCRC = saveDisk ? wizardryCrc32(saveDisk->data(), saveDisk->size()) : 0;
 	_sourceDiskCRC = wizardryCrc32(disk.data(), disk.size());
 	memset(_memory, 0, sizeof(_memory));
 	_stack.clear();
@@ -210,6 +252,21 @@ void PCodeMachine::setIoResult(uint16 value) {
 }
 
 bool PCodeMachine::readDisk(uint32 block, uint32 size, byte *destination) {
+	return readDiskAt(block, size, destination, 0, 4);
+}
+
+bool PCodeMachine::readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) {
+	if (_diskPolicy == kResidentCOM) {
+		Common::String error;
+		uint16 result = 0;
+		ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave);
+		if (block > 65535 || size > 65535 || !transport.readBuffer(unit, block, size, destination, physicalOffset, result, error)) {
+			fail(error.empty() ? "Resident graphics disk request is too large" : error);
+			return false;
+		}
+		setIoResult(result);
+		return result == 0;
+	}
 	if (block > _disk.size() / 512 || size > _disk.size() - block * 512) {
 		setIoResult(10);
 		return false;
@@ -1248,9 +1305,20 @@ void PCodeMachine::unitIO(bool write) {
 	if (unit == 13) {
 		_console->call(write, address, y, z, w);
 	} else if (unit == 4 || unit == 5 || (unit >= 9 && unit <= 12)) {
+		if (_diskPolicy == kResidentCOM) {
+			Common::String error;
+			uint16 result;
+			ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave);
+			if (!transport.unitIO(write, unit, address, y, z, w, result, error)) {
+				fail(error);
+				return;
+			}
+			setIoResult(result);
+			return;
+		}
 		const uint32 offset = uint32(z) * 512;
 		const uint32 available = offset < _disk.size() ? MIN<uint32>(y, _disk.size() - offset) : 0;
-		if (_suppliedGeometry && !write) {
+		if (_diskPolicy == kRaw0880 && !write) {
 			// Original full-sector EOF reads leave the uncopied guest bytes
 			// intact and return IORESULT=0. A partial-sector EOF additionally
 			// depends on the DOS bounce buffer, which is not modeled here.
@@ -1265,7 +1333,7 @@ void PCodeMachine::unitIO(bool write) {
 		}
 		// Writes are private and bounded by the supplied image; this port
 		// does not reproduce DOS file growth or its ignored error flags.
-		if (offset > _disk.size() || available != y || (!_suppliedGeometry && (z >= 632 || offset + y > 632U * 512))) {
+		if (offset > _disk.size() || available != y || (_diskPolicy == kLegacy632 && (z >= 632 || offset + y > 632U * 512))) {
 			setIoResult(10);
 			return;
 		}

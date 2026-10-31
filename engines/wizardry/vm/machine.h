@@ -49,9 +49,16 @@ public:
 		kFault,
 		kPlayingSound
 	};
+	enum DiskPolicy {
+		kLegacy632,
+		kRaw0880,
+		kResidentCOM
+	};
 	PCodeMachine();
 	~PCodeMachine() override;
 	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk, Common::String &error);
+	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk,
+			  const Common::Array<byte> &saveDisk, Common::String &error);
 	State run(uint32 instructionBudget = 20000);
 	void queueKey(byte key);
 	void clearKeys();
@@ -96,6 +103,10 @@ public:
 	PCodeConsole &console() { return *_console; }
 	const PCodeConsole &console() const { return *_console; }
 	const Common::Array<byte> &disk() const { return _disk; }
+	const Common::Array<byte> &saveDisk() const { return _saveDisk; }
+	DiskPolicy diskPolicy() const { return _diskPolicy; }
+	bool diskSelectedSave() const { return _diskSelectedSave; }
+	uint32 sourceSaveDiskCRC() const { return _sourceSaveDiskCRC; }
 	const PCodeFile &codeFile() const { return _code; }
 	bool canSuspend() const {
 		return _state != kFault && _state != kHalted && !_frames.empty() &&
@@ -107,7 +118,8 @@ public:
 	void writeByte(uint16 address, byte value) override;
 	void writeWord(uint16 address, uint16 value) override;
 	bool readDisk(uint32 block, uint32 size, byte *destination) override;
-	uint16 diskCapacity() const override { return _suppliedGeometry ? 1272 : 632; }
+	bool readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) override;
+	uint16 diskCapacity() const override { return _diskPolicy == kLegacy632 ? 632 : 1272; }
 	bool keyAvailable() const override { return _keyPosition < _keys.size(); }
 	bool pollKeyboard() override;
 	bool tracedInput() const override { return _services.inputMode(); }
@@ -151,7 +163,12 @@ private:
 	};
 	PCodeFile _code;
 	Common::Array<byte> _disk;
+	Common::Array<byte> _saveDisk;
 	uint32 _sourceDiskCRC = 0;
+	uint32 _sourceSaveDiskCRC = 0;
+	DiskPolicy _diskPolicy = kLegacy632;
+	DiskPolicy _defaultDiskPolicy = kLegacy632;
+	bool _diskSelectedSave = false;
 	byte _memory[65536];
 	byte _originalWordHighByte = 0;
 	Common::Array<uint16> _stack;
@@ -173,7 +190,6 @@ private:
 	bool _preserveLocals = false;
 	bool _originalMemory = false;
 	byte _nativeRevision = 0;
-	bool _suppliedGeometry = false;
 	NativeServiceReplay _services;
 	bool _realtime = false;
 	byte _biosModifiers = 0;
@@ -223,6 +239,10 @@ private:
 	void moveWords(uint16 destination, uint16 source, uint16 count);
 	void fillMemory(uint16 destination, byte value, uint32 size);
 	Common::String pascalString(uint16 address) const;
+	bool bootInternal(const Common::Array<byte> &code, const Common::Array<byte> &disk,
+		const Common::Array<byte> *saveDisk, Common::String &error);
+	bool validateDiskPair(const Common::Array<byte> &code, const Common::Array<byte> &disk,
+		const Common::Array<byte> &saveDisk, byte revision, Common::String &error) const;
 };
 
 } // namespace Wizardry

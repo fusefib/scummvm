@@ -7,6 +7,7 @@ MODULE_OBJS := \
 	data/huffman.o \
 	vm/codefile.o \
 	vm/machine.o \
+	vm/disk_transport.o \
 	vm/arena.o \
 	vm/timing.o \
 	vm/random.o \

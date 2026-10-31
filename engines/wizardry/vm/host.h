@@ -39,6 +39,9 @@ public:
 	virtual void writeByte(uint16 address, byte value) = 0;
 	virtual void writeWord(uint16 address, uint16 value) = 0;
 	virtual bool readDisk(uint32 block, uint32 size, byte *destination) = 0;
+	virtual bool readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) {
+		return readDisk(block, size, destination);
+	}
 	virtual uint16 diskCapacity() const { return 632; }
 	virtual bool keyAvailable() const = 0;
 	virtual bool pollKeyboard() { return keyAvailable(); }

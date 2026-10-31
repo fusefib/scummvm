@@ -20,6 +20,7 @@
  */
 
 #include "common/endian.h"
+#include "wizardry/vm/disk_transport.h"
 #include "wizardry/vm/machine.h"
 
 namespace Wizardry {
@@ -162,11 +163,26 @@ bool PCodeMachine::loadSegment(byte sn) {
 	const uint16 base = oldTop - s->code.size();
 	const uint16 descriptor = 0xe13e + 6 * sn;
 	const uint32 offset = uint32(readWord(descriptor + 2)) * 512;
-	if (readWord(descriptor + 4) != s->code.size() || offset > _disk.size() || s->code.size() > _disk.size() - offset) {
+	if (readWord(descriptor + 4) != s->code.size() || (_diskPolicy != kResidentCOM &&
+													   (offset > _disk.size() || s->code.size() > _disk.size() - offset))) {
 		fail("Invalid code segment disk descriptor");
 		return false;
 	}
-	memcpy(_memory + base, _disk.data() + offset, s->code.size());
+	if (_diskPolicy == kResidentCOM) {
+		Common::String error;
+		uint16 result;
+		ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave);
+		// The original clears DX and loads DL: the adjacent byte is not a unit.
+		if (!transport.unitIO(false, readByte(descriptor), base, s->code.size(),
+							  readWord(descriptor + 2), 0, result, error) ||
+			result) {
+			if (error.empty())
+				error = Common::String::format("Resident overlay read returned IORESULT %u", result);
+			fail(error);
+			return false;
+		}
+	} else
+		memcpy(_memory + base, _disk.data() + offset, s->code.size());
 	writeWord(kSavedArenaTable + 2 * sn, oldTop);
 	writeWord(kDictionaryTable + 2 * sn, oldTop - 2);
 	writeWord(kCodeBaseTable + 2 * sn, base);

@@ -131,7 +131,9 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 		break;
 	case 14: {
 		byte charset[kCharsetSize];
-		if (!_host.readDisk(z, sizeof(charset), charset))
+		const uint16 physical = _host.nativeRevision() == 5 ? 0xa1a2 : _host.nativeRevision() == 4 ? 0x872a
+																								   : 0x85da;
+		if (!_host.readDiskAt(z, sizeof(charset), charset, physical, _host.readWord(0xe0e2)))
 			return fail("could not read the complete charset");
 		memcpy(_state.charset, charset, sizeof(charset));
 		break;
@@ -625,7 +627,8 @@ void PCodeConsole::portraits(uint16 buffer, uint16 address) {
 	for (uint i = 0; i < 4; ++i)
 		_state.monsterPicture[i] = 0xffff;
 	for (uint group = 0; group < count; ++group) {
-		if (!_host.readDisk(uint32(_state.monsterBlock) + pictures[group] - 1, 512, _state.monsterRecord[group])) {
+		if (!_host.readDiskAt(uint32(_state.monsterBlock) + pictures[group] - 1, 512,
+							  _state.monsterRecord[group], 0x7252 + group * 512, _host.readWord(0xe0e2))) {
 			fail("could not read a complete monster portrait");
 			return;
 		}
@@ -647,7 +650,7 @@ void PCodeConsole::title(uint16 block) {
 		return;
 	}
 	byte data[56 * 80 + 512];
-	if (!_host.readDisk(block, sizeof(data), data)) {
+	if (!_host.readDiskAt(block, sizeof(data), data, 0x7252, _host.readWord(0xe0e2))) {
 		fail("could not read the complete title bitmap");
 		return;
 	}
