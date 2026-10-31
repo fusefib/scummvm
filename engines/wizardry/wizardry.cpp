@@ -1,0 +1,159 @@
+/* ScummVM - Graphic Adventure Engine
+ *
+ * ScummVM is the legal property of its developers, whose names
+ * are too numerous to list here. Please refer to the COPYRIGHT
+ * file distributed with this source distribution.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+#include "wizardry/wizardry.h"
+#include "common/config-manager.h"
+#include "common/debug.h"
+#include "common/events.h"
+#include "common/file.h"
+#include "common/system.h"
+#include "engines/util.h"
+#include "graphics/cursorman.h"
+#include "graphics/paletteman.h"
+#include "wizardry/data/ucsd_disk.h"
+#include "wizardry/vm/console.h"
+
+namespace Wizardry {
+
+WizardryEngine::WizardryEngine(OSystem *system, const WizardryGameDescription *description) : Engine(system), _description(description) {
+	memset(_pixels, 0, sizeof(_pixels));
+}
+
+bool WizardryEngine::hasFeature(EngineFeature feature) const {
+	return feature == kSupportsReturnToLauncher;
+}
+
+Common::Error WizardryEngine::run() {
+	if (_description->gameNumber < 1 || _description->gameNumber > 3)
+		return Common::Error(Common::kUnsupportedGameidError, "Wizardry IV and V require their revised native drivers");
+	const Common::String name = Common::String::format("WIZ%u.DSK", _description->gameNumber);
+	Common::File file;
+	if (!file.open(Common::Path(name)))
+		return Common::Error(Common::kNoGameDataFoundError, name);
+	if (file.size() < 6 * 512 || file.size() > 2 * 1024 * 1024)
+		return Common::Error(Common::kReadingFailed, "Unexpected disk image size");
+	Common::Array<byte> bytes(uint32(file.size()));
+	if (file.read(bytes.data(), bytes.size()) != bytes.size())
+		return Common::kReadingFailed;
+	UcsdDisk disk;
+	Common::String message;
+	Common::Array<byte> program;
+	if (!disk.loadBytes(bytes, message) || !disk.readFile("SYSTEM.PASCAL", program, message) ||
+		!_machine.boot(program, bytes, message))
+		return Common::Error(Common::kReadingFailed, message);
+	debug(1, "Wizardry %u: loaded %u p-code segments from %s", _description->gameNumber,
+		  _machine.codeFile().segments().size(), name.c_str());
+	initGraphics(320, 200);
+	CursorMan.showMouse(false);
+	const byte palette[] = {0, 0, 0, 0, 170, 170, 170, 0, 0, 255, 255, 255};
+	_system->getPaletteManager()->setPalette(palette, 0, 4);
+	PCodeMachine::State previousState = PCodeMachine::kHalted;
+	while (!shouldQuit()) {
+		processEvents();
+		if (shouldQuit())
+			break;
+		if (_machine.keyAvailable())
+			_delayEnd = 0; // CONUNIT WR19 ends early on buffered input.
+		if (_delayEnd && int32(_system->getMillis() - _delayEnd) < 0) {
+			_system->delayMillis(10);
+			continue;
+		}
+		_delayEnd = 0;
+		PCodeMachine::State state = _machine.run(20000);
+		present();
+		if (state != previousState && state == PCodeMachine::kWaitingForInput)
+			debug(2, "Wizardry: input wait at segment %u, procedure %u, IP 0x%04x",
+				  _machine.currentSegment(), _machine.currentProcedure(), _machine.currentIP());
+		previousState = state;
+		if (state == PCodeMachine::kFault)
+			return Common::Error(Common::kUnknownError, _machine.error());
+		if (state == PCodeMachine::kHalted)
+			break;
+		if (state == PCodeMachine::kDelayed && !_machine.keyAvailable()) {
+			// Native WR19 waits for 2*z BIOS ticks (18.2 ticks/second).
+			uint32 milliseconds = uint32(_machine.delayTicks()) * 110;
+			_delayEnd = _system->getMillis() + milliseconds;
+		}
+		if (state != PCodeMachine::kRunning)
+			_system->delayMillis(10);
+	}
+	return Common::kNoError;
+}
+
+void WizardryEngine::processEvents() {
+	Common::Event event;
+	while (_eventMan->pollEvent(event)) {
+		if (event.type != Common::EVENT_KEYDOWN)
+			continue;
+		if (event.kbd.keycode == Common::KEYCODE_F5) {
+			openMainMenuDialog();
+			continue;
+		}
+		byte key = 0;
+		switch (event.kbd.keycode) {
+		case Common::KEYCODE_LEFT:
+			key = 0x09;
+			break;
+		case Common::KEYCODE_DOWN:
+			key = 0x0a;
+			break;
+		case Common::KEYCODE_UP:
+			key = 0x0b;
+			break;
+		case Common::KEYCODE_RIGHT:
+			key = 0x0c;
+			break;
+		case Common::KEYCODE_RETURN:
+		case Common::KEYCODE_KP_ENTER:
+			key = 0x0d;
+			break;
+		case Common::KEYCODE_ESCAPE:
+			key = 0x1b;
+			break;
+		case Common::KEYCODE_BACKSPACE:
+			key = 0x08;
+			break;
+		default:
+			if (!(event.kbd.flags & (Common::KBD_CTRL | Common::KBD_ALT | Common::KBD_META)) &&
+				event.kbd.ascii >= 32 && event.kbd.ascii <= 126) {
+				key = event.kbd.ascii;
+				if (key >= 'a' && key <= 'z')
+					key -= 'a' - 'A';
+			}
+			break;
+		}
+		if (key)
+			_machine.queueKey(key);
+	}
+}
+
+void WizardryEngine::present() {
+	const byte *vram = _machine.console().vram();
+	for (uint y = 0; y < 200; ++y) {
+		const uint row = (y & 1) * 0x2000 + (y >> 1) * 80;
+		for (uint x = 0; x < 320; ++x)
+			_pixels[y * 320 + x] = (vram[row + (x >> 2)] >> (6 - 2 * (x & 3))) & 3;
+	}
+	_system->copyRectToScreen(_pixels, 320, 0, 0, 320, 200);
+	_system->updateScreen();
+}
+
+} // namespace Wizardry

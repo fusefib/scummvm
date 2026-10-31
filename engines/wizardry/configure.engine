@@ -1,0 +1,2 @@
+# DOS Wizardry I-V interpreter.
+add_engine wizardry "Wizardry I-V" no
