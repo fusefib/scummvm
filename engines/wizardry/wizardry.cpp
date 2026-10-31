@@ -29,6 +29,7 @@
 #include "common/system.h"
 #include "engines/util.h"
 #include "graphics/cursorman.h"
+#include "graphics/fonts/dosfont.h"
 #include "graphics/paletteman.h"
 #include "wizardry/data/ucsd_disk.h"
 #include "wizardry/vm/console.h"
@@ -38,9 +39,13 @@ namespace Wizardry {
 
 WizardryEngine::WizardryEngine(OSystem *system, const WizardryGameDescription *description) : Engine(system), _description(description) {
 	memset(_pixels, 0, sizeof(_pixels));
+	if (_description->gameNumber == 1)
+		_machine.setObserver(this);
 }
 
-WizardryEngine::~WizardryEngine() { stopSound(); }
+WizardryEngine::~WizardryEngine() {
+	stopSound();
+}
 
 bool WizardryEngine::hasFeature(EngineFeature feature) const {
 	return feature == kSupportsReturnToLauncher;
@@ -118,8 +123,9 @@ Common::Error WizardryEngine::run() {
 			debug(2, "Wizardry: input wait at segment %u, procedure %u, IP 0x%04x",
 				  _machine.currentSegment(), _machine.currentProcedure(), _machine.currentIP());
 		previousState = state;
-		if (state == PCodeMachine::kFault)
+		if (state == PCodeMachine::kFault) {
 			return Common::Error(Common::kUnknownError, _machine.error());
+		}
 		if (state == PCodeMachine::kHalted)
 			break;
 		if (state != PCodeMachine::kRunning)
@@ -250,13 +256,26 @@ void WizardryEngine::stopSound() {
 }
 
 void WizardryEngine::present() {
-	const byte *vram = _machine.console().vram();
-	for (uint y = 0; y < 200; ++y) {
-		const uint row = (y & 1) * 0x2000 + (y >> 1) * 80;
-		for (uint x = 0; x < 320; ++x)
-			_pixels[y * 320 + x] = (vram[row + (x >> 2)] >> (6 - 2 * (x & 3))) & 3;
+	const PCodeConsole &console = _machine.console();
+	const uint16 width = console.textOutput() ? 640 : 320;
+	if (_screenWidth != width) {
+		initGraphics(width, 200);
+		_screenWidth = width;
+		const byte foreground = console.textOutput() ? 170 : 255;
+		const byte palette[] = {0, 0, 0, 0, 170, 170, 170, 0, 0, foreground, foreground, foreground};
+		_system->getPaletteManager()->setPalette(palette, 0, 4);
 	}
-	_system->copyRectToScreen(_pixels, 320, 0, 0, 320, 200);
+	if (console.textOutput()) {
+		console.renderText(_pixels, width, Graphics::DosFont::fontData_PCBIOS);
+	} else {
+		const byte *vram = console.vram();
+		for (uint y = 0; y < 200; ++y) {
+			const uint row = (y & 1) * 0x2000 + (y >> 1) * 80;
+			for (uint x = 0; x < 320; ++x)
+				_pixels[y * 320 + x] = (vram[row + (x >> 2)] >> (6 - 2 * (x & 3))) & 3;
+		}
+	}
+	_system->copyRectToScreen(_pixels, width, 0, 0, width, 200);
 	_system->updateScreen();
 }
 

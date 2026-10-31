@@ -47,6 +47,7 @@ public:
 	virtual bool pollKeyboard() { return keyAvailable(); }
 	virtual bool tracedInput() const { return false; }
 	virtual byte nativeRevision() const { return 0; }
+	virtual void diskWritten() {}
 	virtual bool graphicsInit(bool) { return true; }
 	virtual void setIoResult(uint16 value) = 0;
 	// An availability poll is complete before this cooperative yield.

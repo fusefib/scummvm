@@ -38,6 +38,98 @@ PCodeConsole::PCodeConsole(MachineHost &host, const PCodeConsole &source)
 	  _classicCache(source._classicCache), _failed(false) {
 }
 
+bool PCodeConsole::graphicsCharacter(byte character) {
+	_failed = false;
+	const byte revision = _host.nativeRevision();
+	if (!_state.initialized || (revision != 1 && revision != 4 && revision != 5))
+		return fail("graphics error-window output requires an initialized original profile");
+	const uint16 window = 0xf500;
+	if (_state.errorPrefix) {
+		const uint16 word = uint16(_state.errorPrefix) << 8 | character;
+		_state.errorPrefix = 0;
+		putChar(window, word);
+	} else if (character & 0x80) {
+		_state.errorPrefix = character;
+	} else if (character == '~') {
+		_host.writeWord(window, _state.head);
+		_host.writeByte(window + 8, 0x3f);
+		_host.writeByte(window + 2, 0);
+		_host.writeByte(window + 3, 10);
+		_host.writeByte(window + 4, 40);
+		_host.writeByte(window + 5, 5);
+		_host.writeWord(window + 6, 0);
+		for (uint i = 0; i < 114; ++i)
+			_host.writeWord(window + 10 + 2 * i, 0x2020);
+	} else if (character == '{' || character == '}') {
+		// INTERP:2571 calls the layout body without changing DS:E800.
+		const uint16 head = _state.head;
+		layout(character == '{' ? window : head);
+		_state.head = head;
+	} else if (character == 13) {
+		_host.writeByte(window + 6, 0);
+		byte row = _host.readByte(window + 7) + 1;
+		if (row == byte(_host.readByte(window + 5) - 2))
+			row = 0;
+		_host.writeByte(window + 7, row);
+	} else if (character != 10) {
+		if (character >= 'a' && character <= 'z')
+			character -= 'a' - 'A';
+		putChar(window, character);
+	}
+	return !_failed;
+}
+
+void PCodeConsole::resetText() {
+	memset(_state.text, ' ', sizeof(_state.text));
+	_state.textColumn = _state.textRow = 0;
+	_state.textOutput = true;
+}
+
+void PCodeConsole::teletypeCharacter(byte character) {
+	if (!_state.textOutput)
+		resetText();
+	// INT 10h/AH=0Eh on the declared page-zero, 80-column text host.
+	if (character == 7)
+		return;
+	if (character == 8) {
+		if (_state.textColumn)
+			--_state.textColumn;
+	} else if (character == 13) {
+		_state.textColumn = 0;
+	} else if (character == 10) {
+		++_state.textRow;
+	} else if (character == 9) {
+		do {
+			teletypeCharacter(' ');
+		} while (_state.textColumn & 7);
+		return;
+	} else {
+		_state.text[_state.textRow * kTextCols + _state.textColumn++] = character;
+		if (_state.textColumn == kTextCols) {
+			_state.textColumn = 0;
+			++_state.textRow;
+		}
+	}
+	if (_state.textRow == kRows) {
+		memmove(_state.text, _state.text + kTextCols, kTextCells - kTextCols);
+		memset(_state.text + kTextCells - kTextCols, ' ', kTextCols);
+		--_state.textRow;
+	}
+}
+
+void PCodeConsole::renderText(byte *pixels, uint pitch, const byte *font) const {
+	for (uint row = 0; row < kRows; ++row) {
+		for (uint column = 0; column < kTextCols; ++column) {
+			const byte *glyph = font + 8 * _state.text[row * kTextCols + column];
+			for (uint y = 0; y < 8; ++y) {
+				const byte bits = row == _state.textRow && column == _state.textColumn && y >= 6 ? 0xff : glyph[y];
+				for (uint x = 0; x < 8; ++x)
+					pixels[(row * 8 + y) * pitch + column * 8 + x] = (bits & (0x80 >> x)) ? 3 : 0;
+			}
+		}
+	}
+}
+
 static uint16 classicBase(byte revision) {
 	return revision == 4 ? 0x73a2 : 0x7252;
 }
@@ -160,9 +252,14 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 		memcpy(_state.charset, charset, sizeof(charset));
 		break;
 	}
-	case 15:
+	case 15: {
+		const bool clear = _host.nativeRevision() < 4 || (_host.readWord(0xe8fe) & 255);
+		_host.writeWord(0xe8fe, 0);
 		_state.initialized = false;
+		if (clear || !_state.textOutput)
+			resetText();
 		break;
+	}
 	case 17:
 		if (_portraitPolicy)
 			backupPortrait(buffer, z);
@@ -274,6 +371,9 @@ void PCodeConsole::init(uint16 buffer) {
 		return;
 	}
 	_host.setIoResult(0);
+	_state.textOutput = false;
+	_state.textColumn = _state.textRow = 0;
+	memset(_state.text, 0, sizeof(_state.text));
 	if (first) {
 		_host.writeWord(0xe8fe, 0x00ff);
 		_host.writeWord(0xe816, 0xe900);

@@ -39,11 +39,20 @@ public:
 		   kCells = 1000,
 		   kVramSize = 0x4000,
 		   kCharsetSize = 5120,
-		   kLargePortraitSize = 3072 };
+		   kLargePortraitSize = 3072,
+		   kTextCols = 80,
+		   kTextCells = 2000 };
 	explicit PCodeConsole(MachineHost &host, NativeRandom::Algorithm algorithm = NativeRandom::kFourWord,
 						  bool classicCache = false);
 	PCodeConsole(MachineHost &host, const PCodeConsole &source);
 	bool call(bool write, uint16 buffer, uint16 selector, uint16 z, uint16 w);
+	bool graphicsCharacter(byte character);
+	void teletypeCharacter(byte character);
+	bool textOutput() const { return _state.textOutput; }
+	byte textCell(uint index) const { return index < kTextCells ? _state.text[index] : 0; }
+	byte textColumn() const { return _state.textColumn; }
+	byte textRow() const { return _state.textRow; }
+	void renderText(byte *pixels, uint pitch, const byte *font) const;
 	const byte *vram() const { return _state.vram; }
 	uint16 visibleCell(uint index) const;
 	uint16 visibleAt(uint index) const { return visibleCell(index); }
@@ -52,6 +61,8 @@ public:
 	NativeRandom::Algorithm rngAlgorithm() const { return _rngAlgorithm; }
 	byte portraitPolicy() const { return _portraitPolicy; }
 	bool classicPortraitCache() const { return _classicCache; }
+	bool graphicsOutput() const { return _state.initialized; }
+	byte errorPrefix() const { return _state.errorPrefix; }
 
 private:
 	struct State {
@@ -68,6 +79,10 @@ private:
 		bool initialized;
 		byte largePortrait[2][kLargePortraitSize];
 		byte portraitOrientation; // Logical slot containing physical CS:71A2.
+		byte errorPrefix;         // Original CS:2570/2690/2770, retained by WR1 and WR15.
+		byte text[kTextCells];
+		byte textColumn, textRow;
+		bool textOutput;
 	};
 	struct Window {
 		uint16 address, next;
@@ -83,6 +98,7 @@ private:
 	bool _failed;
 
 	bool fail(const char *message);
+	void resetText();
 	bool readWindow(uint16 address, Window &window);
 	uint16 windowCell(const Window &window, uint index) const;
 	void advanceRandom(uint16 buffer);

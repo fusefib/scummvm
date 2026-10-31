@@ -368,8 +368,14 @@ bool PCodeMachine::setInputReplay(const Common::Array<NativeServiceReplay::Event
 		error = "Native input replay requires the verified original RNG and portrait profiles and an empty keyboard boundary";
 		return false;
 	}
-	if (!_services.configure(events, 0, error, true))
+	NativeServiceReplay next;
+	if (!next.configure(events, 0, error, true))
 		return false;
+	if (next.unit1Input() && !_originalMemory) {
+		error = "Original unit-1 replay requires original memory";
+		return false;
+	}
+	_services = Common::move(next);
 	clearKeys();
 	return true;
 }
@@ -1344,8 +1350,14 @@ void PCodeMachine::unitIO(bool write) {
 			else
 				writeByte(uint16(address + i), _disk[offset + i]);
 		}
+		if (write && y)
+			diskWritten();
 		setIoResult(0);
 	} else if (unit == 1 || unit == 2) {
+		if (write && _originalMemory && originalServiceProfile()) {
+			writeConsoleOutput(unit, address, y, w);
+			return;
+		}
 		if (!write && _services.inputMode()) {
 			if (!y) {
 				setIoResult(0);
@@ -1354,6 +1366,24 @@ void PCodeMachine::unitIO(bool write) {
 			Common::Array<byte> bytes;
 			Common::String error;
 			const bool modeAware = _services.modeAwareRead();
+			if (unit == 1 && modeAware) {
+				NativeServiceReplay next = _services;
+				if (!next.readInput(unit, y, bytes, error, w, address, readByte(0xe130))) {
+					fail(error);
+					return;
+				}
+				PendingInput request;
+				request.active = true;
+				request.address = address;
+				request.count = y;
+				request.kind = 3;
+				request.mode = w;
+				uint consumed;
+				if (!consumeConsoleInput(request, bytes, true, true, consumed))
+					return;
+				_services = Common::move(next);
+				return;
+			}
 			if (!_services.readInput(unit, y, bytes, error, w, address, readByte(0xe130))) {
 				fail(error);
 				return;
@@ -1363,15 +1393,38 @@ void PCodeMachine::unitIO(bool write) {
 			for (uint i = 0; i < bytes.size(); ++i) {
 				if (_observer)
 					_observer->beforeInput(bytes[i]);
+				if (modeAware)
+					setIoResult(0);
 				writeByte(uint16(address + i), bytes[i]);
 				_idleSnapshot = false;
 			}
 			if (modeAware)
 				finishInput();
-			setIoResult(0);
+			if (!modeAware)
+				setIoResult(0);
 			return;
 		}
-		setIoResult(0);
+		if (!write && unit == 1 && _originalMemory && originalServiceProfile() && y) {
+			PendingInput request;
+			request.active = true;
+			request.address = address;
+			request.count = y;
+			request.kind = 3;
+			request.mode = w;
+			const uint available = MIN<uint>(y, _keys.size() - _keyPosition);
+			Common::Array<byte> bytes;
+			for (uint i = 0; i < available; ++i)
+				bytes.push_back(_keys[_keyPosition + i]);
+			uint consumed;
+			if (!consumeConsoleInput(request, bytes, true, false, consumed))
+				return;
+			_keyPosition += consumed;
+			if (_input.active)
+				yieldForInput();
+			return;
+		}
+		if (write || !y || unit == 1 || !_originalMemory)
+			setIoResult(0);
 		if (!write) {
 			if (!y)
 				return;
@@ -1402,7 +1455,189 @@ void PCodeMachine::finishInput() {
 	writeByte(0xe21c, readByte(0x0630));
 }
 
+class StagedConsoleHost : public MachineHost {
+public:
+	StagedConsoleHost(Common::Array<byte> &memory, byte revision) : _memory(memory), _revision(revision) {}
+	byte readByte(uint16 address) const override { return _memory[address]; }
+	uint16 readWord(uint16 address) const override { return readByte(address) | uint16(readByte(uint16(address + 1))) << 8; }
+	void writeByte(uint16 address, byte value) override { _memory[address] = value; }
+	void writeWord(uint16 address, uint16 value) override {
+		writeByte(address, value);
+		writeByte(uint16(address + 1), value >> 8);
+	}
+	bool readDisk(uint32, uint32, byte *) override {
+		fail("Unexpected disk access while staging console output");
+		return false;
+	}
+	bool keyAvailable() const override { return false; }
+	byte nativeRevision() const override { return _revision; }
+	void setIoResult(uint16 value) override { writeWord(0xe0de, value); }
+	void yieldForInput() override {}
+	void delay(uint16) override {}
+	void sound(uint16, uint16, uint16) override {}
+	void fail(const Common::String &message) override {
+		if (error.empty())
+			error = message;
+	}
+	Common::String error;
+
+private:
+	Common::Array<byte> &_memory;
+	byte _revision;
+};
+
+class ConsoleIO {
+public:
+	ConsoleIO(MachineHost &host, PCodeConsole &console, MachineObserver *observer = nullptr) : _host(host), _console(console), _observer(observer) {}
+
+	uint read(uint16 address, uint16 count, uint16 mode, uint16 &position,
+			  bool &active, const Common::Array<byte> &keys, bool begin);
+	void write(uint16 unit, uint16 address, uint16 count, uint16 mode);
+
+private:
+	MachineHost &_host;
+	PCodeConsole &_console;
+	MachineObserver *_observer;
+
+	void initialize(uint16 mode);
+	void finish();
+	void outputCharacter(byte character, uint16 unit);
+	void emitCharacter(byte character);
+};
+
+void ConsoleIO::initialize(uint16 mode) {
+	const byte flags = _host.readByte(0xe21c);
+	_host.writeByte(0x0630, flags);
+	_host.writeByte(0xe21c, flags | ((flags >> 4) & 3));
+	_host.writeByte(0x0623, mode & 8 ? 0 : 255);
+	_host.writeByte(0x0622, mode & 4 ? 0 : 255);
+}
+
+void ConsoleIO::finish() {
+	_host.writeByte(0xe21c, _host.readByte(0x0630));
+}
+
+void ConsoleIO::emitCharacter(byte character) {
+	if (character) {
+		if (_console.graphicsOutput()) {
+			_console.graphicsCharacter(character);
+		} else {
+			_console.teletypeCharacter(character);
+			if (_observer && _observer->capturesTeletype())
+				_observer->onTeletype(character);
+		}
+	}
+	_host.writeByte(0xe0de, 0);
+	_host.writeByte(0xe0df, 0);
+}
+
+void ConsoleIO::outputCharacter(byte character, uint16 unit) {
+	if (_host.readByte(0x0623) && _host.readByte(uint16(0x0624 + unit))) {
+		for (uint spaces = byte(character - 0x20); spaces; --spaces)
+			emitCharacter(0x20);
+		_host.writeByte(uint16(0x0624 + unit), 0);
+	} else if (_host.readByte(0x0623) && character == 0x10) {
+		_host.writeByte(uint16(0x0624 + unit), 255);
+	} else {
+		if (_host.readByte(0x0622) && character == 13) {
+			emitCharacter(13);
+			character = 10;
+		}
+		emitCharacter(character);
+	}
+}
+
+uint ConsoleIO::read(uint16 address, uint16 count, uint16 mode, uint16 &position,
+	bool &active, const Common::Array<byte> &keys, bool begin) {
+	if (begin)
+		initialize(mode);
+	uint consumed = 0;
+	while (consumed < keys.size() && position < count) {
+		const byte key = keys[consumed++];
+		if (_observer)
+			_observer->beforeInput(key);
+		_host.writeByte(0xe0de, 0);
+		_host.writeByte(0xe0df, 0);
+		const uint16 destination = uint16(address + position);
+		_host.writeByte(destination, key);
+		if (_host.readByte(0x0623) && key == _host.readByte(0xe130)) {
+			for (; position < count; ++position)
+				_host.writeByte(uint16(address + position), 0);
+			break;
+		}
+		outputCharacter(key, 1);
+		++position;
+	}
+	active = position < count;
+	if (!active)
+		finish();
+	return consumed;
+}
+
+bool PCodeMachine::consumeConsoleInput(const PendingInput &request, const Common::Array<byte> &keys,
+	bool begin, bool requireComplete, uint &consumed) {
+	Common::Array<byte> staged(_memory, sizeof(_memory));
+	StagedConsoleHost host(staged, _nativeRevision);
+	PCodeConsole console(host, *_console);
+	ConsoleIO stagedIO(host, console);
+	PendingInput next = request;
+	consumed = stagedIO.read(next.address, next.count, next.mode, next.position, next.active, keys, begin);
+	if (!host.error.empty()) {
+		fail(host.error);
+		return false;
+	}
+	if (requireComplete && (next.active || consumed != keys.size())) {
+		fail("Original unit-1 replay does not end at its count or terminator");
+		return false;
+	}
+	_input = request;
+	ConsoleIO liveIO(*this, *_console, _observer);
+	liveIO.read(_input.address, _input.count, _input.mode, _input.position, _input.active, keys, begin);
+	if (consumed)
+		_idleSnapshot = false;
+	return true;
+}
+
+void ConsoleIO::write(uint16 unit, uint16 address, uint16 count, uint16 mode) {
+	initialize(mode);
+	for (uint32 i = 0; i < count; ++i)
+		outputCharacter(_host.readByte(uint16(address + i)), unit);
+	finish();
+}
+
+bool PCodeMachine::writeConsoleOutput(uint16 unit, uint16 address, uint16 count, uint16 mode) {
+	if (!count) {
+		setIoResult(0);
+		return true;
+	}
+	Common::Array<byte> staged(_memory, sizeof(_memory));
+	StagedConsoleHost host(staged, _nativeRevision);
+	PCodeConsole console(host, *_console);
+	ConsoleIO stagedIO(host, console);
+	stagedIO.write(unit, address, count, mode);
+	if (!host.error.empty()) {
+		fail(host.error);
+		return false;
+	}
+	ConsoleIO liveIO(*this, *_console, _observer);
+	liveIO.write(unit, address, count, mode);
+	return true;
+}
+
 void PCodeMachine::completeInput() {
+	if (_input.kind == 3) {
+		const uint available = MIN<uint>(_input.count - _input.position, _keys.size() - _keyPosition);
+		Common::Array<byte> bytes;
+		for (uint i = 0; i < available; ++i)
+			bytes.push_back(_keys[_keyPosition + i]);
+		uint consumed;
+		if (!consumeConsoleInput(_input, bytes, false, false, consumed))
+			return;
+		_keyPosition += consumed;
+		if (_input.active)
+			yieldForInput();
+		return;
+	}
 	while (_input.position < _input.count) {
 		if (!keyAvailable()) {
 			yieldForInput();
@@ -1411,6 +1646,8 @@ void PCodeMachine::completeInput() {
 		const byte key = _keys[_keyPosition++];
 		if (_observer)
 			_observer->beforeInput(key);
+		if (_input.kind == 2)
+			setIoResult(0);
 		writeByte(uint16(_input.address + _input.position++), key);
 		_idleSnapshot = false;
 		if (_input.kind == 2 && readByte(0x0623) && key == readByte(0xe130))
@@ -1419,7 +1656,8 @@ void PCodeMachine::completeInput() {
 	if (_input.kind == 2)
 		finishInput();
 	_input.active = false;
-	setIoResult(0);
+	if (_input.kind != 2)
+		setIoResult(0);
 }
 
 } // namespace Wizardry

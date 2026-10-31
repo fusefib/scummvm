@@ -36,6 +36,9 @@ public:
 	virtual ~MachineObserver() {}
 	virtual void beforeInput(byte) {}
 	virtual void onDelay(uint16) {}
+	virtual bool capturesTeletype() const { return false; }
+	virtual void onTeletype(byte) {}
+	virtual void onDiskWrite() {}
 };
 
 /** Cooperative p-machine for the Wizardry I-V DOS interpreters. */
@@ -106,6 +109,7 @@ public:
 	const Common::Array<byte> &saveDisk() const { return _saveDisk; }
 	DiskPolicy diskPolicy() const { return _diskPolicy; }
 	bool diskSelectedSave() const { return _diskSelectedSave; }
+	uint32 sourceDiskCRC() const { return _sourceDiskCRC; }
 	uint32 sourceSaveDiskCRC() const { return _sourceSaveDiskCRC; }
 	const PCodeFile &codeFile() const { return _code; }
 	bool canSuspend() const {
@@ -124,6 +128,10 @@ public:
 	bool pollKeyboard() override;
 	bool tracedInput() const override { return _services.inputMode(); }
 	bool graphicsInit(bool first) override;
+	void diskWritten() override {
+		if (_observer)
+			_observer->onDiskWrite();
+	}
 	void setIoResult(uint16 value) override;
 	void yieldForInput() override;
 	void delay(uint16 ticks) override;
@@ -232,7 +240,10 @@ private:
 	void compare(byte opcode);
 	void standardProcedure(byte number);
 	void unitIO(bool write);
+	bool writeConsoleOutput(uint16 unit, uint16 address, uint16 count, uint16 mode);
 	void completeInput();
+	bool consumeConsoleInput(const PendingInput &request, const Common::Array<byte> &keys,
+		bool begin, bool requireComplete, uint &consumed);
 	void prepareInput(uint16 mode);
 	void finishInput();
 	void moveBytes(uint16 destination, uint16 source, uint32 size, bool backward = false);

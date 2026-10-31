@@ -156,8 +156,8 @@ static bool inputCharacter(uint16 word, byte &character, Common::String &error) 
 }
 
 bool NativeServiceReplay::executeModeInput(const Common::Array<Event> &events, uint32 &position,
-										   uint16 unit, uint16 count, uint16 mode, uint16 address, uint16 terminator,
-										   Common::Array<byte> &bytes, Common::String &error, bool checkEffects) {
+	uint16 unit, uint16 count, uint16 mode, uint16 address, uint16 terminator,
+	Common::Array<byte> &bytes, Common::String &error, bool checkEffects) {
 	const uint16 expected[] = {kReadInputMode, unit, count, mode, terminator};
 	for (uint i = 0; i < 5; ++i) {
 		uint16 value;
@@ -171,7 +171,7 @@ bool NativeServiceReplay::executeModeInput(const Common::Array<Event> &events, u
 	uint16 consumed;
 	if (!readEvent(events, position, kArgument, consumed, error))
 		return false;
-	if (unit != 2 || !count || terminator > 255 || !consumed || consumed > count) {
+	if ((unit != 1 && unit != 2) || !count || terminator > 255 || !consumed || consumed > count) {
 		error = "Invalid mode-aware native input replay extent";
 		return false;
 	}
@@ -258,6 +258,7 @@ bool NativeServiceReplay::configure(const Common::Array<Event> &events, uint32 p
 	uint32 consumedCalls = 0;
 	uint16 checkpoint = 0;
 	bool extendedInput = false;
+	bool unit1Input = false;
 	bool boundary = position == 0;
 	uint16 rng[4] = {};
 	bool available;
@@ -292,6 +293,7 @@ bool NativeServiceReplay::configure(const Common::Array<Event> &events, uint32 p
 			if (!executeModeInput(events, cursor, request, count, mode, 0, terminator, bytes, error, false))
 				return false;
 			extendedInput = true;
+			unit1Input |= request == 1;
 		} else if (inputMode && (selector == kReadInput || selector == kFlushInput)) {
 			const uint16 count = cursor + 2 < events.size() ? events[cursor + 2].value : 0;
 			Common::Array<byte> bytes;
@@ -319,6 +321,7 @@ bool NativeServiceReplay::configure(const Common::Array<Event> &events, uint32 p
 	_enabled = true;
 	_inputMode = inputMode;
 	_extendedInput = extendedInput;
+	_unit1Input = unit1Input;
 	return true;
 }
 

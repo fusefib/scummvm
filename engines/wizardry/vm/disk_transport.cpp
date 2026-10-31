@@ -144,6 +144,8 @@ bool ResidentDiskTransport::callback(bool write, byte drive, uint16 block,
 		else
 			buffer.write(offset + i, image[position + i]);
 	}
+	if (write && available)
+		_host.diskWritten();
 	return true;
 }
 

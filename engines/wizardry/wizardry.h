@@ -21,6 +21,7 @@
 
 #ifndef WIZARDRY_WIZARDRY_H
 #define WIZARDRY_WIZARDRY_H
+
 #include "audio/mixer.h"
 #include "engines/engine.h"
 #include "wizardry/detection.h"
@@ -32,7 +33,7 @@ class QueuingAudioStream;
 
 namespace Wizardry {
 
-class WizardryEngine : public Engine {
+class WizardryEngine : public Engine, public MachineObserver {
 public:
 	WizardryEngine(OSystem *system, const WizardryGameDescription *description);
 	~WizardryEngine() override;
@@ -43,7 +44,8 @@ public:
 private:
 	const WizardryGameDescription *_description;
 	PCodeMachine _machine;
-	byte _pixels[320 * 200];
+	byte _pixels[640 * 200];
+	uint16 _screenWidth = 320;
 	uint32 _lastClock = 0;
 	bool _ready = false;
 	bool _paused = false;
@@ -60,4 +62,5 @@ private:
 };
 
 } // namespace Wizardry
+
 #endif
