@@ -39,8 +39,12 @@ public:
 	virtual void writeByte(uint16 address, byte value) = 0;
 	virtual void writeWord(uint16 address, uint16 value) = 0;
 	virtual bool readDisk(uint32 block, uint32 size, byte *destination) = 0;
-	virtual bool readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) {
+	virtual bool readDiskAt(uint32 block, uint32 size, byte *destination, uint16, uint16) {
 		return readDisk(block, size, destination);
+	}
+	virtual bool cacheControl(uint16) {
+		fail("RAM-cache control requires a native machine");
+		return false;
 	}
 	virtual uint16 diskCapacity() const { return 632; }
 	virtual bool keyAvailable() const = 0;
@@ -55,7 +59,7 @@ public:
 	virtual void setIoResult(uint16 value) = 0;
 	// An availability poll is complete before this cooperative yield.
 	virtual void yieldForInput() = 0;
-	// Native delay request: testing can advance without wall-clock sleeping.
+	// The host schedules native delay requests cooperatively.
 	virtual void delay(uint16 ticks) = 0;
 	virtual void sound(uint16 first, uint16 second, uint16 third) = 0;
 	virtual void fail(const Common::String &message) = 0;

@@ -34,19 +34,24 @@ namespace Wizardry {
 class ResidentDiskTransport {
 public:
 	ResidentDiskTransport(MachineHost &host, Common::Array<byte> &master,
-						  Common::Array<byte> &save, bool &selectedSave, Common::Array<byte> *auxiliary = nullptr) : _host(host), _master(master), _save(save), _selectedSave(selectedSave), _auxiliary(auxiliary) {}
+						  Common::Array<byte> &save, bool &selectedSave, Common::Array<byte> *auxiliary = nullptr,
+						  Common::Array<byte> *dmaBuffer = nullptr) : _host(host), _master(master), _save(save), _selectedSave(selectedSave), _auxiliary(auxiliary),
+																	  _dmaBuffer(dmaBuffer ? *dmaBuffer : _localDmaBuffer) {}
 
 	bool unitIO(bool write, uint16 unit, uint16 address, uint16 count,
 				uint16 block, uint16 mode, uint16 &ioResult, Common::String &error);
 	bool readBuffer(uint16 unit, uint16 block, uint16 count, byte *destination,
 					uint16 physicalOffset, uint16 &ioResult, Common::String &error);
 
+	bool readCacheBuffer(uint16 block, uint16 count, byte *destination, uint16 physicalBase,
+						 uint16 &ioResult, Common::String &error);
+
 private:
 	struct Buffer {
 		MachineHost &host;
 		byte *external;
-		uint16 address;
-		Buffer(MachineHost &h, uint16 a, byte *p = nullptr) : host(h), external(p), address(a) {}
+		uint16 address, physicalBase;
+		Buffer(MachineHost &h, uint16 a, byte *p = nullptr, uint16 base = 0) : host(h), external(p), address(a), physicalBase(base) {}
 		byte read(uint32 offset) const { return external ? external[offset] : host.readByte(uint16(address + offset)); }
 		void write(uint32 offset, byte value) {
 			if (external)
@@ -59,6 +64,8 @@ private:
 	Common::Array<byte> &_master, &_save;
 	bool &_selectedSave;
 	Common::Array<byte> *_auxiliary;
+	Common::Array<byte> _localDmaBuffer;
+	Common::Array<byte> &_dmaBuffer; // Empty until a complete original transfer defines CS residue.
 
 	bool transfer(bool write, uint16 unit, uint16 block, uint16 count,
 				  Buffer &buffer, uint16 &ioResult, Common::String &error);

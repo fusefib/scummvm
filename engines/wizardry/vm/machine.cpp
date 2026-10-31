@@ -49,7 +49,7 @@ static uint16 packedFieldMask(uint16 width, byte revision) {
 }
 
 static bool identifyNativeRevision(const Common::Array<byte> &disk, byte &revision, Common::String &error,
-								   byte *firstByte = nullptr) {
+	byte *firstByte = nullptr) {
 	revision = 0;
 	if (firstByte)
 		*firstByte = 0;
@@ -93,7 +93,7 @@ bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byt
 }
 
 bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byte> &disk,
-						const Common::Array<byte> &saveDisk, Common::String &error) {
+	const Common::Array<byte> &saveDisk, Common::String &error) {
 	return bootInternal(code, disk, &saveDisk, error);
 }
 
@@ -126,7 +126,7 @@ bool PCodeMachine::validateDiskPair(const Common::Array<byte> &code, const Commo
 }
 
 bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::Array<byte> &disk,
-								const Common::Array<byte> *saveDisk, Common::String &error) {
+	const Common::Array<byte> *saveDisk, Common::String &error) {
 	PCodeFile parsed;
 	if (!parsed.load(code, error))
 		return false;
@@ -152,6 +152,8 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 	_disk = disk;
 	_saveDisk = saveDisk ? *saveDisk : Common::Array<byte>();
 	_diskSelectedSave = false;
+	_diskDMABuffer.clear();
+	_ramCache.initialize(_originalMemory ? revision : 0, _diskPolicy == kResidentCOM);
 	_sourceSaveDiskCRC = saveDisk ? wizardryCrc32(saveDisk->data(), saveDisk->size()) : 0;
 	_sourceDiskCRC = wizardryCrc32(disk.data(), disk.size());
 	memset(_memory, 0, sizeof(_memory));
@@ -175,16 +177,15 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 	_state = kRunning;
 	delete _console;
 	_console = new PCodeConsole(*this, revision >= 4 ? NativeRandom::kThreeWord : NativeRandom::kFourWord,
-								(revision == 1 || revision == 4) && _originalMemory);
-	// HAS.CACHE activates the optional native RAM-disk cache, whose ABI is
-	// not implemented. Mark it absent in this private working image only.
+		(revision == 1 || revision == 4) && _originalMemory);
+	// Compatibility memory lacks the original optional native-cache ABI.
 	uint count = READ_LE_UINT16(_disk.data() + 1024 + 16);
 	if (count > 77) {
 		error = "Invalid UCSD directory count";
 		_state = kFault;
 		return false;
 	}
-	for (uint i = 0; i < count; ++i) {
+	for (uint i = 0; !_ramCache.configured() && i < count; ++i) {
 		uint off = 1024 + 26 * (i + 1);
 		if (_disk[off + 6] == 9 && !memcmp(_disk.data() + off + 7, "HAS.CACHE", 9)) {
 			_disk[off + 4] = _disk[off + 5] = 0;
@@ -261,23 +262,61 @@ bool PCodeMachine::readDisk(uint32 block, uint32 size, byte *destination) {
 }
 
 bool PCodeMachine::readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) {
-	if (_diskPolicy == kResidentCOM) {
-		Common::String error;
-		uint16 result = 0;
-		ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave, activeTransferDisk());
-		if (block > 65535 || size > 65535 || !transport.readBuffer(unit, block, size, destination, physicalOffset, result, error)) {
-			fail(error.empty() ? "Resident graphics disk request is too large" : error);
-			return false;
-		}
-		setIoResult(result);
-		return result == 0;
-	}
-	if (block > _disk.size() / 512 || size > _disk.size() - block * 512) {
-		setIoResult(10);
+	Common::String error;
+	uint16 result = 0;
+	if (block > 65535 || size > 65535 || !_ramCache.read(*this, *this, unit, block, size,
+		destination, physicalOffset, result, error)) {
+		fail(error.empty() ? "Native graphics disk request is too large" : error);
 		return false;
 	}
-	if (size)
-		memcpy(destination, _disk.data() + block * 512, size);
+	setIoResult(result);
+	return result == 0;
+}
+
+bool PCodeMachine::cacheControl(uint16 address) {
+	Common::String error;
+	uint16 result = 0;
+	if (!_ramCache.configured() || !_ramCache.control(*this, *this, address, result, error)) {
+		fail(error.empty() ? "RAM-cache control requires a verified original-memory profile" : error);
+		return false;
+	}
+	setIoResult(result);
+	return true;
+}
+
+bool PCodeMachine::readGuestDisk(uint16 unit, uint16 block, uint16 count, uint16 address,
+	uint16 &result, Common::String &error) {
+	return _ramCache.read(*this, *this, unit, block, count, nullptr, address, result, error);
+}
+
+bool PCodeMachine::readUncached(uint16 unit, uint16 block, uint16 count, byte *external,
+		uint16 address, uint16 physicalBase, uint16 &result, Common::String &error) {
+	error.clear();
+	result = 0;
+	if (_diskPolicy == kResidentCOM) {
+		ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave, activeTransferDisk(), &_diskDMABuffer);
+		if (physicalBase)
+			return transport.readCacheBuffer(block, count, external, physicalBase, result, error);
+		return external ? transport.readBuffer(unit, block, count, external, address, result, error) :
+			transport.unitIO(false, unit, address, count, block, 0, result, error);
+	}
+	const uint32 offset = uint32(block) * 512;
+	const uint32 available = offset < _disk.size() ? MIN<uint32>(count, _disk.size() - offset) : 0;
+	if (external) {
+		if (available != count) { result = 10; return true; }
+		if (count) memcpy(external, _disk.data() + offset, count);
+		return true;
+	}
+	if (_diskPolicy == kRaw0880) {
+		if (available != count && (count & 511)) {
+			error = "Partial-sector disk EOF requires an unmodeled original bounce buffer";
+			return false;
+		}
+	} else if (available != count || block >= 632 || offset + count > 632U * 512) {
+		result = 10;
+		return true;
+	}
+	for (uint32 i = 0; i < available; ++i) writeByte(uint16(address + i), _disk[offset + i]);
 	return true;
 }
 
@@ -1567,10 +1606,20 @@ void PCodeMachine::unitIO(bool write) {
 			_input.kind = 4;
 		}
 	} else if (unit == 4 || unit == 5 || (unit >= 9 && unit <= 12)) {
+		if (!write && _ramCache.configured()) {
+			Common::String error;
+			uint16 result = 0;
+			if (!readGuestDisk(unit, z, y, address, result, error)) {
+				fail(error);
+				return;
+			}
+			setIoResult(result);
+			return;
+		}
 		if (_diskPolicy == kResidentCOM) {
 			Common::String error;
 			uint16 result;
-			ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave, activeTransferDisk());
+			ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave, activeTransferDisk(), &_diskDMABuffer);
 			if (!transport.unitIO(write, unit, address, y, z, w, result, error)) {
 				fail(error);
 				return;
@@ -1593,8 +1642,8 @@ void PCodeMachine::unitIO(bool write) {
 			setIoResult(0);
 			return;
 		}
-		// Writes are private and bounded by the supplied image; this port
-		// does not reproduce DOS file growth or its ignored error flags.
+		// Writes stay within the private image instead of extending the DOS
+		// file or ignoring its write errors.
 		if (offset > _disk.size() || available != y || (_diskPolicy == kLegacy632 && (z >= 632 || offset + y > 632U * 512))) {
 			setIoResult(10);
 			return;
@@ -1791,7 +1840,7 @@ public:
 	ConsoleIO(MachineHost &host, PCodeConsole &console, MachineObserver *observer = nullptr) : _host(host), _console(console), _observer(observer) {}
 
 	uint read(uint16 address, uint16 count, uint16 mode, uint16 &position,
-			  bool &active, const Common::Array<byte> &keys, bool begin);
+		bool &active, const Common::Array<byte> &keys, bool begin);
 	void write(uint16 unit, uint16 address, uint16 count, uint16 mode);
 
 private:

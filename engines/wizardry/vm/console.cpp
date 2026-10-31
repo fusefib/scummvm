@@ -235,7 +235,7 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 	}
 	switch (selector) {
 	case 25:
-		break;
+		return _host.cacheControl(buffer);
 	case 1:
 		init(buffer);
 		break;

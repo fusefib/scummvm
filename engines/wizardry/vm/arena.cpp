@@ -20,7 +20,6 @@
  */
 
 #include "common/endian.h"
-#include "wizardry/vm/disk_transport.h"
 #include "wizardry/vm/machine.h"
 
 namespace Wizardry {
@@ -168,13 +167,12 @@ bool PCodeMachine::loadSegment(byte sn) {
 		fail("Invalid code segment disk descriptor");
 		return false;
 	}
-	if (_diskPolicy == kResidentCOM) {
+	if (_diskPolicy == kResidentCOM || _ramCache.enabled()) {
 		Common::String error;
 		uint16 result;
-		ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave);
 		// The original clears DX and loads DL: the adjacent byte is not a unit.
-		if (!transport.unitIO(false, readByte(descriptor), base, s->code.size(),
-							  readWord(descriptor + 2), 0, result, error) ||
+		if (!readGuestDisk(readByte(descriptor), readWord(descriptor + 2), s->code.size(),
+						   base, result, error) ||
 			result) {
 			if (error.empty())
 				error = Common::String::format("Resident overlay read returned IORESULT %u", result);

@@ -24,6 +24,7 @@
 
 #include "wizardry/vm/codefile.h"
 #include "wizardry/vm/host.h"
+#include "wizardry/vm/ram_cache.h"
 #include "wizardry/vm/services.h"
 #include "wizardry/vm/transfer.h"
 
@@ -43,7 +44,7 @@ public:
 };
 
 /** Cooperative p-machine for the Wizardry I-V DOS interpreters. */
-class PCodeMachine : public MachineHost {
+class PCodeMachine : public MachineHost, private RamDiskSource {
 public:
 	enum State {
 		kRunning,
@@ -62,7 +63,7 @@ public:
 	~PCodeMachine() override;
 	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk, Common::String &error);
 	bool boot(const Common::Array<byte> &code, const Common::Array<byte> &disk,
-			  const Common::Array<byte> &saveDisk, Common::String &error);
+		const Common::Array<byte> &saveDisk, Common::String &error);
 	bool loadLoaderCom(const Common::Array<byte> &com, Common::String &error);
 	bool loadTransferSource(byte source, const Common::Array<byte> &image, Common::String &error);
 	const TransferDisks &transferDisks() const { return _transfer; }
@@ -115,6 +116,8 @@ public:
 	const Common::Array<byte> &saveDisk() const { return _saveDisk; }
 	DiskPolicy diskPolicy() const { return _diskPolicy; }
 	bool diskSelectedSave() const { return _diskSelectedSave; }
+	const Common::Array<byte> &diskDMABuffer() const { return _diskDMABuffer; }
+	const RamDiskCache &ramCache() const { return _ramCache; }
 	const Common::Array<uint16> &loaderKeys() const { return _loaderKeys; }
 	const Common::Array<byte> &loaderData() const { return _loaderData; }
 	uint32 sourceDiskCRC() const { return _sourceDiskCRC; }
@@ -131,6 +134,7 @@ public:
 	void writeWord(uint16 address, uint16 value) override;
 	bool readDisk(uint32 block, uint32 size, byte *destination) override;
 	bool readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) override;
+	bool cacheControl(uint16 address) override;
 	uint16 diskCapacity() const override { return _diskPolicy == kLegacy632 ? 632 : 1272; }
 	bool keyAvailable() const override { return !_loaderKeys.empty() || _keyPosition < _keys.size(); }
 	bool pollKeyboard() override;
@@ -182,13 +186,17 @@ private:
 	PCodeFile _code;
 	Common::Array<byte> _disk;
 	Common::Array<byte> _saveDisk;
+	Common::Array<byte> _diskDMABuffer;
 	TransferDisks _transfer;
+	RamDiskCache _ramCache;
 	uint32 _sourceDiskCRC = 0;
 	uint32 _sourceSaveDiskCRC = 0;
 	DiskPolicy _diskPolicy = kLegacy632;
 	DiskPolicy _defaultDiskPolicy = kLegacy632;
 	bool _diskSelectedSave = false;
 	byte _memory[65536];
+	// DS = CS - 0x1000 in the DOS interpreters. A native word at
+	// DS:ffff reaches this physical CS:0000 byte; two byte operations wrap.
 	byte _originalWordHighByte = 0;
 	Common::Array<uint16> _stack;
 	Common::Array<Frame> _frames;
@@ -283,6 +291,10 @@ private:
 		const Common::Array<byte> *saveDisk, Common::String &error);
 	bool validateDiskPair(const Common::Array<byte> &code, const Common::Array<byte> &disk,
 		const Common::Array<byte> &saveDisk, byte revision, Common::String &error) const;
+	bool readUncached(uint16 unit, uint16 block, uint16 count, byte *external,
+		uint16 address, uint16 physicalBase, uint16 &result, Common::String &error) override;
+	bool readGuestDisk(uint16 unit, uint16 block, uint16 count, uint16 address,
+		uint16 &result, Common::String &error);
 };
 
 } // namespace Wizardry
