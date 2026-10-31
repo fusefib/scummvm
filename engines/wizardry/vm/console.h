@@ -40,7 +40,9 @@ public:
 		   kVramSize = 0x4000,
 		   kCharsetSize = 5120,
 		   kLargePortraitSize = 3072 };
-	explicit PCodeConsole(MachineHost &host, NativeRandom::Algorithm algorithm = NativeRandom::kFourWord);
+	explicit PCodeConsole(MachineHost &host, NativeRandom::Algorithm algorithm = NativeRandom::kFourWord,
+						  bool classicCache = false);
+	PCodeConsole(MachineHost &host, const PCodeConsole &source);
 	bool call(bool write, uint16 buffer, uint16 selector, uint16 z, uint16 w);
 	const byte *vram() const { return _state.vram; }
 	uint16 visibleCell(uint index) const;
@@ -49,6 +51,7 @@ public:
 	void setRngState(const uint16 state[4]);
 	NativeRandom::Algorithm rngAlgorithm() const { return _rngAlgorithm; }
 	byte portraitPolicy() const { return _portraitPolicy; }
+	bool classicPortraitCache() const { return _classicCache; }
 
 private:
 	struct State {
@@ -72,9 +75,11 @@ private:
 	};
 	MachineHost &_host;
 	State _state;
+	mutable Common::Array<byte> _textVram;
 	HuffmanDecoder _huffman;
 	NativeRandom::Algorithm _rngAlgorithm;
 	byte _portraitPolicy;
+	bool _classicCache;
 	bool _failed;
 
 	bool fail(const char *message);
@@ -98,6 +103,7 @@ private:
 	void drawLine(uint16 buffer, uint16 address);
 	void clearAttributes(uint16 address);
 	void portraits(uint16 buffer, uint16 address);
+	void classicPortraits(uint16 buffer, uint16 address);
 	void largePortraits(uint16 buffer, uint16 address);
 	void backupPortrait(uint16 buffer, uint16 address);
 	void swapLargePortraits();

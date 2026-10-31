@@ -28,20 +28,21 @@ static const PlainGameDescriptor kWizardryGames[] = {
 	{"wizardry3", "Wizardry III: Legacy of Llylgamyn"},
 	{"wizardry4", "Wizardry IV: The Return of Werdna"},
 	{"wizardry5", "Wizardry V: Heart of the Maelstrom"},
-	{nullptr, nullptr}};
+	{nullptr, nullptr}
+};
 
 static const Wizardry::WizardryGameDescription kWizardryDescriptions[] = {
 	{{"wizardry1", "",
 	  AD_ENTRY1s("WIZ1.DSK", "c52895175e3aac4d9ac56f00e25c229c", 327680),
-	  Common::EN_ANY, Common::kPlatformDOS, ADGF_UNSTABLE, GUIO2(GUIO_NOMUSIC, GUIO_NOSPEECH)},
+	  Common::EN_ANY, Common::kPlatformDOS, ADGF_UNSTABLE, GUIO3(GUIO_NOMUSIC, GUIO_NOSPEECH, GAMEOPTION_ORIGINAL_SAVE_DISK)},
 	 1},
 	{{"wizardry2", "",
 	  AD_ENTRY1s("WIZ2.DSK", "a0e0a2a211355cc5bb841177506f216f", 327680),
-	  Common::EN_ANY, Common::kPlatformDOS, ADGF_UNSTABLE, GUIO2(GUIO_NOMUSIC, GUIO_NOSPEECH)},
+	  Common::EN_ANY, Common::kPlatformDOS, ADGF_UNSTABLE, GUIO3(GUIO_NOMUSIC, GUIO_NOSPEECH, GAMEOPTION_ORIGINAL_SAVE_DISK)},
 	 2},
 	{{"wizardry3", "",
 	  AD_ENTRY1s("WIZ3.DSK", "cf5ac7f4e5ccbf26155d8cf2ebdd3611", 327680),
-	  Common::EN_ANY, Common::kPlatformDOS, ADGF_UNSTABLE, GUIO2(GUIO_NOMUSIC, GUIO_NOSPEECH)},
+	  Common::EN_ANY, Common::kPlatformDOS, ADGF_UNSTABLE, GUIO3(GUIO_NOMUSIC, GUIO_NOSPEECH, GAMEOPTION_ORIGINAL_SAVE_DISK)},
 	 3},
 	{{"wizardry4", "",
 	  AD_ENTRY1s("WIZ4.DSK", "37ef0d3ba2fd641b170148b2f4c19f6a", 327680),
@@ -51,7 +52,8 @@ static const Wizardry::WizardryGameDescription kWizardryDescriptions[] = {
 	  AD_ENTRY1s("WIZ5.DSK", "932277b230b5f35fdd9497415823ba96", 655360),
 	  Common::EN_ANY, Common::kPlatformDOS, ADGF_UNSTABLE, GUIO2(GUIO_NOMUSIC, GUIO_NOSPEECH)},
 	 5},
-	{AD_TABLE_END_MARKER, 0}};
+	{AD_TABLE_END_MARKER, 0}
+};
 
 class WizardryMetaEngineDetection : public AdvancedMetaEngineDetection<Wizardry::WizardryGameDescription> {
 public:

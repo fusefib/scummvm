@@ -24,6 +24,9 @@
 #include "engines/advancedDetector.h"
 
 namespace Wizardry {
+
+#define GAMEOPTION_ORIGINAL_SAVE_DISK GUIO_GAMEOPTIONS1
+
 struct WizardryGameDescription {
 	AD_GAME_DESCRIPTION_HELPERS(desc);
 

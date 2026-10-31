@@ -25,9 +25,27 @@
 #include "common/translation.h"
 #include "wizardry/wizardry.h"
 
+static const ADExtraGuiOptionsMap kWizardryOptions[] = {
+	{
+		GAMEOPTION_ORIGINAL_SAVE_DISK,
+		{
+			_s("Use original save disk"),
+			_s("Start with the matching SAVE1.DSK, SAVE2.DSK or SAVE3.DSK file."),
+			"original_save_disk",
+			false,
+			0,
+			0
+		}
+	},
+	AD_EXTRA_GUI_OPTIONS_TERMINATOR
+};
+
 class WizardryMetaEngine : public AdvancedMetaEngine<Wizardry::WizardryGameDescription> {
 public:
 	const char *getName() const override { return "wizardry"; }
+	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
+		return kWizardryOptions;
+	}
 	Common::KeymapArray initKeymaps(const char *) const override {
 		using namespace Common;
 		Keymap *map = new Keymap(Keymap::kKeymapTypeGame, "wizardry", _("Wizardry"));
@@ -44,7 +62,8 @@ public:
 			{"RIGHT", _s("Right"), KEYCODE_RIGHT, 0, "RIGHT", "JOY_RIGHT"},
 			{"CONFIRM", _s("Confirm"), KEYCODE_RETURN, ASCII_RETURN, "RETURN", "JOY_A"},
 			{"BACK", _s("Escape"), KEYCODE_ESCAPE, ASCII_ESCAPE, "ESCAPE", "JOY_B"},
-			{"MENU", _s("Game menu"), KEYCODE_F5, 0, "F5", "JOY_START"}};
+			{"MENU", _s("Game menu"), KEYCODE_F5, 0, "F5", "JOY_START"}
+		};
 		for (uint i = 0; i < ARRAYSIZE(bindings); ++i) {
 			const Binding &b = bindings[i];
 			Action *action = new Action(b.id, _(b.label));

@@ -54,6 +54,8 @@ public:
 	// Native delay request: testing can advance without wall-clock sleeping.
 	virtual void delay(uint16 ticks) = 0;
 	virtual void sound(uint16 first, uint16 second, uint16 third) = 0;
+	virtual bool executionStopped() const { return false; }
+	virtual bool keyboardBlocked() const { return false; }
 	virtual void fail(const Common::String &message) = 0;
 };
 

@@ -23,12 +23,28 @@
 
 namespace Wizardry {
 
-PCodeConsole::PCodeConsole(MachineHost &host, NativeRandom::Algorithm algorithm)
-	: _host(host), _rngAlgorithm(algorithm), _portraitPolicy(host.nativeRevision() == 5 ? 1 : 0), _failed(false) {
+PCodeConsole::PCodeConsole(MachineHost &host, NativeRandom::Algorithm algorithm, bool classicCache)
+	: _host(host), _rngAlgorithm(algorithm), _portraitPolicy(host.nativeRevision() == 5 ? 1 : 0),
+	  _classicCache(classicCache && (host.nativeRevision() == 1 || host.nativeRevision() == 4)), _failed(false) {
 	memset(&_state, 0, sizeof(_state));
 	NativeRandom::reset(_rngAlgorithm, _state.rng);
 	for (uint i = 0; i < 4; ++i)
-		_state.monsterPicture[i] = 0xffff;
+		_state.monsterPicture[i] = _classicCache ? 0 : 0xffff;
+}
+
+PCodeConsole::PCodeConsole(MachineHost &host, const PCodeConsole &source)
+	: _host(host), _state(source._state), _huffman(source._huffman),
+	  _rngAlgorithm(source._rngAlgorithm), _portraitPolicy(source._portraitPolicy),
+	  _classicCache(source._classicCache), _failed(false) {
+}
+
+static uint16 classicBase(byte revision) {
+	return revision == 4 ? 0x73a2 : 0x7252;
+}
+
+static int classicBuffer(uint16 pointer, byte revision) {
+	const uint16 base = classicBase(revision);
+	return pointer >= base && pointer <= base + 1536 && (pointer - base) % 512 == 0 ? (pointer - base) / 512 : -1;
 }
 
 bool PCodeConsole::fail(const char *message) {
@@ -86,6 +102,8 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 			break;
 		case 11: {
 			bool available = _host.pollKeyboard();
+			if (_host.executionStopped() || _host.keyboardBlocked())
+				return false;
 			_host.writeWord(buffer, available ? 1 : 0);
 			_state.idle = available ? 0 : (_state.idle < 0xffffffffU ? _state.idle + 1 : _state.idle);
 			if (_state.idle > 300 && !_host.tracedInput())
@@ -108,6 +126,8 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 		return !_failed;
 	}
 	switch (selector) {
+	case 25:
+		break;
 	case 1:
 		init(buffer);
 		break;
@@ -126,6 +146,8 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 	case 13:
 		if (_portraitPolicy)
 			largePortraits(buffer, z);
+		else if (_classicCache)
+			classicPortraits(buffer, z);
 		else
 			portraits(buffer, z);
 		break;
@@ -139,9 +161,8 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 		break;
 	}
 	case 15:
-		_host.writeWord(0xe8fe, 0);
 		_state.initialized = false;
-		break; // The backend owns display lifetime; no DOS text mode to restore.
+		break;
 	case 17:
 		if (_portraitPolicy)
 			backupPortrait(buffer, z);
@@ -156,6 +177,14 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 			_state.monsterPicture[i] = 0xffff;
 		if (_portraitPolicy)
 			syncPortraitCache();
+		if (_classicCache) {
+			// WR18 resets the cache order, preserving desired pointers and
+			// the four physical buffers even after an earlier permutation.
+			for (uint i = 0; i < 4; ++i) {
+				_host.writeWord(0xe838 + 4 * i, 0xffff);
+				_host.writeWord(0xe83a + 4 * i, classicBase(_host.nativeRevision()) + 512 * i);
+			}
+		}
 		break;
 	case 19:
 		// INTERP:2305 doubles DX before waiting for BIOS clock ticks. Pass the
@@ -163,7 +192,8 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 		_host.delay(z);
 		break;
 	case 22:
-		break; // DOS disk-flush service; in-memory writes are already immediate.
+		// Guest writes update private images; the engine persists campaigns.
+		break;
 	case 23:
 		title(z);
 		break;
@@ -279,14 +309,14 @@ void PCodeConsole::putTile(uint cell, const byte *rows) {
 
 void PCodeConsole::blank(uint cell) {
 	static const byte zeros[16] = {};
-	_state.cell[cell] = _portraitPolicy ? 0x20 : 0;
+	_state.cell[cell] = _host.nativeRevision() >= 4 ? 0x20 : 0;
 	putTile(cell, zeros);
 }
 
 void PCodeConsole::draw(uint cell, uint16 word) {
 	uint high = word >> 8, low = word & 255;
 	if (high == 0) {
-		if ((!_portraitPolicy && low == 0) || low == 0x20)
+		if ((_host.nativeRevision() < 4 && low == 0) || low == 0x20)
 			blank(cell);
 		else
 			putTile(cell, _state.charset + low * 16);
@@ -316,6 +346,20 @@ void PCodeConsole::draw(uint cell, uint16 word) {
 			fail("invalid monster tile attribute");
 			return;
 		}
+		// IV initializes only thirty offsets at CS:5B42. The next word
+		// remains undefined after bootstrap and WR1.
+		if (_host.nativeRevision() == 4 && tile >= 30) {
+			fail("uninitialized Wizardry IV portrait tile offset");
+			return;
+		}
+		if (_classicCache) {
+			const int physical = classicBuffer(_host.readWord(0xe830 + 2 * group), _host.nativeRevision());
+			if (physical < 0) {
+				fail("unsupported classic desired portrait pointer");
+				return;
+			}
+			group = physical;
+		}
 		putTile(cell, _state.monsterRecord[group] + tile * 16);
 	}
 }
@@ -323,7 +367,7 @@ void PCodeConsole::draw(uint cell, uint16 word) {
 void PCodeConsole::storeCell(uint cell, uint16 word) {
 	uint16 old = _state.cell[cell];
 	_state.cell[cell] = word;
-	const uint16 blankValue = _portraitPolicy ? 0x20 : 0;
+	const uint16 blankValue = _host.nativeRevision() >= 4 ? 0x20 : 0;
 	uint16 a = (old == 0x2020 || old == 0x20) ? blankValue : old;
 	uint16 b = (word == 0x2020 || word == 0x20) ? blankValue : word;
 	if (a != b)
@@ -566,7 +610,8 @@ void PCodeConsole::largePortraits(uint16 buffer, uint16 address) {
 				swapLargePortraits();
 		} else {
 			const uint16 block = uint16(_state.monsterBlock + 6 * (int(pictures[group]) - 1));
-			if (!_host.readDisk(block, kLargePortraitSize, _state.largePortrait[group])) {
+			const uint16 physical = (group ^ _state.portraitOrientation) ? 0x89a2 : 0x71a2;
+			if (!_host.readDiskAt(block, kLargePortraitSize, _state.largePortrait[group], physical, _host.readWord(0xe0e2))) {
 				fail("could not read a complete Wizardry V portrait");
 				return;
 			}
@@ -602,6 +647,80 @@ void PCodeConsole::backupPortrait(uint16 buffer, uint16 address) {
 	}
 }
 
+void PCodeConsole::classicPortraits(uint16 buffer, uint16 address) {
+	// Original I-III WR13/1A63 and IV WR13/1B35. Guest metadata
+	// owns the logical order; monsterRecord remains in physical CS order.
+	clearAttributes(address);
+	for (uint i = 0; i < 4; ++i)
+		_host.writeWord(0xe830 + 2 * i, 0xffff);
+	uint count = 0;
+	for (uint i = 0; i < 4; ++i) {
+		// These reads and stores must be interleaved: the input can alias
+		// E830 or the window cleared above.
+		const byte picture = _host.readByte(uint16(buffer + i));
+		if (picture != 0xff)
+			_host.writeWord(0xe830 + 2 * count++, picture);
+	}
+	if (!count) {
+		// The original enters LOOP with CX=0 and overruns the placement table.
+		fail("unsupported empty classic portrait list");
+		return;
+	}
+	static const byte columns[4][4] = {{15, 0, 0, 0}, {11, 19, 0, 0}, {7, 15, 23, 0}, {3, 11, 19, 27}};
+	for (uint group = 0; group < count; ++group) {
+		const uint16 base = address + 10 + 2 * (324 + columns[count - 1][group]);
+		byte attribute = byte(group << 5);
+		for (uint row = 0; row < 5; ++row)
+			for (uint col = 0; col < 6; ++col)
+				_host.writeByte(uint16(base + 2 * (row * 36 + col) + 1), ++attribute);
+	}
+	for (uint group = 0; group < 4; ++group) {
+		const uint16 desired = 0xe830 + 2 * group, slot = 0xe838 + 4 * group;
+		const uint16 picture = _host.readWord(desired);
+		if (picture & 0x8000)
+			continue;
+		if (picture > 254) {
+			fail("unsupported classic portrait ID");
+			return;
+		}
+		uint cached = group;
+		while (cached < 4 && _host.readWord(0xe838 + 4 * cached) != picture)
+			++cached;
+		if (cached < 4) {
+			const uint16 found = 0xe838 + 4 * cached;
+			const uint16 oldID = _host.readWord(slot), foundID = _host.readWord(found);
+			_host.writeWord(found, oldID);
+			_host.writeWord(slot, foundID);
+			const uint16 oldPointer = _host.readWord(slot + 2), foundPointer = _host.readWord(found + 2);
+			_host.writeWord(found + 2, oldPointer);
+			_host.writeWord(slot + 2, foundPointer);
+			_host.writeWord(desired, foundPointer);
+		} else {
+			const uint16 pointer = _host.readWord(slot + 2);
+			const int physical = classicBuffer(pointer, _host.nativeRevision());
+			if (physical < 0) {
+				fail("unsupported classic cache buffer pointer");
+				return;
+			}
+			_host.writeWord(slot, picture);
+			_host.writeWord(desired, pointer);
+			// Original accepts ID0 and performs this arithmetic as a word.
+			const uint16 block = uint16(_state.monsterBlock + picture - 1);
+			if (!_host.readDiskAt(block, 512, _state.monsterRecord[physical], pointer, _host.readWord(0xe0e2))) {
+				fail("could not read a complete monster portrait");
+				return;
+			}
+		}
+	}
+	for (uint i = 0; i < 4; ++i)
+		_state.monsterPicture[i] = _host.readWord(0xe838 + 4 * i);
+	for (uint cell = 0; cell < kCells; ++cell) {
+		const uint high = _state.cell[cell] >> 8;
+		if (high && high < 0x80 && high != 0x20)
+			_state.cell[cell] = (_state.cell[cell] & 255) | 0x1f00;
+	}
+}
+
 void PCodeConsole::portraits(uint16 buffer, uint16 address) {
 	clearAttributes(address);
 	byte pictures[4];
@@ -627,8 +746,9 @@ void PCodeConsole::portraits(uint16 buffer, uint16 address) {
 	for (uint i = 0; i < 4; ++i)
 		_state.monsterPicture[i] = 0xffff;
 	for (uint group = 0; group < count; ++group) {
+		const uint16 physical = (_host.nativeRevision() == 4 ? 0x73a2 : 0x7252) + group * 512;
 		if (!_host.readDiskAt(uint32(_state.monsterBlock) + pictures[group] - 1, 512,
-							  _state.monsterRecord[group], 0x7252 + group * 512, _host.readWord(0xe0e2))) {
+							  _state.monsterRecord[group], physical, _host.readWord(0xe0e2))) {
 			fail("could not read a complete monster portrait");
 			return;
 		}
@@ -650,12 +770,16 @@ void PCodeConsole::title(uint16 block) {
 		return;
 	}
 	byte data[56 * 80 + 512];
-	if (!_host.readDiskAt(block, sizeof(data), data, 0x7252, _host.readWord(0xe0e2))) {
+	const uint16 physical = _host.nativeRevision() == 5 ? 0x71a2 : _host.nativeRevision() == 4 ? 0x73a2
+																							   : 0x7252;
+	if (!_host.readDiskAt(block, sizeof(data), data, physical, _host.readWord(0xe0e2))) {
 		fail("could not read the complete title bitmap");
 		return;
 	}
 	if (_portraitPolicy)
 		memcpy(_state.largePortrait[_state.portraitOrientation], data, kLargePortraitSize);
+	if (_classicCache)
+		memcpy(_state.monsterRecord, data, sizeof(_state.monsterRecord));
 	uint pos = 4;
 	for (uint i = 0; i < 28; ++i) {
 		for (uint bank = 0; bank < 2; ++bank) {
@@ -669,6 +793,9 @@ void PCodeConsole::title(uint16 block) {
 		_host.writeWord(0xe838, 0xffff);
 		_host.writeWord(0xe83c, 0xffff);
 	}
+	if (_classicCache)
+		for (uint i = 0; i < 4; ++i)
+			_host.writeWord(0xe838 + 4 * i, 0xffff);
 }
 
 void PCodeConsole::appendString(uint16 destination, uint16 source) {

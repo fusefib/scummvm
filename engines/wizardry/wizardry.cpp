@@ -61,9 +61,34 @@ Common::Error WizardryEngine::run() {
 	UcsdDisk disk;
 	Common::String message;
 	Common::Array<byte> program;
-	if (!disk.loadBytes(bytes, message) || !disk.readFile("SYSTEM.PASCAL", program, message) ||
-		!_machine.boot(program, bytes, message))
+	if (!disk.loadBytes(bytes, message) || !disk.readFile("SYSTEM.PASCAL", program, message))
 		return Common::Error(Common::kReadingFailed, message);
+	const bool useOriginalSave = ConfMan.hasKey("original_save_disk") && ConfMan.getBool("original_save_disk");
+	_machine.setOriginalMemory(useOriginalSave);
+	if (useOriginalSave) {
+		const Common::String saveName = Common::String::format("SAVE%u.DSK", _description->gameNumber);
+		Common::File saveFile;
+		if (!saveFile.open(Common::Path(saveName))) {
+			debug(1, "Wizardry: original save disk rejected: missing %s", saveName.c_str());
+			return Common::Error(Common::kNoGameDataFoundError,
+								 Common::String::format("The original save disk option requires %s", saveName.c_str()));
+		}
+		if (saveFile.size() != 1280 * 512) {
+			debug(1, "Wizardry: original save disk rejected: unexpected size for %s", saveName.c_str());
+			return Common::Error(Common::kReadingFailed, "The original save disk has an unexpected size");
+		}
+		Common::Array<byte> saveBytes(uint32(saveFile.size()));
+		if (saveFile.read(saveBytes.data(), saveBytes.size()) != saveBytes.size()) {
+			debug(1, "Wizardry: original save disk rejected: could not read all of %s", saveName.c_str());
+			return Common::kReadingFailed;
+		}
+		if (!_machine.boot(program, bytes, saveBytes, message)) {
+			debug(1, "Wizardry: original save disk rejected: %s", message.c_str());
+			return Common::Error(Common::kReadingFailed, message);
+		}
+	} else if (!_machine.boot(program, bytes, message)) {
+		return Common::Error(Common::kReadingFailed, message);
+	}
 	debug(1, "Wizardry %u: loaded %u p-code segments from %s", _description->gameNumber,
 		  _machine.codeFile().segments().size(), name.c_str());
 	initGraphics(320, 200);

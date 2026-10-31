@@ -170,7 +170,8 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 	_idleSnapshot = false;
 	_state = kRunning;
 	delete _console;
-	_console = new PCodeConsole(*this, revision >= 4 ? NativeRandom::kThreeWord : NativeRandom::kFourWord);
+	_console = new PCodeConsole(*this, revision >= 4 ? NativeRandom::kThreeWord : NativeRandom::kFourWord,
+								(revision == 1 || revision == 4) && _originalMemory);
 	// HAS.CACHE activates the optional native RAM-disk cache, whose ABI is
 	// not implemented. Mark it absent in this private working image only.
 	uint count = READ_LE_UINT16(_disk.data() + 1024 + 16);
