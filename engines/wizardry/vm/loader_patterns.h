@@ -43,25 +43,29 @@ static const byte kLoaderPixels[][16] = {
 	{0xfc, 0x3c, 0x30, 0x0c, 0x30, 0x30, 0x0c, 0x30, 0x0c, 0xc0, 0x03, 0xc0, 0x03, 0x00, 0x00, 0x00},
 };
 static const LoaderTile kLoaderTiles0[] = {
-	{0x0f20, 1},
-	{0x0f2c, 1},
-};
-static const LoaderTile kLoaderTiles1[] = {
-	{0x107e, 0},
-	{0x0f3e, 19},
-};
-static const LoaderTile kLoaderTiles2[] = {
 	{0x1b94, 0},
 	{0x1b98, 18},
 };
+static const LoaderTile kLoaderTiles1[] = {
+	{0x0f20, 1},
+	{0x0f2c, 1},
+};
+static const LoaderTile kLoaderTiles2[] = {
+	{0x107e, 0},
+	{0x0f3e, 19},
+};
 static const LoaderTile kLoaderTiles3[] = {
+	{0x1b94, 0},
+	{0x1b98, 18},
+};
+static const LoaderTile kLoaderTiles4[] = {
 	{0x0f0e, 12},
 	{0x0f10, 2},
 	{0x0f20, 2},
 	{0x0f3e, 2},
 	{0x107e, 0},
 };
-static const LoaderTile kLoaderTiles4[] = {
+static const LoaderTile kLoaderTiles5[] = {
 	{0x0f04, 20},
 	{0x0f06, 2},
 	{0x0f08, 12},
@@ -71,47 +75,47 @@ static const LoaderTile kLoaderTiles4[] = {
 	{0x0f12, 4},
 	{0x0f1e, 13},
 };
-static const LoaderTile kLoaderTiles5[] = {
+static const LoaderTile kLoaderTiles6[] = {
 	{0x0f20, 3},
 	{0x0f2c, 3},
 };
-static const LoaderTile kLoaderTiles6[] = {
+static const LoaderTile kLoaderTiles7[] = {
 	{0x107e, 8},
 	{0x0f3e, 10},
 };
-static const LoaderTile kLoaderTiles7[] = {
+static const LoaderTile kLoaderTiles8[] = {
 	{0x1b94, 8},
 	{0x1b98, 16},
 };
-static const LoaderTile kLoaderTiles8[] = {
+static const LoaderTile kLoaderTiles9[] = {
 	{0x0158, 11},
 	{0x015a, 6},
 	{0x0790, 4},
 	{0x079e, 6},
 	{0x07c0, 6},
 };
-static const LoaderTile kLoaderTiles9[] = {
+static const LoaderTile kLoaderTiles10[] = {
 	{0x0788, 4},
 	{0x079e, 14},
 	{0x07a6, 4},
 	{0x07c2, 4},
 	{0x07c4, 6},
 };
-static const LoaderTile kLoaderTiles10[] = {
+static const LoaderTile kLoaderTiles11[] = {
 	{0x078c, 4},
 	{0x07a2, 6},
 	{0x07a6, 4},
 	{0x07c0, 4},
 	{0x07c2, 6},
 };
-static const LoaderTile kLoaderTiles11[] = {
+static const LoaderTile kLoaderTiles12[] = {
 	{0x0f0e, 9},
 	{0x0f10, 7},
 	{0x0f20, 7},
 	{0x0f3e, 7},
 	{0x107e, 8},
 };
-static const LoaderTile kLoaderTiles12[] = {
+static const LoaderTile kLoaderTiles13[] = {
 	{0x0a06, 5},
 	{0x0a08, 15},
 	{0x0a0a, 17},
@@ -120,17 +124,18 @@ static const LoaderTile kLoaderTiles12[] = {
 	{0x0a2a, 11},
 };
 static const LoaderRule kLoaderRules[] = {
-	{4, LoaderKeyboard::kStart, ARRAYSIZE(kLoaderTiles0), kLoaderTiles0},
-	{4, LoaderKeyboard::kReturn, ARRAYSIZE(kLoaderTiles1), kLoaderTiles1},
-	{4, LoaderKeyboard::kExit, ARRAYSIZE(kLoaderTiles2), kLoaderTiles2},
-	{4, LoaderKeyboard::kSelectSave, ARRAYSIZE(kLoaderTiles3), kLoaderTiles3},
-	{4, LoaderKeyboard::kValidationCode, ARRAYSIZE(kLoaderTiles4), kLoaderTiles4},
-	{5, LoaderKeyboard::kStart, ARRAYSIZE(kLoaderTiles5), kLoaderTiles5},
-	{5, LoaderKeyboard::kReturn, ARRAYSIZE(kLoaderTiles6), kLoaderTiles6},
-	{5, LoaderKeyboard::kExit, ARRAYSIZE(kLoaderTiles7), kLoaderTiles7},
-	{5, LoaderKeyboard::kAuxiliary, ARRAYSIZE(kLoaderTiles8), kLoaderTiles8},
-	{5, LoaderKeyboard::kSelectSave, ARRAYSIZE(kLoaderTiles9), kLoaderTiles9},
+	{1, LoaderKeyboard::kExit, ARRAYSIZE(kLoaderTiles0), kLoaderTiles0},
+	{4, LoaderKeyboard::kStart, ARRAYSIZE(kLoaderTiles1), kLoaderTiles1},
+	{4, LoaderKeyboard::kReturn, ARRAYSIZE(kLoaderTiles2), kLoaderTiles2},
+	{4, LoaderKeyboard::kExit, ARRAYSIZE(kLoaderTiles3), kLoaderTiles3},
+	{4, LoaderKeyboard::kSelectSave, ARRAYSIZE(kLoaderTiles4), kLoaderTiles4},
+	{4, LoaderKeyboard::kValidationCode, ARRAYSIZE(kLoaderTiles5), kLoaderTiles5},
+	{5, LoaderKeyboard::kStart, ARRAYSIZE(kLoaderTiles6), kLoaderTiles6},
+	{5, LoaderKeyboard::kReturn, ARRAYSIZE(kLoaderTiles7), kLoaderTiles7},
+	{5, LoaderKeyboard::kExit, ARRAYSIZE(kLoaderTiles8), kLoaderTiles8},
+	{5, LoaderKeyboard::kAuxiliary, ARRAYSIZE(kLoaderTiles9), kLoaderTiles9},
 	{5, LoaderKeyboard::kSelectSave, ARRAYSIZE(kLoaderTiles10), kLoaderTiles10},
 	{5, LoaderKeyboard::kSelectSave, ARRAYSIZE(kLoaderTiles11), kLoaderTiles11},
-	{5, LoaderKeyboard::kMagicWord, ARRAYSIZE(kLoaderTiles12), kLoaderTiles12},
+	{5, LoaderKeyboard::kSelectSave, ARRAYSIZE(kLoaderTiles12), kLoaderTiles12},
+	{5, LoaderKeyboard::kMagicWord, ARRAYSIZE(kLoaderTiles13), kLoaderTiles13},
 };

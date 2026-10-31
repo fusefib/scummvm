@@ -310,6 +310,12 @@ bool PCodeMachine::loaderKeyboardProfile() const {
 	return _diskPolicy == kResidentCOM && _originalMemory && (_nativeRevision == 4 || _nativeRevision == 5);
 }
 
+bool PCodeMachine::keyboardScreenProfile() const {
+	// The classic COMs share one exit predicate, including compatibility mode.
+	// Their other loader actions and queues are not part of this profile.
+	return _nativeRevision == 1 || loaderKeyboardProfile();
+}
+
 bool PCodeMachine::loadLoaderCom(const Common::Array<byte> &com, Common::String &error) {
 	error.clear();
 	if (!loaderKeyboardProfile() || _instructions || !_loaderKeys.empty()) {
@@ -320,7 +326,7 @@ bool PCodeMachine::loadLoaderCom(const Common::Array<byte> &com, Common::String 
 }
 
 bool PCodeMachine::prepareLoaderKeys() {
-	if (!loaderKeyboardProfile() || !_loaderKeys.empty())
+	if (!keyboardScreenProfile() || !_loaderKeys.empty())
 		return true;
 	const LoaderKeyboard::Action action = LoaderKeyboard::match(_nativeRevision, _console->vram());
 	if (action == LoaderKeyboard::kValidationCode || action == LoaderKeyboard::kMagicWord) {
@@ -331,8 +337,15 @@ bool PCodeMachine::prepareLoaderKeys() {
 		LoaderKeyboard::challengeKeys(_nativeRevision, _console->vram(), _loaderData, _loaderKeys);
 		return true;
 	}
-	if (action == LoaderKeyboard::kExit || action == LoaderKeyboard::kAuxiliary) {
-		fail(action == LoaderKeyboard::kExit ? "Resident loader process-exit action is not implemented" : "Resident loader auxiliary SAVE-file chooser is not implemented");
+	if (action == LoaderKeyboard::kExit) {
+		// The original INT 16h hook commits/closes its files and terminates
+		// through DOS 4C00h without returning to the pending guest service.
+		// Our images are private; the frontend commits them on normal exit.
+		_state = kHalted;
+		return false;
+	}
+	if (action == LoaderKeyboard::kAuxiliary) {
+		fail("Resident loader auxiliary SAVE-file chooser is not implemented");
 		return false;
 	}
 	LoaderKeyboard::enqueue(action, _loaderKeys);
@@ -342,7 +355,7 @@ bool PCodeMachine::prepareLoaderKeys() {
 }
 
 bool PCodeMachine::replayLoaderEvents(uint32 begin, uint32 end) {
-	if (!loaderKeyboardProfile())
+	if (!keyboardScreenProfile())
 		return true;
 	const Common::Array<NativeServiceReplay::Event> &events = _services.events();
 	for (uint32 i = begin; i < end; ++i) {
@@ -381,7 +394,7 @@ void PCodeMachine::consumeInputKey() {
 }
 
 bool PCodeMachine::flushLoaderKeys() {
-	if (!loaderKeyboardProfile())
+	if (!keyboardScreenProfile())
 		return true;
 	// INT16/AH=1 reruns the matcher whenever its queue is empty. A flush
 	// cannot terminate while a matching screen keeps reinserting keys.
@@ -404,7 +417,7 @@ void PCodeMachine::fail(const Common::String &message) {
 }
 
 void PCodeMachine::yieldForInput() {
-	if (_state != kFault) {
+	if (!executionStopped()) {
 		_state = kWaitingForInput;
 		if (!_idleSnapshot && _observer) {
 			_observer->beforeInput(0);
@@ -414,7 +427,7 @@ void PCodeMachine::yieldForInput() {
 }
 
 void PCodeMachine::delay(uint16 ticks) {
-	if (_state == kFault)
+	if (executionStopped())
 		return;
 	if (_observer)
 		_observer->onDelay(ticks);
@@ -488,7 +501,7 @@ bool PCodeMachine::graphicsInit(bool first) {
 }
 
 bool PCodeMachine::pollKeyboard() {
-	if (_state == kFault)
+	if (executionStopped())
 		return false;
 	if (!_services.enabled())
 		return prepareLoaderKeys() && keyAvailable();
@@ -799,7 +812,7 @@ PCodeMachine::State PCodeMachine::run(uint32 budget) {
 			push(readWord(uint16(pop() + 2 * (op - 0xf8))));
 		else
 			execute(op);
-		if (_state != kFault && _services.checkpoint()) {
+		if (!executionStopped() && _services.checkpoint()) {
 			_idleSnapshot = false;
 			yieldForInput();
 		}
@@ -1398,6 +1411,9 @@ void PCodeMachine::standardProcedure(byte n) {
 				if (!_scriptedInput)
 					clearKeys();
 				setIoResult(0);
+			} else if (_nativeRevision == 1) {
+				// Legacy diagnostic scripts retain type-ahead and IORESULT.
+				prepareLoaderKeys();
 			}
 		}
 		break;
@@ -1487,7 +1503,13 @@ void PCodeMachine::unitIO(bool write) {
 				request.kind = 3;
 				request.mode = w;
 				uint consumed;
-				if (loaderKeyboardProfile()) {
+				if (keyboardScreenProfile()) {
+					Common::Array<uint16> biosWords;
+					for (uint32 i = replayBegin; i < next.position(); ++i)
+						if (_services.events()[i].type == NativeServiceReplay::kBiosAX)
+							biosWords.push_back(_services.events()[i].value);
+					if (!validateConsoleInput(request, true, &bytes, &biosWords))
+						return;
 					uint keyIndex = 0;
 					for (uint32 i = replayBegin; i < next.position(); ++i) {
 						if (_services.events()[i].type != NativeServiceReplay::kBiosAX)
@@ -1538,7 +1560,9 @@ void PCodeMachine::unitIO(bool write) {
 			request.count = y;
 			request.kind = 3;
 			request.mode = w;
-			if (loaderKeyboardProfile()) {
+			if (keyboardScreenProfile()) {
+				if (!validateConsoleInput(request, true))
+					return;
 				Common::Array<byte> empty;
 				uint consumed;
 				if (consumeConsoleInput(request, empty, true, false, consumed))
@@ -1732,6 +1756,75 @@ bool PCodeMachine::consumeConsoleInput(const PendingInput &request, const Common
 	return true;
 }
 
+bool PCodeMachine::validateConsoleInput(const PendingInput &request, bool begin,
+										const Common::Array<byte> *replayBytes, const Common::Array<uint16> *biosWords) {
+	if (replayBytes && (!biosWords || biosWords->size() != replayBytes->size())) {
+		fail("Original unit-1 replay has an inconsistent BIOS word count");
+		return false;
+	}
+	Common::Array<byte> staged(_memory, sizeof(_memory));
+	StagedConsoleHost host(staged, _nativeRevision);
+	PCodeConsole console(host, *_console);
+	ConsoleIO stagedIO(host, console);
+	Common::Array<uint16> queued(_loaderKeys);
+	PendingInput next = request;
+	uint position = 0;
+	bool first = begin;
+	// A failed later echo must not expose an earlier key or a DLE prefix.
+	// Stage the whole available sequence, including screen-dependent keys.
+	while (next.position < next.count) {
+		if (queued.empty()) {
+			const LoaderKeyboard::Action action = LoaderKeyboard::match(_nativeRevision, console.vram());
+			if (action == LoaderKeyboard::kExit)
+				return true;
+			if (action == LoaderKeyboard::kAuxiliary) {
+				fail("Resident loader auxiliary SAVE-file chooser is not implemented");
+				return false;
+			}
+			if (action == LoaderKeyboard::kValidationCode || action == LoaderKeyboard::kMagicWord) {
+				if (_loaderData.empty()) {
+					fail("Resident challenge requires the matching WIZ4.COM or WIZ5.COM at startup");
+					return false;
+				}
+				LoaderKeyboard::challengeKeys(_nativeRevision, console.vram(), _loaderData, queued);
+			} else {
+				LoaderKeyboard::enqueue(action, queued);
+			}
+		}
+		byte key;
+		if (replayBytes) {
+			if (position == replayBytes->size())
+				break;
+			if (!queued.empty() && (*biosWords)[position] != queued[0]) {
+				fail("Original keyboard replay differs from the resident loader BIOS word");
+				return false;
+			}
+			key = (*replayBytes)[position++];
+		} else if (!queued.empty()) {
+			key = byte(queued[0]);
+		} else {
+			if (position == _keys.size() - _keyPosition)
+				break;
+			key = _keys[_keyPosition + position++];
+		}
+		Common::Array<byte> one;
+		one.push_back(key);
+		stagedIO.read(next.address, next.count, next.mode, next.position, next.active, one, first);
+		first = false;
+		if (!host.error.empty()) {
+			fail(host.error);
+			return false;
+		}
+		if (!queued.empty())
+			queued.remove_at(0);
+	}
+	if (replayBytes && (next.active || position != replayBytes->size())) {
+		fail("Original unit-1 replay does not end at its count or terminator");
+		return false;
+	}
+	return true;
+}
+
 void ConsoleIO::write(uint16 unit, uint16 address, uint16 count, uint16 mode) {
 	initialize(mode);
 	for (uint32 i = 0; i < count; ++i)
@@ -1760,7 +1853,9 @@ bool PCodeMachine::writeConsoleOutput(uint16 unit, uint16 address, uint16 count,
 
 void PCodeMachine::completeInput() {
 	if (_input.kind == 3) {
-		if (loaderKeyboardProfile()) {
+		if (keyboardScreenProfile()) {
+			if (!validateConsoleInput(_input, false))
+				return;
 			while (_input.active) {
 				if (!prepareLoaderKeys())
 					return;

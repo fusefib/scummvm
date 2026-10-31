@@ -129,6 +129,7 @@ public:
 	uint16 diskCapacity() const override { return _diskPolicy == kLegacy632 ? 632 : 1272; }
 	bool keyAvailable() const override { return !_loaderKeys.empty() || _keyPosition < _keys.size(); }
 	bool pollKeyboard() override;
+	bool executionStopped() const override { return _state == kHalted || _state == kFault; }
 	bool tracedInput() const override { return _services.inputMode(); }
 	bool graphicsInit(bool first) override;
 	void diskWritten() override {
@@ -237,6 +238,7 @@ private:
 	bool originalProcedure(byte segment, byte procedure, PCodeProcedure &result) const;
 	bool originalServiceProfile() const;
 	bool loaderKeyboardProfile() const;
+	bool keyboardScreenProfile() const;
 	bool prepareLoaderKeys();
 	bool replayLoaderEvents(uint32 begin, uint32 end);
 	byte inputKey() const;
@@ -255,6 +257,9 @@ private:
 	void completeInput();
 	bool consumeConsoleInput(const PendingInput &request, const Common::Array<byte> &keys,
 		bool begin, bool requireComplete, uint &consumed);
+	bool validateConsoleInput(const PendingInput &request, bool begin,
+							  const Common::Array<byte> *replayBytes = nullptr,
+							  const Common::Array<uint16> *biosWords = nullptr);
 	void prepareInput(uint16 mode);
 	void finishInput();
 	void moveBytes(uint16 destination, uint16 source, uint32 size, bool backward = false);

@@ -45,6 +45,8 @@ public:
 	virtual uint16 diskCapacity() const { return 632; }
 	virtual bool keyAvailable() const = 0;
 	virtual bool pollKeyboard() { return keyAvailable(); }
+	// A resident loader may terminate instead of returning from a BIOS call.
+	virtual bool executionStopped() const { return false; }
 	virtual bool tracedInput() const { return false; }
 	virtual byte nativeRevision() const { return 0; }
 	virtual void diskWritten() {}
@@ -55,7 +57,6 @@ public:
 	// Native delay request: testing can advance without wall-clock sleeping.
 	virtual void delay(uint16 ticks) = 0;
 	virtual void sound(uint16 first, uint16 second, uint16 third) = 0;
-	virtual bool executionStopped() const { return false; }
 	virtual bool keyboardBlocked() const { return false; }
 	virtual void fail(const Common::String &message) = 0;
 };
