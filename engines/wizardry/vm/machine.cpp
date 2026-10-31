@@ -104,6 +104,10 @@ bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byt
 	_code = Common::move(parsed);
 	_nativeRevision = revision;
 	_originalWordHighByte = originalWordHighInitial;
+	// The supplied boot sectors pass DX=0880 (URD21=1272). IV/V can use
+	// that observed raw transport. I-III retain the 632-block control policy
+	// until the COM callback's separate SAVE-image switch is implemented.
+	_suppliedGeometry = revision >= 4 && READ_LE_UINT16(disk.data() + 3) == 0x0880;
 	_services.clear();
 	_disk = disk;
 	_sourceDiskCRC = wizardryCrc32(disk.data(), disk.size());
@@ -216,6 +220,8 @@ bool PCodeMachine::readDisk(uint32 block, uint32 size, byte *destination) {
 }
 
 void PCodeMachine::queueKey(byte key) {
+	if (_services.inputMode())
+		return;
 	if (!key)
 		return;
 	if (_keyPosition == _keys.size())
@@ -285,12 +291,38 @@ void PCodeMachine::delay(uint16 ticks) {
 	}
 }
 
+bool PCodeMachine::originalServiceProfile() const {
+	return (_nativeRevision == 1 && _console->rngAlgorithm() == NativeRandom::kFourWord) ||
+		((_nativeRevision == 4 || _nativeRevision == 5) && _console->rngAlgorithm() == NativeRandom::kThreeWord);
+}
+
 bool PCodeMachine::setServiceReplay(const Common::Array<NativeServiceReplay::Event> &events, Common::String &error) {
-	if (!canSuspend() || !_nativeRevision || (_nativeRevision >= 4 && _console->rngAlgorithm() != NativeRandom::kThreeWord)) {
+	if (!canSuspend() || !originalServiceProfile()) {
 		error = "Native service replay requires the verified interpreter's original RNG profile";
 		return false;
 	}
 	return _services.configure(events, 0, error);
+}
+
+bool PCodeMachine::setInputReplay(const Common::Array<NativeServiceReplay::Event> &events, Common::String &error) {
+	if (!canSuspend() || !originalServiceProfile() || (_nativeRevision == 5 && !_console->portraitPolicy()) ||
+		_input.active || keyAvailable()) {
+		error = "Native input replay requires the verified original RNG and portrait profiles and an empty keyboard boundary";
+		return false;
+	}
+	if (!_services.configure(events, 0, error, true))
+		return false;
+	clearKeys();
+	return true;
+}
+
+bool PCodeMachine::graphicsInit(bool first) {
+	Common::String error;
+	if (!_services.graphicsInit(_nativeRevision, first, error)) {
+		fail(error);
+		return false;
+	}
+	return true;
 }
 
 bool PCodeMachine::pollKeyboard() {
@@ -564,6 +596,18 @@ Common::String PCodeMachine::pascalString(uint16 address) const {
 PCodeMachine::State PCodeMachine::run(uint32 budget) {
 	if (_state == kHalted || _state == kFault)
 		return _state;
+	if (_services.inputMode()) {
+		if (_services.complete()) {
+			if (_state != kWaitingForInput)
+				yieldForInput();
+			return _state;
+		}
+		if (_services.checkpoint()) {
+			_idleSnapshot = false;
+			yieldForInput();
+			return _state;
+		}
+	}
 	if (_realtime && (_state == kDelayed || _state == kPlayingSound)) {
 		advanceTime(0);
 		if (_waitRemainingUs)
@@ -590,6 +634,10 @@ PCodeMachine::State PCodeMachine::run(uint32 budget) {
 			push(readWord(uint16(pop() + 2 * (op - 0xf8))));
 		else
 			execute(op);
+		if (_state != kFault && _services.checkpoint()) {
+			_idleSnapshot = false;
+			yieldForInput();
+		}
 	}
 	return _state;
 }
@@ -1168,8 +1216,19 @@ void PCodeMachine::standardProcedure(byte n) {
 		break;
 	case 38:
 		a = pop();
-		if (a == 2 && !_scriptedInput)
-			clearKeys();
+		if (a == 1 || a == 2) {
+			if (_services.inputMode()) {
+				Common::String error;
+				if (!_services.flushInput(a, error)) {
+					fail(error);
+					break;
+				}
+				setIoResult(0);
+			} else if (!_scriptedInput) {
+				clearKeys();
+				setIoResult(0);
+			}
+		}
 		break;
 	case 40:
 		a = _originalMemory && readWord(0xe0e6) ? readWord(0xe0e6) : _heap;
@@ -1189,31 +1248,89 @@ void PCodeMachine::unitIO(bool write) {
 	if (unit == 13) {
 		_console->call(write, address, y, z, w);
 	} else if (unit == 4 || unit == 5 || (unit >= 9 && unit <= 12)) {
-		// I-III report 632 accessible blocks even in the larger SAVE images.
-		if (z >= 632 || y > _disk.size() || uint32(z) * 512 > _disk.size() - y ||
-			uint32(z) * 512 + y > 632U * 512) {
+		const uint32 offset = uint32(z) * 512;
+		const uint32 available = offset < _disk.size() ? MIN<uint32>(y, _disk.size() - offset) : 0;
+		if (_suppliedGeometry && !write) {
+			// Original full-sector EOF reads leave the uncopied guest bytes
+			// intact and return IORESULT=0. A partial-sector EOF additionally
+			// depends on the DOS bounce buffer, which is not modeled here.
+			if (available != y && (y & 511)) {
+				fail("Partial-sector disk EOF requires an unmodeled original bounce buffer");
+				return;
+			}
+			for (uint32 i = 0; i < available; ++i)
+				writeByte(uint16(address + i), _disk[offset + i]);
+			setIoResult(0);
+			return;
+		}
+		// Writes are private and bounded by the supplied image; this port
+		// does not reproduce DOS file growth or its ignored error flags.
+		if (offset > _disk.size() || available != y || (!_suppliedGeometry && (z >= 632 || offset + y > 632U * 512))) {
 			setIoResult(10);
 			return;
 		}
 		for (uint32 i = 0; i < y; ++i) {
 			if (write)
-				_disk[uint32(z) * 512 + i] = readByte(uint16(address + i));
+				_disk[offset + i] = readByte(uint16(address + i));
 			else
-				writeByte(uint16(address + i), _disk[uint32(z) * 512 + i]);
+				writeByte(uint16(address + i), _disk[offset + i]);
 		}
 		setIoResult(0);
 	} else if (unit == 1 || unit == 2) {
+		if (!write && _services.inputMode()) {
+			if (!y) {
+				setIoResult(0);
+				return;
+			}
+			Common::Array<byte> bytes;
+			Common::String error;
+			const bool modeAware = _services.modeAwareRead();
+			if (!_services.readInput(unit, y, bytes, error, w, address, readByte(0xe130))) {
+				fail(error);
+				return;
+			}
+			if (modeAware)
+				prepareInput(w);
+			for (uint i = 0; i < bytes.size(); ++i) {
+				if (_observer)
+					_observer->beforeInput(bytes[i]);
+				writeByte(uint16(address + i), bytes[i]);
+				_idleSnapshot = false;
+			}
+			if (modeAware)
+				finishInput();
+			setIoResult(0);
+			return;
+		}
 		setIoResult(0);
 		if (!write) {
+			if (!y)
+				return;
 			_input.active = true;
 			_input.address = address;
 			_input.count = y;
 			_input.position = 0;
+			_input.kind = unit;
+			_input.mode = unit == 2 ? w : 8;
+			if (unit == 2)
+				prepareInput(w);
 			completeInput();
 		}
 	} else {
 		setIoResult(2);
 	}
+}
+
+void PCodeMachine::prepareInput(uint16 mode) {
+	const byte flags = readByte(0xe21c);
+	writeByte(0x0630, flags);
+	writeByte(0xe21c, flags | ((flags >> 4) & 3));
+	writeByte(0x0623, mode & 8 ? 0 : 255);
+	writeByte(0x0622, mode & 4 ? 0 : 255);
+}
+
+void PCodeMachine::finishInput() {
+	writeByte(0xe21c, readByte(0x0630));
 }
 
 void PCodeMachine::completeInput() {
@@ -1227,7 +1344,11 @@ void PCodeMachine::completeInput() {
 			_observer->beforeInput(key);
 		writeByte(uint16(_input.address + _input.position++), key);
 		_idleSnapshot = false;
+		if (_input.kind == 2 && readByte(0x0623) && key == readByte(0xe130))
+			break;
 	}
+	if (_input.kind == 2)
+		finishInput();
 	_input.active = false;
 	setIoResult(0);
 }

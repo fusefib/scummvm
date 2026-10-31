@@ -38,7 +38,8 @@ public:
 		   kRows = 25,
 		   kCells = 1000,
 		   kVramSize = 0x4000,
-		   kCharsetSize = 5120 };
+		   kCharsetSize = 5120,
+		   kLargePortraitSize = 3072 };
 	explicit PCodeConsole(MachineHost &host, NativeRandom::Algorithm algorithm = NativeRandom::kFourWord);
 	bool call(bool write, uint16 buffer, uint16 selector, uint16 z, uint16 w);
 	const byte *vram() const { return _state.vram; }
@@ -47,6 +48,7 @@ public:
 	void getRngState(uint16 state[4]) const;
 	void setRngState(const uint16 state[4]);
 	NativeRandom::Algorithm rngAlgorithm() const { return _rngAlgorithm; }
+	byte portraitPolicy() const { return _portraitPolicy; }
 
 private:
 	struct State {
@@ -61,6 +63,8 @@ private:
 		byte monsterRecord[4][512];
 		uint16 head;
 		bool initialized;
+		byte largePortrait[2][kLargePortraitSize];
+		byte portraitOrientation; // Logical slot containing physical CS:71A2.
 	};
 	struct Window {
 		uint16 address, next;
@@ -70,12 +74,14 @@ private:
 	State _state;
 	HuffmanDecoder _huffman;
 	NativeRandom::Algorithm _rngAlgorithm;
+	byte _portraitPolicy;
 	bool _failed;
 
 	bool fail(const char *message);
 	bool readWindow(uint16 address, Window &window);
 	uint16 windowCell(const Window &window, uint index) const;
 	void advanceRandom(uint16 buffer);
+	void cacheList(uint16 buffer, uint16 key);
 	void init(uint16 buffer);
 	void putTile(uint cell, const byte *rows);
 	void blank(uint cell);
@@ -92,6 +98,10 @@ private:
 	void drawLine(uint16 buffer, uint16 address);
 	void clearAttributes(uint16 address);
 	void portraits(uint16 buffer, uint16 address);
+	void largePortraits(uint16 buffer, uint16 address);
+	void backupPortrait(uint16 buffer, uint16 address);
+	void swapLargePortraits();
+	void syncPortraitCache();
 	void title(uint16 block);
 	void appendString(uint16 destination, uint16 source);
 	void stringPosition(uint16 buffer, uint16 pattern, uint16 text);

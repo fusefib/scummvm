@@ -24,7 +24,7 @@
 namespace Wizardry {
 
 PCodeConsole::PCodeConsole(MachineHost &host, NativeRandom::Algorithm algorithm)
-	: _host(host), _rngAlgorithm(algorithm), _failed(false) {
+	: _host(host), _rngAlgorithm(algorithm), _portraitPolicy(host.nativeRevision() == 5 ? 1 : 0), _failed(false) {
 	memset(&_state, 0, sizeof(_state));
 	NativeRandom::reset(_rngAlgorithm, _state.rng);
 	for (uint i = 0; i < 4; ++i)
@@ -77,7 +77,8 @@ void PCodeConsole::advanceRandom(uint16 buffer) {
 
 bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, uint16 w) {
 	_failed = false;
-	_host.setIoResult(0);
+	if (!write || selector != 1)
+		_host.setIoResult(0);
 	if (!write) {
 		switch (selector) {
 		case 10:
@@ -87,15 +88,18 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 			bool available = _host.pollKeyboard();
 			_host.writeWord(buffer, available ? 1 : 0);
 			_state.idle = available ? 0 : (_state.idle < 0xffffffffU ? _state.idle + 1 : _state.idle);
-			if (_state.idle > 300)
+			if (_state.idle > 300 && !_host.tracedInput())
 				_host.yieldForInput();
 			break;
 		}
 		case 12:
 			_host.writeWord(buffer, 1);
 			break;
+		case 16:
+			cacheList(buffer, z);
+			break;
 		case 21:
-			_host.writeWord(buffer, 0x278);
+			_host.writeWord(buffer, _host.diskCapacity());
 			break;
 		default:
 			_host.setIoResult(3);
@@ -120,7 +124,10 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 		drawLine(buffer, z);
 		break;
 	case 13:
-		portraits(buffer, z);
+		if (_portraitPolicy)
+			largePortraits(buffer, z);
+		else
+			portraits(buffer, z);
 		break;
 	case 14: {
 		byte charset[kCharsetSize];
@@ -130,14 +137,23 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 		break;
 	}
 	case 15:
-		break; // The backend owns display lifetime; no DOS video mode to restore.
+		_host.writeWord(0xe8fe, 0);
+		_state.initialized = false;
+		break; // The backend owns display lifetime; no DOS text mode to restore.
 	case 17:
-		clearAttributes(z);
+		if (_portraitPolicy)
+			backupPortrait(buffer, z);
+		else
+			clearAttributes(z);
 		break;
 	case 18:
 		_state.monsterBlock = z;
+		if (_portraitPolicy && _state.portraitOrientation)
+			swapLargePortraits();
 		for (uint i = 0; i < 4; ++i)
 			_state.monsterPicture[i] = 0xffff;
+		if (_portraitPolicy)
+			syncPortraitCache();
 		break;
 	case 19:
 		// INTERP:2305 doubles DX before waiting for BIOS clock ticks. Pass the
@@ -177,14 +193,72 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 	return !_failed;
 }
 
+void PCodeConsole::cacheList(uint16 buffer, uint16 key) {
+	// URD16: I-III 23e4, IV 2508, V 25ec. Each node is key/next/previous;
+	// the caller supplies head/tail words and moves the returned head's data.
+	// Keep the original write order and rereads, including wrapped/aliased
+	// guest addresses and the original empty/single-node edge behavior.
+	uint16 node = _host.readWord(buffer);
+	for (uint32 searched = 0; node && _host.readWord(node) != key; ++searched) {
+		if (searched == 65535) {
+			fail("Cyclic cache list in CONUNIT read selector 16");
+			return;
+		}
+		node = _host.readWord(uint16(node + 2));
+	}
+	if (node) {
+		if (node == _host.readWord(buffer))
+			return;
+		const uint16 next = _host.readWord(uint16(node + 2));
+		const uint16 previous = _host.readWord(uint16(node + 4));
+		_host.writeWord(uint16(previous + 2), next);
+		if (node == _host.readWord(uint16(buffer + 2)))
+			_host.writeWord(uint16(buffer + 2), previous);
+		else
+			_host.writeWord(uint16(_host.readWord(uint16(node + 2)) + 4), previous);
+		_host.writeWord(uint16(node + 4), 0);
+		const uint16 head = _host.readWord(buffer);
+		_host.writeWord(uint16(node + 2), head);
+		_host.writeWord(uint16(head + 4), node);
+		_host.writeWord(buffer, node);
+	} else {
+		node = _host.readWord(uint16(buffer + 2));
+		const uint16 previous = _host.readWord(uint16(node + 4));
+		_host.writeWord(uint16(buffer + 2), previous);
+		_host.writeWord(uint16(previous + 2), 0);
+		_host.writeWord(uint16(node + 4), 0);
+		const uint16 head = _host.readWord(buffer);
+		_host.writeWord(uint16(node + 2), head);
+		_host.writeWord(node, 0x8000);
+		_host.writeWord(uint16(head + 4), node);
+		_host.writeWord(buffer, node);
+	}
+}
+
 void PCodeConsole::init(uint16 buffer) {
+	const bool first = (_host.readWord(0xe8fe) & 255) == 0;
+	if (!_host.graphicsInit(first)) {
+		_failed = true;
+		return;
+	}
+	_host.setIoResult(0);
+	if (first) {
+		_host.writeWord(0xe8fe, 0x00ff);
+		_host.writeWord(0xe816, 0xe900);
+		const byte revision = _host.nativeRevision();
+		_host.writeWord(0xe81a, revision == 5 ? 0xa1a2 : revision == 4 ? 0x872a
+																	   : 0x85da);
+		memset(_state.priority, 0, sizeof(_state.priority));
+		const uint16 blank = _host.nativeRevision() >= 4 ? 0x20 : 0;
+		for (uint i = 0; i < kCells; ++i)
+			_state.cell[i] = blank;
+		memset(_state.vram, 0, sizeof(_state.vram));
+	}
 	// The IV/V routine sets ES=0040 but actually reads DS:006C.
 	if (_rngAlgorithm == NativeRandom::kThreeWord)
 		_state.rng[1] = uint16(_host.readWord(0x006c) + 2);
 	_state.initialized = true;
-	memset(_state.priority, 0, sizeof(_state.priority));
-	memset(_state.cell, 0, sizeof(_state.cell));
-	memset(_state.vram, 0, sizeof(_state.vram));
+	_host.writeWord(0xe822, _host.readWord(buffer));
 	_host.writeWord(buffer, 0x31);
 }
 
@@ -203,14 +277,14 @@ void PCodeConsole::putTile(uint cell, const byte *rows) {
 
 void PCodeConsole::blank(uint cell) {
 	static const byte zeros[16] = {};
-	_state.cell[cell] = 0;
+	_state.cell[cell] = _portraitPolicy ? 0x20 : 0;
 	putTile(cell, zeros);
 }
 
 void PCodeConsole::draw(uint cell, uint16 word) {
 	uint high = word >> 8, low = word & 255;
 	if (high == 0) {
-		if (low == 0 || low == 0x20)
+		if ((!_portraitPolicy && low == 0) || low == 0x20)
 			blank(cell);
 		else
 			putTile(cell, _state.charset + low * 16);
@@ -220,6 +294,19 @@ void PCodeConsole::draw(uint cell, uint16 word) {
 		byte solid[16];
 		memset(solid, 255, sizeof(solid));
 		putTile(cell, solid);
+	} else if (_portraitPolicy) {
+		if (high != 2 && high != 3) {
+			fail("unsupported Wizardry V graphics pointer table entry");
+			return;
+		}
+		const uint16 pointer = _host.readWord(0xe830 + 2 * (high - 2));
+		if (pointer != 0x71a2 && pointer != 0x89a2) {
+			fail("unsupported Wizardry V desired portrait pointer");
+			return;
+		}
+		const uint group = (pointer == 0x89a2 ? 1 : 0) ^ _state.portraitOrientation;
+		// Original V's 256-entry offset table maps 168..255 back to tile0.
+		putTile(cell, _state.largePortrait[group] + (low < 168 ? low * 16 : 0));
 	} else {
 		int tile = int(high & 31) - 1;
 		uint group = ((high >> 4) & 6) >> 1;
@@ -234,8 +321,9 @@ void PCodeConsole::draw(uint cell, uint16 word) {
 void PCodeConsole::storeCell(uint cell, uint16 word) {
 	uint16 old = _state.cell[cell];
 	_state.cell[cell] = word;
-	uint16 a = (old == 0x2020 || old == 0x20) ? 0 : old;
-	uint16 b = (word == 0x2020 || word == 0x20) ? 0 : word;
+	const uint16 blankValue = _portraitPolicy ? 0x20 : 0;
+	uint16 a = (old == 0x2020 || old == 0x20) ? blankValue : old;
+	uint16 b = (word == 0x2020 || word == 0x20) ? blankValue : word;
 	if (a != b)
 		draw(cell, word);
 }
@@ -432,6 +520,86 @@ void PCodeConsole::clearAttributes(uint16 address) {
 		_host.writeByte(address + 11 + 2 * i, 0);
 }
 
+void PCodeConsole::swapLargePortraits() {
+	for (uint i = 0; i < kLargePortraitSize; ++i) {
+		const byte value = _state.largePortrait[0][i];
+		_state.largePortrait[0][i] = _state.largePortrait[1][i];
+		_state.largePortrait[1][i] = value;
+	}
+	const uint16 picture = _state.monsterPicture[0];
+	_state.monsterPicture[0] = _state.monsterPicture[1];
+	_state.monsterPicture[1] = picture;
+	_state.portraitOrientation ^= 1;
+}
+
+void PCodeConsole::syncPortraitCache() {
+	for (uint group = 0; group < 2; ++group) {
+		_host.writeWord(0xe838 + group * 4, _state.monsterPicture[group]);
+		_host.writeWord(0xe83a + group * 4, (group ^ _state.portraitOrientation) ? 0x89a2 : 0x71a2);
+	}
+}
+
+void PCodeConsole::largePortraits(uint16 buffer, uint16 address) {
+	const byte first = _host.readByte(buffer);
+	if (first == 255) {
+		_host.writeWord(0xe834, _host.readWord(uint16(buffer + 2)));
+		return;
+	}
+	const byte pictures[2] = {first, _host.readByte(uint16(buffer + 1))};
+	const uint count = pictures[1] == 255 ? 1 : 2;
+	for (uint group = 0; group < count; ++group) {
+		const uint column = count == 1 ? 12 : group ? 20
+													: 4;
+		for (uint row = 0; row < 14; ++row)
+			for (uint col = 0; col < 12; ++col)
+				_host.writeWord(uint16(address + 10 + 2 * ((6 + row) * 36 + column + col)),
+								uint16(((group + 2) << 8) | (row * 12 + col)));
+	}
+	for (uint group = 0; group < count; ++group) {
+		uint cached = group;
+		while (cached < 2 && _state.monsterPicture[cached] != pictures[group])
+			++cached;
+		if (cached < 2) {
+			if (cached != group)
+				swapLargePortraits();
+		} else {
+			const uint16 block = uint16(_state.monsterBlock + 6 * (int(pictures[group]) - 1));
+			if (!_host.readDisk(block, kLargePortraitSize, _state.largePortrait[group])) {
+				fail("could not read a complete Wizardry V portrait");
+				return;
+			}
+			_state.monsterPicture[group] = pictures[group];
+		}
+		syncPortraitCache();
+		_host.writeWord(0xe830 + group * 2, (group ^ _state.portraitOrientation) ? 0x89a2 : 0x71a2);
+	}
+	if (count == 1)
+		_host.writeWord(0xe832, 0xffff);
+	for (uint cell = 0; cell < kCells; ++cell) {
+		const uint high = _state.cell[cell] >> 8;
+		if (high && high < 0x80 && high != 0x20)
+			_state.cell[cell] = (_state.cell[cell] & 0xff00) | 0x5f;
+	}
+}
+
+void PCodeConsole::backupPortrait(uint16 buffer, uint16 address) {
+	const bool restore = _host.readByte(buffer) != 0;
+	const byte placement = _host.readByte(uint16(buffer + 1));
+	const uint column = placement == 1 ? 12 : placement == 2 ? 20
+															 : 4;
+	const uint16 backup = uint16(_host.readWord(0xe834) + 0x557 + (placement == 2 ? 0x600 : 0));
+	for (uint row = 0; row < 14; ++row) {
+		for (uint col = 0; col < 12; ++col) {
+			const uint16 cell = uint16(address + 10 + 2 * ((6 + row) * 36 + column + col));
+			const uint16 saved = uint16(backup + row * 12 + col);
+			if (restore)
+				_host.writeWord(cell, _host.readByte(saved));
+			else
+				_host.writeByte(saved, _host.readByte(cell));
+		}
+	}
+}
+
 void PCodeConsole::portraits(uint16 buffer, uint16 address) {
 	clearAttributes(address);
 	byte pictures[4];
@@ -483,6 +651,8 @@ void PCodeConsole::title(uint16 block) {
 		fail("could not read the complete title bitmap");
 		return;
 	}
+	if (_portraitPolicy)
+		memcpy(_state.largePortrait[_state.portraitOrientation], data, kLargePortraitSize);
 	uint pos = 4;
 	for (uint i = 0; i < 28; ++i) {
 		for (uint bank = 0; bank < 2; ++bank) {
@@ -492,6 +662,10 @@ void PCodeConsole::title(uint16 block) {
 	}
 	for (uint i = 0; i < 4; ++i)
 		_state.monsterPicture[i] = 0xffff;
+	if (_portraitPolicy) {
+		_host.writeWord(0xe838, 0xffff);
+		_host.writeWord(0xe83c, 0xffff);
+	}
 }
 
 void PCodeConsole::appendString(uint16 destination, uint16 source) {

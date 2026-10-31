@@ -39,8 +39,12 @@ public:
 	virtual void writeByte(uint16 address, byte value) = 0;
 	virtual void writeWord(uint16 address, uint16 value) = 0;
 	virtual bool readDisk(uint32 block, uint32 size, byte *destination) = 0;
+	virtual uint16 diskCapacity() const { return 632; }
 	virtual bool keyAvailable() const = 0;
 	virtual bool pollKeyboard() { return keyAvailable(); }
+	virtual bool tracedInput() const { return false; }
+	virtual byte nativeRevision() const { return 0; }
+	virtual bool graphicsInit(bool) { return true; }
 	virtual void setIoResult(uint16 value) = 0;
 	// An availability poll is complete before this cooperative yield.
 	virtual void yieldForInput() = 0;

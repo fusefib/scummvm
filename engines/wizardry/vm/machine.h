@@ -63,12 +63,18 @@ public:
 			_originalMemory = original;
 	}
 	bool originalMemory() const { return _originalMemory; }
-	byte nativeRevision() const { return _nativeRevision; }
+	byte nativeRevision() const override { return _nativeRevision; }
 	bool setServiceReplay(const Common::Array<NativeServiceReplay::Event> &events, Common::String &error);
+	bool setInputReplay(const Common::Array<NativeServiceReplay::Event> &events, Common::String &error);
 	bool serviceReplayEnabled() const { return _services.enabled(); }
 	uint32 serviceReplayPosition() const { return _services.position(); }
 	uint32 serviceReplaySize() const { return _services.events().size(); }
 	bool serviceReplayComplete() const { return _services.complete(); }
+	uint32 serviceReplayCalls() const { return _services.calls(); }
+	uint32 serviceReplayCallEnd() const { return _services.callEnd(); }
+	uint16 serviceReplayCheckpoint() const { return _services.checkpointID(); }
+	uint16 serviceReplayNextCall() const { return _services.nextType() == NativeServiceReplay::kCall ? _services.nextValue() : 0; }
+	uint16 evaluationStackPointer() const { return _originalMemory ? originalStackPointer() : 0; }
 	uint16 currentFrameBase() const { return _frames.empty() ? 0 : _frames.back().base; }
 	uint16 arenaTop() const { return _np; }
 	uint16 heapTop() const { return _heap; }
@@ -91,15 +97,21 @@ public:
 	const PCodeConsole &console() const { return *_console; }
 	const Common::Array<byte> &disk() const { return _disk; }
 	const PCodeFile &codeFile() const { return _code; }
-	bool canSuspend() const { return _state != kFault && _state != kHalted && !_frames.empty(); }
+	bool canSuspend() const {
+		return _state != kFault && _state != kHalted && !_frames.empty() &&
+			(!_input.active || _state == kWaitingForInput);
+	}
 
 	byte readByte(uint16 address) const override { return _memory[address]; }
 	uint16 readWord(uint16 address) const override;
 	void writeByte(uint16 address, byte value) override;
 	void writeWord(uint16 address, uint16 value) override;
 	bool readDisk(uint32 block, uint32 size, byte *destination) override;
+	uint16 diskCapacity() const override { return _suppliedGeometry ? 1272 : 632; }
 	bool keyAvailable() const override { return _keyPosition < _keys.size(); }
 	bool pollKeyboard() override;
+	bool tracedInput() const override { return _services.inputMode(); }
+	bool graphicsInit(bool first) override;
 	void setIoResult(uint16 value) override;
 	void yieldForInput() override;
 	void delay(uint16 ticks) override;
@@ -134,6 +146,8 @@ private:
 		uint16 address = 0;
 		uint16 count = 0;
 		uint16 position = 0;
+		uint16 mode = 8;
+		byte kind = 0; // 0-3: reads; 4: console poll; 5: flush; 6: delay, suspended in III's chooser.
 	};
 	PCodeFile _code;
 	Common::Array<byte> _disk;
@@ -159,6 +173,7 @@ private:
 	bool _preserveLocals = false;
 	bool _originalMemory = false;
 	byte _nativeRevision = 0;
+	bool _suppliedGeometry = false;
 	NativeServiceReplay _services;
 	bool _realtime = false;
 	byte _biosModifiers = 0;
@@ -191,6 +206,7 @@ private:
 	uint16 originalStackPointer() const;
 	uint16 codeWord(byte segment, uint16 offset) const;
 	bool originalProcedure(byte segment, byte procedure, PCodeProcedure &result) const;
+	bool originalServiceProfile() const;
 	int32 walk(byte levels);
 	uint16 localAddress(int32 frame, uint16 word);
 	uint16 literal(uint16 offset, uint16 length);
@@ -201,6 +217,8 @@ private:
 	void standardProcedure(byte number);
 	void unitIO(bool write);
 	void completeInput();
+	void prepareInput(uint16 mode);
+	void finishInput();
 	void moveBytes(uint16 destination, uint16 source, uint32 size, bool backward = false);
 	void moveWords(uint16 destination, uint16 source, uint16 count);
 	void fillMemory(uint16 destination, byte value, uint32 size);
