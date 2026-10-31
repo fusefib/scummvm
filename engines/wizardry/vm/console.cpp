@@ -23,10 +23,10 @@
 
 namespace Wizardry {
 
-PCodeConsole::PCodeConsole(MachineHost &host) : _host(host), _failed(false) {
+PCodeConsole::PCodeConsole(MachineHost &host, NativeRandom::Algorithm algorithm)
+	: _host(host), _rngAlgorithm(algorithm), _failed(false) {
 	memset(&_state, 0, sizeof(_state));
-	const uint16 initial[4] = {0x5bab, 0xd02b, 0x7e15, 0x7351};
-	setRngState(initial);
+	NativeRandom::reset(_rngAlgorithm, _state.rng);
 	for (uint i = 0; i < 4; ++i)
 		_state.monsterPicture[i] = 0xffff;
 }
@@ -67,16 +67,12 @@ void PCodeConsole::getRngState(uint16 state[4]) const {
 
 void PCodeConsole::setRngState(const uint16 state[4]) {
 	memcpy(_state.rng, state, sizeof(_state.rng));
+	if (_rngAlgorithm == NativeRandom::kThreeWord)
+		_state.rng[3] = 0;
 }
 
 void PCodeConsole::advanceRandom(uint16 buffer) {
-	static const uint16 inc[4] = {0x3619, 0xff8b, 0x0183, 0x7fc9};
-	static const uint16 mul[4] = {0x6a2d, 0xfff1, 0xffaf, 0xffd9};
-	for (uint i = 0; i < 4; ++i)
-		_state.rng[i] = uint16(uint32(_state.rng[i]) * mul[i] + inc[i]);
-	uint16 swapped = uint16((_state.rng[3] << 8) | (_state.rng[3] >> 8));
-	// The shipped interpreter stores AX, discarding the four-word mix in BX.
-	_host.writeWord(buffer, swapped & 0x700f);
+	_host.writeWord(buffer, NativeRandom::next(_rngAlgorithm, _state.rng));
 }
 
 bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, uint16 w) {
@@ -88,7 +84,7 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 			advanceRandom(buffer);
 			break;
 		case 11: {
-			bool available = _host.keyAvailable();
+			bool available = _host.pollKeyboard();
 			_host.writeWord(buffer, available ? 1 : 0);
 			_state.idle = available ? 0 : (_state.idle < 0xffffffffU ? _state.idle + 1 : _state.idle);
 			if (_state.idle > 300)
@@ -182,6 +178,9 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 }
 
 void PCodeConsole::init(uint16 buffer) {
+	// The IV/V routine sets ES=0040 but actually reads DS:006C.
+	if (_rngAlgorithm == NativeRandom::kThreeWord)
+		_state.rng[1] = uint16(_host.readWord(0x006c) + 2);
 	_state.initialized = true;
 	memset(_state.priority, 0, sizeof(_state.priority));
 	memset(_state.cell, 0, sizeof(_state.cell));

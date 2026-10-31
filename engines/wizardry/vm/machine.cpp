@@ -21,15 +21,12 @@
 
 #include "wizardry/vm/machine.h"
 #include "common/endian.h"
+#include "common/md5.h"
+#include "common/memstream.h"
 #include "common/util.h"
+#include "wizardry/data/ucsd_disk.h"
 #include "wizardry/vm/console.h"
 #include "wizardry/vm/timing.h"
-
-#include "common/md5.h"
-
-#include "common/memstream.h"
-
-#include "wizardry/data/ucsd_disk.h"
 
 namespace Wizardry {
 
@@ -100,9 +97,14 @@ bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byt
 	byte revision, originalWordHighInitial;
 	if (!identifyNativeRevision(disk, revision, error, &originalWordHighInitial))
 		return false;
+	if (!revision && parsed.segment(1)->name == "WIZARDRY") {
+		error = "Wizardry boot requires a verified SYSTEM.INTERP native service profile";
+		return false;
+	}
+	_code = Common::move(parsed);
 	_nativeRevision = revision;
 	_originalWordHighByte = originalWordHighInitial;
-	_code = Common::move(parsed);
+	_services.clear();
 	_disk = disk;
 	_sourceDiskCRC = wizardryCrc32(disk.data(), disk.size());
 	memset(_memory, 0, sizeof(_memory));
@@ -122,7 +124,7 @@ bool PCodeMachine::boot(const Common::Array<byte> &code, const Common::Array<byt
 	_idleSnapshot = false;
 	_state = kRunning;
 	delete _console;
-	_console = new PCodeConsole(*this);
+	_console = new PCodeConsole(*this, revision >= 4 ? NativeRandom::kThreeWord : NativeRandom::kFourWord);
 	// HAS.CACHE activates the optional native RAM-disk cache, whose ABI is
 	// not implemented. Mark it absent in this private working image only.
 	uint count = READ_LE_UINT16(_disk.data() + 1024 + 16);
@@ -256,14 +258,56 @@ void PCodeMachine::yieldForInput() {
 }
 
 void PCodeMachine::delay(uint16 ticks) {
+	if (_state == kFault)
+		return;
 	if (_observer)
 		_observer->onDelay(ticks);
 	_delayTicks = ticks;
+	if (_services.enabled()) {
+		uint16 rng[4];
+		_console->getRngState(rng);
+		bool available;
+		Common::String error;
+		if (!_services.call(19, ticks, _console->rngAlgorithm(), rng, available, error)) {
+			fail(error);
+			return;
+		}
+		_console->setRngState(rng);
+		_waitRemainingUs = 0;
+		_soundPattern = 0xffff;
+		_state = kDelayed;
+		return;
+	}
 	if (_state != kFault) {
 		_waitRemainingUs = NativeTiming::delayMicroseconds(ticks);
 		_soundPattern = 0xffff;
 		_state = kDelayed;
 	}
+}
+
+bool PCodeMachine::setServiceReplay(const Common::Array<NativeServiceReplay::Event> &events, Common::String &error) {
+	if (!canSuspend() || !_nativeRevision || (_nativeRevision >= 4 && _console->rngAlgorithm() != NativeRandom::kThreeWord)) {
+		error = "Native service replay requires the verified interpreter's original RNG profile";
+		return false;
+	}
+	return _services.configure(events, 0, error);
+}
+
+bool PCodeMachine::pollKeyboard() {
+	if (_state == kFault)
+		return false;
+	if (!_services.enabled())
+		return keyAvailable();
+	uint16 rng[4];
+	_console->getRngState(rng);
+	bool available;
+	Common::String error;
+	if (!_services.call(11, 0, _console->rngAlgorithm(), rng, available, error)) {
+		fail(error);
+		return false;
+	}
+	_console->setRngState(rng);
+	return available;
 }
 
 void PCodeMachine::sound(uint16, uint16 pattern, uint16) {

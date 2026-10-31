@@ -9,6 +9,8 @@ MODULE_OBJS := \
 	vm/machine.o \
 	vm/arena.o \
 	vm/timing.o \
+	vm/random.o \
+	vm/services.o \
 	vm/console.o
 
 ifeq ($(ENABLE_WIZARDRY), DYNAMIC_PLUGIN)

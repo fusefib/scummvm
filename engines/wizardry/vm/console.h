@@ -24,6 +24,7 @@
 
 #include "wizardry/data/huffman.h"
 #include "wizardry/vm/host.h"
+#include "wizardry/vm/random.h"
 
 namespace Wizardry {
 
@@ -38,13 +39,14 @@ public:
 		   kCells = 1000,
 		   kVramSize = 0x4000,
 		   kCharsetSize = 5120 };
-	explicit PCodeConsole(MachineHost &host);
+	explicit PCodeConsole(MachineHost &host, NativeRandom::Algorithm algorithm = NativeRandom::kFourWord);
 	bool call(bool write, uint16 buffer, uint16 selector, uint16 z, uint16 w);
 	const byte *vram() const { return _state.vram; }
 	uint16 visibleCell(uint index) const;
 	uint16 visibleAt(uint index) const { return visibleCell(index); }
 	void getRngState(uint16 state[4]) const;
 	void setRngState(const uint16 state[4]);
+	NativeRandom::Algorithm rngAlgorithm() const { return _rngAlgorithm; }
 
 private:
 	struct State {
@@ -67,6 +69,7 @@ private:
 	MachineHost &_host;
 	State _state;
 	HuffmanDecoder _huffman;
+	NativeRandom::Algorithm _rngAlgorithm;
 	bool _failed;
 
 	bool fail(const char *message);

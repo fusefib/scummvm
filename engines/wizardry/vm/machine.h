@@ -24,6 +24,7 @@
 
 #include "wizardry/vm/codefile.h"
 #include "wizardry/vm/host.h"
+#include "wizardry/vm/services.h"
 
 namespace Wizardry {
 
@@ -62,6 +63,12 @@ public:
 			_originalMemory = original;
 	}
 	bool originalMemory() const { return _originalMemory; }
+	byte nativeRevision() const { return _nativeRevision; }
+	bool setServiceReplay(const Common::Array<NativeServiceReplay::Event> &events, Common::String &error);
+	bool serviceReplayEnabled() const { return _services.enabled(); }
+	uint32 serviceReplayPosition() const { return _services.position(); }
+	uint32 serviceReplaySize() const { return _services.events().size(); }
+	bool serviceReplayComplete() const { return _services.complete(); }
 	uint16 currentFrameBase() const { return _frames.empty() ? 0 : _frames.back().base; }
 	uint16 arenaTop() const { return _np; }
 	uint16 heapTop() const { return _heap; }
@@ -92,6 +99,7 @@ public:
 	void writeWord(uint16 address, uint16 value) override;
 	bool readDisk(uint32 block, uint32 size, byte *destination) override;
 	bool keyAvailable() const override { return _keyPosition < _keys.size(); }
+	bool pollKeyboard() override;
 	void setIoResult(uint16 value) override;
 	void yieldForInput() override;
 	void delay(uint16 ticks) override;
@@ -151,6 +159,7 @@ private:
 	bool _preserveLocals = false;
 	bool _originalMemory = false;
 	byte _nativeRevision = 0;
+	NativeServiceReplay _services;
 	bool _realtime = false;
 	byte _biosModifiers = 0;
 	uint16 _soundPattern = 0xffff;

@@ -40,6 +40,7 @@ public:
 	virtual void writeWord(uint16 address, uint16 value) = 0;
 	virtual bool readDisk(uint32 block, uint32 size, byte *destination) = 0;
 	virtual bool keyAvailable() const = 0;
+	virtual bool pollKeyboard() { return keyAvailable(); }
 	virtual void setIoResult(uint16 value) = 0;
 	// An availability poll is complete before this cooperative yield.
 	virtual void yieldForInput() = 0;
