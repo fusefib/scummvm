@@ -150,4 +150,81 @@ bool RamDiskCache::read(MachineHost &host, RamDiskSource &source, uint16 unit, u
 	return true;
 }
 
+bool RamDiskCache::validate(byte revision, bool resident, Common::String &error) const {
+	RamDiskCache expected;
+	expected.initialize(revision, resident);
+	if (_capacity != expected._capacity || _physicalBase != expected._physicalBase ||
+		_data.size() % 512 || _backing.size() % 512 || _backing.size() < _data.size() ||
+		_backing.size() / 512 > _capacity || (_enabled && !_capacity) ||
+		(!_data.empty() && memcmp(_data.data(), _backing.data(), _data.size()))) {
+		error = "Invalid saved RAM-cache geometry";
+		return false;
+	}
+	bool seen[kMaxSlots] = {};
+	for (uint i = 0; i < kMapBlocks; ++i) {
+		const uint16 slot = _map[i];
+		if (slot == 0xffff)
+			continue;
+		if (slot >= used() || seen[slot]) {
+			error = "Invalid or aliased saved RAM-cache slot";
+			return false;
+		}
+		seen[slot] = true;
+	}
+	return true;
+}
+
+bool RamDiskCache::save(Common::WriteStream &out) const {
+	out.writeUint32BE(0x524d4332); // RMC2
+	out.writeByte(_enabled ? 1 : 0);
+	out.writeByte(0);
+	out.writeUint16LE(_capacity);
+	out.writeUint16LE(_physicalBase);
+	out.writeUint16LE(used());
+	out.writeUint16LE(_backing.size() / 512);
+	for (uint i = 0; i < kMapBlocks; ++i)
+		out.writeUint16LE(_map[i]);
+	if (!_backing.empty())
+		out.write(_backing.data(), _backing.size());
+	return !out.err();
+}
+
+bool RamDiskCache::load(Common::SeekableReadStream &in, byte revision, bool resident, Common::String &error) {
+	RamDiskCache candidate;
+	if (in.size() - in.pos() < 14 + 2 * kMapBlocks) {
+		error = "Invalid saved RAM-cache header";
+		return false;
+	}
+	const uint32 marker = in.readUint32BE();
+	if (marker != 0x524d4332) {
+		error = "Invalid saved RAM-cache header";
+		return false;
+	}
+	const byte enabled = in.readByte(), reserved = in.readByte();
+	candidate._enabled = enabled != 0;
+	candidate._capacity = in.readUint16LE();
+	candidate._physicalBase = in.readUint16LE();
+	const uint16 used = in.readUint16LE();
+	const uint16 retained = in.readUint16LE();
+	if (enabled > 1 || reserved || retained > kMaxSlots || retained < used ||
+		uint64(in.size() - in.pos()) != 2 * kMapBlocks + uint64(retained) * 512) {
+		error = "Invalid saved RAM-cache extent or flags";
+		return false;
+	}
+	for (uint i = 0; i < kMapBlocks; ++i)
+		candidate._map[i] = in.readUint16LE();
+	candidate._backing.resize(uint32(retained) * 512);
+	if (retained && in.read(candidate._backing.data(), candidate._backing.size()) != candidate._backing.size()) {
+		error = "Truncated saved RAM-cache data";
+		return false;
+	}
+	candidate._data.resize(uint32(used) * 512);
+	if (used)
+		memcpy(candidate._data.data(), candidate._backing.data(), candidate._data.size());
+	if (in.err() || !candidate.validate(revision, resident, error))
+		return false;
+	*this = Common::move(candidate);
+	return true;
+}
+
 } // namespace Wizardry

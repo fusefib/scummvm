@@ -24,6 +24,7 @@
 
 #include "common/array.h"
 #include "common/str.h"
+#include "common/stream.h"
 
 namespace Wizardry {
 
@@ -40,6 +41,11 @@ public:
 	uint16 base() const { return _base; }
 	uint16 extent() const { return _extent; }
 	void establish(uint16 address, uint16 count);
+	bool needsPersistence() const;
+	uint32 size() const { return 8 + (_data.size() + 7) / 8 + _data.size(); }
+	bool validate(byte revision, Common::String &error) const;
+	bool save(Common::WriteStream &out) const;
+	bool load(Common::SeekableReadStream &in, byte revision, Common::String &error);
 
 private:
 	uint16 _base = 0, _extent = 0;

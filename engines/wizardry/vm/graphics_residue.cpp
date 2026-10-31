@@ -59,4 +59,75 @@ void GraphicsResidue::establish(uint16 address, uint16 count) {
 		memset(_known.data() + offset(address), 1, count);
 }
 
+bool GraphicsResidue::needsPersistence() const {
+	for (uint i = 0; i < _known.size(); ++i)
+		if (_known[i])
+			return true;
+	return false;
+}
+
+bool GraphicsResidue::validate(byte revision, Common::String &error) const {
+	GraphicsResidue expected;
+	expected.initialize(revision);
+	if (_base != expected._base || _extent != expected._extent ||
+		_data.size() != expected._data.size() || _known.size() != _data.size()) {
+		error = "Invalid saved graphics residue geometry";
+		return false;
+	}
+	for (uint i = 0; i < _known.size(); ++i) {
+		if (_known[i] > 1 || (!_known[i] && _data[i])) {
+			error = "Invalid saved graphics residue knowledge";
+			return false;
+		}
+	}
+	return true;
+}
+
+bool GraphicsResidue::save(Common::WriteStream &out) const {
+	if (!needsPersistence())
+		return false;
+	out.writeUint32BE(0x47465831); // GFX1
+	out.writeUint16LE(_base);
+	out.writeUint16LE(_extent);
+	for (uint i = 0; i < _known.size(); i += 8) {
+		byte bits = 0;
+		for (uint j = 0; j < 8 && i + j < _known.size(); ++j)
+			if (_known[i + j])
+				bits |= 1 << j;
+		out.writeByte(bits);
+	}
+	out.write(_data.data(), _data.size());
+	return !out.err();
+}
+
+bool GraphicsResidue::load(Common::SeekableReadStream &in, byte revision, Common::String &error) {
+	GraphicsResidue candidate;
+	candidate.initialize(revision);
+	if (!candidate._extent || in.size() - in.pos() != candidate.size() ||
+		in.readUint32BE() != 0x47465831 || in.readUint16LE() != candidate._base ||
+		in.readUint16LE() != candidate._extent) {
+		error = "Invalid saved graphics residue header or extent";
+		return false;
+	}
+	for (uint i = 0; i < candidate._known.size(); i += 8) {
+		const byte bits = in.readByte();
+		for (uint j = 0; j < 8; ++j) {
+			if (i + j < candidate._known.size())
+				candidate._known[i + j] = (bits >> j) & 1;
+			else if (bits & (1 << j)) {
+				error = "Invalid saved graphics residue bitmap padding";
+				return false;
+			}
+		}
+	}
+	if (in.read(candidate._data.data(), candidate._data.size()) != candidate._data.size() ||
+		in.err() || !candidate.needsPersistence() || !candidate.validate(revision, error)) {
+		if (error.empty())
+			error = "Truncated or empty saved graphics residue";
+		return false;
+	}
+	*this = Common::move(candidate);
+	return true;
+}
+
 } // namespace Wizardry

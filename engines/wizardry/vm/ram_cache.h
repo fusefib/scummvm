@@ -23,6 +23,7 @@
 #define WIZARDRY_VM_RAM_CACHE_H
 
 #include "common/array.h"
+#include "common/stream.h"
 #include "wizardry/vm/host.h"
 
 namespace Wizardry {
@@ -47,16 +48,21 @@ public:
 	void initialize(byte revision, bool resident);
 	bool configured() const { return _capacity != 0; }
 	bool enabled() const { return _enabled; }
+	bool needsPersistence() const { return _enabled || !_backing.empty(); }
 	uint16 capacity() const { return _capacity; }
 	uint16 used() const { return _data.size() / 512; }
 	uint16 remaining() const { return _capacity - used(); }
 	uint16 slot(uint block) const { return block < kMapBlocks ? _map[block] : 0xffff; }
 	const Common::Array<byte> &data() const { return _data; }
 	const Common::Array<byte> &backing() const { return _backing; }
+	uint32 size() const { return 14 + 2 * kMapBlocks + _backing.size(); }
 	bool control(MachineHost &host, RamDiskSource &source, uint16 address,
 				 uint16 &result, Common::String &error);
 	bool read(MachineHost &host, RamDiskSource &source, uint16 unit, uint16 block,
 			  uint16 count, byte *external, uint16 address, uint16 &result, Common::String &error) const;
+	bool validate(byte revision, bool resident, Common::String &error) const;
+	bool save(Common::WriteStream &out) const;
+	bool load(Common::SeekableReadStream &in, byte revision, bool resident, Common::String &error);
 
 private:
 	bool _enabled = false;

@@ -24,6 +24,7 @@
 
 #include "common/array.h"
 #include "common/str.h"
+#include "common/stream.h"
 
 namespace Wizardry {
 
@@ -43,6 +44,11 @@ struct TransferDisks {
 	bool attach(byte target, byte source, const Common::Array<byte> &image, Common::String &error);
 	bool present(byte source) const { return source >= 1 && source <= 3 && !images[source - 1].empty(); }
 	bool empty() const { return images[0].empty() && images[1].empty() && images[2].empty() && !sourceCRC[0] && !sourceCRC[1] && !sourceCRC[2] && !active && !choosing && !transaction; }
+	bool validate(byte target, bool campaign, Common::String &error) const;
+	bool save(Common::WriteStream &out, bool campaign = false) const;
+	bool load(Common::SeekableReadStream &in, byte target, bool campaign, Common::String &error);
+	bool same(const TransferDisks &other) const;
+	uint32 size() const { return 32 + images[0].size() + images[1].size() + images[2].size(); }
 };
 
 } // namespace Wizardry

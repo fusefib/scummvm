@@ -30,7 +30,7 @@ static const ADExtraGuiOptionsMap kWizardryOptions[] = {
 		GAMEOPTION_ORIGINAL_SAVE_DISK,
 		{
 			_s("Use original save disk"),
-			_s("Start with the matching SAVE1.DSK, SAVE2.DSK or SAVE3.DSK file."),
+			_s("Start with the matching SAVE1.DSK, SAVE2.DSK or SAVE3.DSK file. Saved games retain their own disk contents."),
 			"original_save_disk",
 			false,
 			0,
@@ -45,6 +45,16 @@ public:
 	const char *getName() const override { return "wizardry"; }
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
 		return kWizardryOptions;
+	}
+	bool hasFeature(MetaEngineFeature feature) const override {
+		return checkExtendedSaves(feature) || feature == kSupportsLoadingDuringStartup;
+	}
+	Common::String getSavegameFile(int saveGameIdx, const char *target = nullptr) const override {
+		if (!target)
+			target = getName();
+		if (saveGameIdx == kSavegameFilePattern)
+			return Common::String::format("%s-wizardry-session.###", target);
+		return Common::String::format("%s-wizardry-session.%03d", target, saveGameIdx);
 	}
 	Common::KeymapArray initKeymaps(const char *) const override {
 		using namespace Common;

@@ -22,6 +22,7 @@
 #ifndef WIZARDRY_VM_CONSOLE_H
 #define WIZARDRY_VM_CONSOLE_H
 
+#include "common/stream.h"
 #include "wizardry/data/huffman.h"
 #include "wizardry/vm/host.h"
 #include "wizardry/vm/random.h"
@@ -30,7 +31,7 @@ namespace Wizardry {
 
 /** Native console services for the DOS interpreter profiles.
  * The host selects compatibility polling or explicit native-service replay.
- * All console state belongs to this instance.
+ * All state belongs to this instance and is included in the state stream.
  */
 class PCodeConsole {
 public:
@@ -65,6 +66,10 @@ public:
 	bool classicPortraitCache() const { return _classicCache; }
 	bool graphicsOutput() const { return _state.initialized; }
 	byte errorPrefix() const { return _state.errorPrefix; }
+	uint16 stateVersion() const { return 8; }
+	bool validateClassicState(Common::String &error) const;
+	bool saveState(Common::WriteStream &stream) const;
+	bool loadState(Common::ReadStream &stream, Common::String &error);
 
 private:
 	struct State {

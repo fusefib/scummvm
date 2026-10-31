@@ -22,6 +22,7 @@
 #ifndef WIZARDRY_VM_MACHINE_H
 #define WIZARDRY_VM_MACHINE_H
 
+#include "common/stream.h"
 #include "wizardry/vm/codefile.h"
 #include "wizardry/vm/graphics_residue.h"
 #include "wizardry/vm/host.h"
@@ -32,6 +33,7 @@
 namespace Wizardry {
 
 class PCodeConsole;
+class PCodeMachine;
 
 /** Host persistence and optional diagnostics, independent of the frontend. */
 class MachineObserver {
@@ -42,6 +44,7 @@ public:
 	virtual bool capturesTeletype() const { return false; }
 	virtual void onTeletype(byte) {}
 	virtual void onDiskWrite() {}
+	virtual bool onStateLoad(const PCodeMachine &, Common::String &) { return true; }
 };
 
 /** Cooperative p-machine for the Wizardry I-V DOS interpreters. */
@@ -74,7 +77,7 @@ public:
 	void queueKey(byte key);
 	void clearKeys();
 	void setScriptedInput(bool scripted) { _scriptedInput = scripted; }
-	// Memory policy is selected before boot.
+	// Memory policy is selected before boot and restored from snapshots.
 	void setPreserveLocals(bool preserve) { _preserveLocals = preserve; }
 	void setOriginalMemory(bool original) {
 		if (_frames.empty())
@@ -124,7 +127,12 @@ public:
 	const Common::Array<byte> &loaderData() const { return _loaderData; }
 	uint32 sourceDiskCRC() const { return _sourceDiskCRC; }
 	uint32 sourceSaveDiskCRC() const { return _sourceSaveDiskCRC; }
+	uint16 campaignID() const { return _campaignID; }
+	void setCampaignID(uint16 id) { _campaignID = id; }
 	const PCodeFile &codeFile() const { return _code; }
+	bool saveState(Common::WriteStream &out, Common::String &error) const;
+	bool loadState(Common::SeekableReadStream &in, Common::String &error,
+		const Common::Array<byte> *expectedSaveDisk = nullptr);
 	bool canSuspend() const {
 		return _state != kFault && _state != kHalted && !_frames.empty() &&
 			(!_input.active || _state == kWaitingForInput);
@@ -194,6 +202,7 @@ private:
 	GraphicsResidue _graphicsResidue;
 	uint32 _sourceDiskCRC = 0;
 	uint32 _sourceSaveDiskCRC = 0;
+	uint16 _campaignID = 0;
 	DiskPolicy _diskPolicy = kLegacy632;
 	DiskPolicy _defaultDiskPolicy = kLegacy632;
 	bool _diskSelectedSave = false;
@@ -201,6 +210,7 @@ private:
 	// DS = CS - 0x1000 in the DOS interpreters. A native word at
 	// DS:ffff reaches this physical CS:0000 byte; two byte operations wrap.
 	byte _originalWordHighByte = 0;
+	byte _originalWordHighInitial = 0;
 	Common::Array<uint16> _stack;
 	Common::Array<Frame> _frames;
 	Common::Array<Literal> _literals;
@@ -254,6 +264,8 @@ private:
 	uint16 originalStackPointer() const;
 	uint16 codeWord(byte segment, uint16 offset) const;
 	bool originalProcedure(byte segment, byte procedure, PCodeProcedure &result) const;
+	bool validateOriginalState(Common::String &error) const;
+	bool validateServiceProfile(Common::String &error) const;
 	bool originalServiceProfile() const;
 	bool loaderKeyboardProfile() const;
 	bool keyboardScreenProfile() const;
@@ -290,10 +302,12 @@ private:
 	void moveWords(uint16 destination, uint16 source, uint16 count);
 	void fillMemory(uint16 destination, byte value, uint32 size);
 	Common::String pascalString(uint16 address) const;
+	bool deserializePayload(Common::SeekableReadStream &in, Common::String &error);
 	bool bootInternal(const Common::Array<byte> &code, const Common::Array<byte> &disk,
 		const Common::Array<byte> *saveDisk, Common::String &error);
 	bool validateDiskPair(const Common::Array<byte> &code, const Common::Array<byte> &disk,
 		const Common::Array<byte> &saveDisk, byte revision, Common::String &error) const;
+	bool validateDiskPolicy(Common::String &error) const;
 	bool readUncached(uint16 unit, uint16 block, uint16 count, byte *external,
 		uint16 address, uint16 physicalBase, uint16 &result, Common::String &error) override;
 	bool readRetained(uint16 unit, uint16 block, uint16 count, byte *external,

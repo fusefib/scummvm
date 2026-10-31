@@ -390,4 +390,114 @@ void PCodeMachine::leaveOriginal(byte nret) {
 	syncOriginalRegisters();
 }
 
+bool PCodeMachine::validateOriginalState(Common::String &error) const {
+	if (_preserveLocals || _heap < kHeapStart || _heap > _np || _np > kArenaStart ||
+		_heap != readWord(0x0604) || _np != readWord(0x0602) ||
+		_literalNext != 0x0800 || !_literals.empty() ||
+		_stack.size() > (kEvaluationStart - kArenaStart) / 2 ||
+		_ioResult != readWord(0xe0de)) {
+		error = "Invalid saved DOS arena registers";
+		return false;
+	}
+	if (readWord(0xe0e6) && (readWord(0xe0e6) < kHeapStart || readWord(0xe0e6) > _np)) {
+		error = "Invalid saved pending heap frontier";
+		return false;
+	}
+	uint16 minimumReferences[32] = {};
+	for (uint i = 0; i < _frames.size(); ++i) {
+		const Frame &f = _frames[i];
+		PCodeProcedure p;
+		if (!originalProcedure(f.segment, f.procedure, p)) {
+			error = "Invalid saved resident procedure attributes";
+			return false;
+		}
+		const uint32 bytes = uint32(p.localBytes) + p.parameterBytes;
+		const uint32 parentTop = i ? _frames[i - 1].base - 14 : kArenaStart;
+		if (f.segment >= 32 || !segmentReferences(f.segment) || f.base < 14 ||
+			f.savedNP > parentTop || bytes > f.savedNP || f.base != f.savedNP - bytes ||
+			f.base - 14 < _np || readWord(f.base - 14) != f.savedNP ||
+			readWord(f.base - 2) != kEvaluationStart - 2 * f.stackBase) {
+			error = "Invalid saved physical activation frame";
+			return false;
+		}
+		const uint16 bp = f.base - 12;
+		if (i && f.staticFrame < 0) {
+			error = "Missing saved physical static link";
+			return false;
+		}
+		const uint16 staticBP = i ? _frames[f.staticFrame].base - 12 : bp;
+		if (readWord(bp) != staticBP ||
+			readWord(bp + 2) != (i ? _frames[i - 1].base - 12 : bp)) {
+			error = "Invalid saved physical frame links";
+			return false;
+		}
+		if (i) {
+			const Frame &caller = _frames[i - 1];
+			PCodeProcedure cp;
+			if (!originalProcedure(caller.segment, caller.procedure, cp) ||
+				readWord(bp + 4) != segmentBase(caller.segment) + cp.anchor ||
+				readWord(bp + 6) != readWord(kDictionaryTable + 2 * caller.segment) ||
+				readWord(bp + 8) != segmentBase(caller.segment) + f.returnIP) {
+				error = "Invalid saved physical return context";
+				return false;
+			}
+		} else if (readWord(bp + 4) || readWord(bp + 6) || readWord(bp + 8) != kHeapStart) {
+			error = "Invalid saved bootstrap frame";
+			return false;
+		}
+		if (!i || f.segment != _frames[i - 1].segment)
+			++minimumReferences[f.segment];
+	}
+	for (uint sn = 0; sn < 32; ++sn) {
+		const uint16 refs = segmentReferences(sn);
+		if (!refs)
+			continue;
+		const PCodeSegment *s = _code.segment(sn);
+		const uint32 base = segmentBase(sn), top = readWord(kSavedArenaTable + 2 * sn);
+		const uint16 dictionary = readWord(kDictionaryTable + 2 * sn);
+		if (!s || refs < minimumReferences[sn] || base < _np || top > kArenaStart ||
+			base + s->code.size() != top || dictionary != top - 2 ||
+			readByte(dictionary) != sn || readByte(dictionary + 1) + 1U != s->procedures.size()) {
+			error = "Invalid saved code residency table";
+			return false;
+		}
+		const uint16 descriptor = 0xe13e + 6 * sn;
+		const uint32 offset = uint32(readWord(descriptor + 2)) * 512;
+		if (readWord(descriptor + 4) != s->code.size() || offset > _disk.size() || s->code.size() > _disk.size() - offset) {
+			error = "Invalid saved overlay disk extent";
+			return false;
+		}
+		for (uint i = 0; i < _frames.size(); ++i) {
+			if (base < _frames[i].savedNP && uint32(_frames[i].base - 14) < top) {
+				error = "Saved code overlaps an activation frame";
+				return false;
+			}
+		}
+		for (uint other = 0; other < sn; ++other) {
+			if (segmentReferences(other) && base < readWord(kSavedArenaTable + 2 * other) && segmentBase(other) < top) {
+				error = "Overlapping saved code segments";
+				return false;
+			}
+		}
+	}
+	const Frame &f = _frames.back();
+	const Frame &root = _frames[0];
+	PCodeProcedure p, rp;
+	if (!originalProcedure(f.segment, f.procedure, p) || !originalProcedure(root.segment, root.procedure, rp) ||
+		readWord(0x0600) != root.base - 12 || readWord(0x060a) != segmentBase(root.segment) + rp.anchor ||
+		readWord(0x0606) != readWord(kDictionaryTable + 2 * f.segment) ||
+		readWord(0x0608) != segmentBase(f.segment) + p.anchor || readWord(0xe0ec) != f.base - 12 ||
+		readWord(0xe0ee) != readWord(0x0608) || readWord(0xe0f0) != readWord(0x0606)) {
+		error = "Invalid saved physical execution registers";
+		return false;
+	}
+	for (uint i = 0; i < _stack.size(); ++i) {
+		if (readWord(kEvaluationStart - 2 * (i + 1)) != _stack[i]) {
+			error = "Saved evaluation words disagree with physical memory";
+			return false;
+		}
+	}
+	return true;
+}
+
 } // namespace Wizardry

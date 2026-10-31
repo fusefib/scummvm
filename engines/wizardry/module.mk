@@ -13,6 +13,7 @@ MODULE_OBJS := \
 	vm/transfer.o \
 	vm/loader_keyboard.o \
 	vm/arena.o \
+	vm/snapshot.o \
 	vm/timing.o \
 	vm/random.o \
 	vm/services.o \

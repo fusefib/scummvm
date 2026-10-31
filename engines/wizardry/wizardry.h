@@ -39,6 +39,13 @@ public:
 	~WizardryEngine() override;
 	Common::Error run() override;
 	bool hasFeature(EngineFeature feature) const override;
+	bool canSaveGameStateCurrently(Common::U32String *message = nullptr) override;
+	bool canLoadGameStateCurrently(Common::U32String *message = nullptr) override;
+	bool canSaveAutosaveCurrently() override;
+	Common::String getSaveStateName(int slot) const override;
+	Common::Error loadGameState(int slot) override;
+	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
+	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override;
 	void pauseEngineIntern(bool pause) override;
 
 private:
@@ -48,6 +55,7 @@ private:
 	uint16 _screenWidth = 320;
 	uint32 _lastClock = 0;
 	bool _ready = false;
+	bool _loadingAutosave = false;
 	bool _paused = false;
 	bool _soundActive = false;
 	uint64 _soundInstruction = 0;

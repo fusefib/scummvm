@@ -966,4 +966,174 @@ void PCodeConsole::decodeHuffman(uint16 source, uint16 destination) {
 		_host.writeByte(uint16(destination + i), decoded[i]);
 }
 
+bool PCodeConsole::saveState(Common::WriteStream &stream) const {
+	stream.writeUint32BE(0x50434f4e); // PCON
+	stream.writeUint16LE(stateVersion());
+	for (uint i = 0; i < 4; ++i)
+		stream.writeUint16LE(_state.rng[i]);
+	stream.writeUint32LE(_state.idle);
+	stream.write(_state.priority, sizeof(_state.priority));
+	for (uint i = 0; i < kCells; ++i)
+		stream.writeUint16LE(_state.cell[i]);
+	stream.write(_state.vram, sizeof(_state.vram));
+	stream.write(_state.charset, sizeof(_state.charset));
+	stream.writeUint16LE(_state.monsterBlock);
+	for (uint i = 0; i < 4; ++i)
+		stream.writeUint16LE(_state.monsterPicture[i]);
+	stream.write(_state.monsterRecord, sizeof(_state.monsterRecord));
+	stream.writeUint16LE(_state.head);
+	stream.writeByte(_state.initialized ? 1 : 0);
+	stream.writeByte(_huffman.isLoaded() ? 1 : 0);
+	if (_huffman.isLoaded())
+		stream.write(_huffman.table(), HuffmanDecoder::kTableSize);
+	stream.writeByte(_rngAlgorithm);
+	stream.writeByte(_portraitPolicy);
+	stream.write(_state.largePortrait, sizeof(_state.largePortrait));
+	stream.writeByte(_state.portraitOrientation);
+	stream.writeByte(_classicCache ? 1 : 0);
+	stream.writeByte(_state.errorPrefix);
+	stream.writeByte(_state.textOutput ? 1 : 0);
+	if (_state.textOutput) {
+		stream.writeByte(_state.textColumn);
+		stream.writeByte(_state.textRow);
+		stream.write(_state.text, sizeof(_state.text));
+	}
+	return !stream.err();
+}
+
+bool PCodeConsole::loadState(Common::ReadStream &stream, Common::String &error) {
+	if (stream.readUint32BE() != 0x50434f4e) {
+		error = "Invalid console state header";
+		return false;
+	}
+	const uint16 version = stream.readUint16LE();
+	if (version != stateVersion()) {
+		error = "Invalid console state header";
+		return false;
+	}
+	State next = {};
+	for (uint i = 0; i < 4; ++i)
+		next.rng[i] = stream.readUint16LE();
+	next.idle = stream.readUint32LE();
+	stream.read(next.priority, sizeof(next.priority));
+	for (uint i = 0; i < kCells; ++i)
+		next.cell[i] = stream.readUint16LE();
+	stream.read(next.vram, sizeof(next.vram));
+	stream.read(next.charset, sizeof(next.charset));
+	next.monsterBlock = stream.readUint16LE();
+	bool valid = true;
+	for (uint i = 0; i < 4; ++i) {
+		next.monsterPicture[i] = stream.readUint16LE();
+	}
+	stream.read(next.monsterRecord, sizeof(next.monsterRecord));
+	next.head = stream.readUint16LE();
+	byte initialized = stream.readByte();
+	HuffmanDecoder huffman;
+	{
+		const byte loaded = stream.readByte();
+		if (loaded > 1)
+			valid = false;
+		else if (loaded) {
+			byte table[HuffmanDecoder::kTableSize];
+			if (stream.read(table, sizeof(table)) != sizeof(table)) {
+				error = "Truncated saved Huffman table";
+				return false;
+			}
+			if (!huffman.load(table, sizeof(table), error))
+				return false;
+		}
+	}
+	const byte algorithm = stream.readByte();
+	if (algorithm > NativeRandom::kThreeWord ||
+		(algorithm == NativeRandom::kThreeWord && next.rng[3]))
+		valid = false;
+	const byte portraitPolicy = stream.readByte();
+	if (stream.read(next.largePortrait, sizeof(next.largePortrait)) != sizeof(next.largePortrait))
+		valid = false;
+	next.portraitOrientation = stream.readByte();
+	const byte classic = stream.readByte();
+	next.errorPrefix = stream.readByte();
+	const byte revision = _host.nativeRevision();
+	if (classic > 1 || (next.errorPrefix && (!(next.errorPrefix & 0x80) ||
+											 (revision != 1 && revision != 4 && revision != 5))))
+		valid = false;
+	const byte textOutput = stream.readByte();
+	if (textOutput > 1 || (textOutput && revision != 1 && revision != 4 && revision != 5))
+		valid = false;
+	if (textOutput) {
+		next.textOutput = true;
+		next.textColumn = stream.readByte();
+		next.textRow = stream.readByte();
+		if (next.textColumn >= kTextCols || next.textRow >= kRows || initialized ||
+			stream.read(next.text, sizeof(next.text)) != sizeof(next.text))
+			valid = false;
+	}
+	const bool classicCache = classic != 0;
+	if (portraitPolicy > 1 || (portraitPolicy && _host.nativeRevision() != 5))
+		valid = false;
+	if (classicCache && (portraitPolicy || (_host.nativeRevision() != 1 &&
+											_host.nativeRevision() != 4)))
+		valid = false;
+	if (next.portraitOrientation > 1 || (!portraitPolicy && next.portraitOrientation))
+		valid = false;
+	for (uint i = 0; i < 4; ++i) {
+		const uint16 picture = next.monsterPicture[i];
+		if (picture != 0xffff && (picture > 254 || (portraitPolicy ? i >= 2 : !classicCache && picture == 0)))
+			valid = false;
+	}
+	if (!portraitPolicy) {
+		for (uint group = 0; group < 2; ++group)
+			for (uint i = 0; i < kLargePortraitSize; ++i)
+				if (next.largePortrait[group][i])
+					valid = false;
+	}
+	if (!valid || initialized > 1 || stream.err() || stream.eos()) {
+		error = "Truncated or invalid console state";
+		return false;
+	}
+	next.initialized = initialized != 0;
+	_state = next;
+	_huffman = huffman;
+	_rngAlgorithm = NativeRandom::Algorithm(algorithm);
+	_portraitPolicy = portraitPolicy;
+	_classicCache = classicCache;
+	_failed = false;
+	error.clear();
+	return true;
+}
+
+bool PCodeConsole::validateClassicState(Common::String &error) const {
+	if (!_classicCache)
+		return true;
+	const byte revision = _host.nativeRevision();
+	bool unconfigured = true, valid = (revision == 1 || revision == 4) && !_portraitPolicy;
+	uint physicalMask = 0;
+	for (uint i = 0; i < 4; ++i) {
+		const uint16 pointer = _host.readWord(0xe83a + 4 * i);
+		const uint16 picture = _host.readWord(0xe838 + 4 * i);
+		unconfigured &= pointer == 0;
+		valid &= picture == _state.monsterPicture[i] && (picture <= 254 || picture == 0xffff);
+		const int physical = classicBuffer(pointer, revision);
+		if (physical >= 0)
+			physicalMask |= 1U << physical;
+		const uint16 desired = _host.readWord(0xe830 + 2 * i);
+		valid &= desired == 0 || desired == 0xffff || classicBuffer(desired, revision) >= 0;
+	}
+	if (unconfigured) {
+		// Bootstrap/WR1 preserve twelve zero words. A nonzero title before
+		// WR18 changes only all four IDs to FFFF, leaving zero pointers.
+		const uint16 firstID = _host.readWord(0xe838);
+		valid &= firstID == 0 || firstID == 0xffff;
+		for (uint i = 0; i < 4; ++i)
+			valid &= _host.readWord(0xe830 + 2 * i) == 0 && _host.readWord(0xe838 + 4 * i) == firstID;
+	} else {
+		valid &= physicalMask == 15;
+	}
+	if (!valid) {
+		error = "Invalid saved classic portrait cache metadata";
+		return false;
+	}
+	return true;
+}
+
 } // namespace Wizardry

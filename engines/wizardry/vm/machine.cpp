@@ -125,6 +125,34 @@ bool PCodeMachine::validateDiskPair(const Common::Array<byte> &code, const Commo
 	return true;
 }
 
+bool PCodeMachine::validateDiskPolicy(Common::String &error) const {
+	if (_diskPolicy == kResidentCOM) {
+		byte revision;
+		if (!identifyNativeRevision(_disk, revision, error))
+			return false;
+		if (revision != _nativeRevision) {
+			error = "Paired saved master has a different native interpreter profile";
+			return false;
+		}
+		UcsdDisk volume;
+		Common::Array<byte> program;
+		if (!volume.loadBytes(_disk, error) || !volume.readFile("SYSTEM.PASCAL", program, error))
+			return false;
+		if (wizardryCrc32(program.data(), program.size()) != _code.checksum()) {
+			error = "Paired saved master has a different program";
+			return false;
+		}
+		if (!validateDiskPair(program, _disk, _saveDisk, _nativeRevision, error))
+			return false;
+	} else {
+		if (_diskPolicy != _defaultDiskPolicy || _diskSelectedSave || !_saveDisk.empty() || _sourceSaveDiskCRC) {
+			error = "Invalid legacy disk policy or noncanonical secondary image";
+			return false;
+		}
+	}
+	return true;
+}
+
 bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::Array<byte> &disk,
 	const Common::Array<byte> *saveDisk, Common::String &error) {
 	PCodeFile parsed;
@@ -145,6 +173,7 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 		return false;
 	_code = Common::move(parsed);
 	_nativeRevision = revision;
+	_originalWordHighInitial = originalWordHighInitial;
 	_originalWordHighByte = originalWordHighInitial;
 	_defaultDiskPolicy = revision >= 4 && READ_LE_UINT16(disk.data() + 3) == 0x0880 ? kRaw0880 : kLegacy632;
 	_diskPolicy = saveDisk ? kResidentCOM : _defaultDiskPolicy;
@@ -157,6 +186,7 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 	_graphicsResidue.initialize(_originalMemory ? revision : 0);
 	_sourceSaveDiskCRC = saveDisk ? wizardryCrc32(saveDisk->data(), saveDisk->size()) : 0;
 	_sourceDiskCRC = wizardryCrc32(disk.data(), disk.size());
+	_campaignID = 0;
 	memset(_memory, 0, sizeof(_memory));
 	_stack.clear();
 	_frames.clear();
@@ -622,6 +652,52 @@ void PCodeMachine::delay(uint16 ticks) {
 bool PCodeMachine::originalServiceProfile() const {
 	return (_nativeRevision == 1 && _console->rngAlgorithm() == NativeRandom::kFourWord) ||
 		((_nativeRevision == 4 || _nativeRevision == 5) && _console->rngAlgorithm() == NativeRandom::kThreeWord);
+}
+
+bool PCodeMachine::validateServiceProfile(Common::String &error) const {
+	if ((!_loaderData.empty() && (!loaderKeyboardProfile() || !LoaderKeyboard::validData(_nativeRevision, _loaderData))) ||
+		!LoaderKeyboard::validQueue(_loaderKeys, _nativeRevision, _loaderData) ||
+		(!_loaderKeys.empty() && !loaderKeyboardProfile() && !transferProfile())) {
+		error = "Invalid resident loader keyboard queue or interpreter policy";
+		return false;
+	}
+	if (!_transfer.validate(transferProfile(), false, error))
+		return false;
+	if (transferProfile() && transferProfile() != 5 && !_loaderKeys.empty() && (_loaderKeys.size() != 1 || _loaderKeys[0] != 0x1c0d)) {
+		error = "Classic transfer loader queue must contain one original Return";
+		return false;
+	}
+	if (_services.transferInput() && transferProfile() != 3 && transferProfile() != 5) {
+		error = "Physical transfer choices require an original III or V paired profile";
+		return false;
+	}
+	if (_transfer.choosing && (!_input.active || _state != kWaitingForInput || _input.kind < 2 || _input.kind > 6 || !_loaderKeys.empty())) {
+		error = "Resident transfer chooser requires a suspended original input service";
+		return false;
+	}
+	if (_input.kind >= 4 && (_input.kind > 6 || !_input.active || !_transfer.choosing || _input.count != 1 || _input.position || _input.mode != 8 || (_input.kind == 5 && _input.address != 1 && _input.address != 2))) {
+		error = "Invalid suspended resident transfer service";
+		return false;
+	}
+	const NativeRandom::Algorithm algorithm = _console->rngAlgorithm();
+	if ((_nativeRevision < 4 && algorithm != NativeRandom::kFourWord) ||
+		(_services.enabled() && !originalServiceProfile())) {
+		error = "Native service replay and saved RNG profile do not match the interpreter revision";
+		return false;
+	}
+	if ((_input.kind == 3 || _services.unit1Input()) && (!_originalMemory || !originalServiceProfile())) {
+		error = "Original unit-1 input requires a recognized original-memory profile";
+		return false;
+	}
+	if (_input.kind == 3 && (!_input.count || (!_input.active && _input.position != _input.count))) {
+		error = "Invalid original unit-1 input progress";
+		return false;
+	}
+	if (_services.inputMode() && ((!_console->portraitPolicy() && _nativeRevision == 5) || !_keys.empty() || _input.active || (_services.complete() && _state != kWaitingForInput))) {
+		error = "Native input replay requires the current portrait profile, empty legacy keyboard state and valid checkpoint state";
+		return false;
+	}
+	return true;
 }
 
 bool PCodeMachine::setServiceReplay(const Common::Array<NativeServiceReplay::Event> &events, Common::String &error) {

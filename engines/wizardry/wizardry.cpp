@@ -24,13 +24,18 @@
 #include "audio/decoders/raw.h"
 #include "common/config-manager.h"
 #include "common/debug.h"
+#include "common/endian.h"
 #include "common/events.h"
 #include "common/file.h"
+#include "common/memstream.h"
+#include "common/savefile.h"
 #include "common/system.h"
+#include "engines/metaengine.h"
 #include "engines/util.h"
 #include "graphics/cursorman.h"
 #include "graphics/fonts/dosfont.h"
 #include "graphics/paletteman.h"
+#include "gui/message.h"
 #include "wizardry/data/ucsd_disk.h"
 #include "wizardry/vm/console.h"
 #include "wizardry/vm/timing.h"
@@ -48,7 +53,31 @@ WizardryEngine::~WizardryEngine() {
 }
 
 bool WizardryEngine::hasFeature(EngineFeature feature) const {
-	return feature == kSupportsReturnToLauncher;
+	return feature == kSupportsReturnToLauncher || feature == kSupportsSavingDuringRuntime ||
+		   feature == kSupportsLoadingDuringRuntime;
+}
+
+bool WizardryEngine::canSaveGameStateCurrently(Common::U32String *) {
+	return _ready && _machine.canSuspend();
+}
+bool WizardryEngine::canLoadGameStateCurrently(Common::U32String *) { return _ready; }
+
+bool WizardryEngine::canSaveAutosaveCurrently() {
+	return canSaveGameStateCurrently() && _machine.instructions() && !_loadingAutosave;
+}
+
+Common::String WizardryEngine::getSaveStateName(int slot) const {
+	return getMetaEngine()->getSavegameFile(slot, _targetName.c_str());
+}
+
+Common::Error WizardryEngine::loadGameState(int slot) {
+	// The framework normally autosaves before loading. Preserve the very
+	// autosave being selected, and never autosave an unstarted machine.
+	const bool previous = _loadingAutosave;
+	_loadingAutosave = slot == getAutosaveSlot();
+	Common::Error result = Engine::loadGameState(slot);
+	_loadingAutosave = previous;
+	return result;
 }
 
 Common::Error WizardryEngine::run() {
@@ -68,7 +97,8 @@ Common::Error WizardryEngine::run() {
 	Common::Array<byte> program;
 	if (!disk.loadBytes(bytes, message) || !disk.readFile("SYSTEM.PASCAL", program, message))
 		return Common::Error(Common::kReadingFailed, message);
-	const bool useOriginalSave = (_description->gameNumber >= 4 ||
+	const bool loadingSave = ConfMan.hasKey("save_slot");
+	const bool useOriginalSave = !loadingSave && (_description->gameNumber >= 4 ||
 												  (ConfMan.hasKey("original_save_disk") && ConfMan.getBool("original_save_disk")));
 	_machine.setOriginalMemory(useOriginalSave);
 	if (useOriginalSave) {
@@ -97,7 +127,7 @@ Common::Error WizardryEngine::run() {
 	}
 	// Earlier scenarios are optional, immutable inputs. The original Move
 	// Characters command mutates private copies, committed with the target.
-	if (_machine.transferProfile()) {
+	if (!loadingSave && _machine.transferProfile()) {
 		for (byte source = 1; source <= TransferDisks::sourceCount(_machine.transferProfile()); ++source) {
 			const Common::String sourceName = Common::String::format("SAVE%u.DSK", source);
 			if (!Common::File::exists(Common::Path(sourceName)))
@@ -112,7 +142,7 @@ Common::Error WizardryEngine::run() {
 				return Common::Error(Common::kReadingFailed, message);
 		}
 	}
-	if (_description->gameNumber >= 4) {
+	if (!loadingSave && _description->gameNumber >= 4) {
 		const Common::String comName = Common::String::format("WIZ%u.COM", _description->gameNumber);
 		Common::File comFile;
 		if (!comFile.open(Common::Path(comName)))
@@ -136,6 +166,13 @@ Common::Error WizardryEngine::run() {
 	_machine.setRealtime(true);
 	_lastClock = _system->getMillis();
 	_ready = true;
+	if (loadingSave) {
+		Common::Error result = loadGameState(ConfMan.getInt("save_slot"));
+		if (result.getCode() != Common::kNoError)
+			return result;
+	}
+	debug(1, "Wizardry: memory policy %s, disk policy %u",
+		  _machine.originalMemory() ? "original" : "compatibility", unsigned(_machine.diskPolicy()));
 	PCodeMachine::State previousState = PCodeMachine::kHalted;
 	while (!shouldQuit()) {
 		processEvents();
@@ -163,6 +200,8 @@ Common::Error WizardryEngine::run() {
 		if (state != PCodeMachine::kRunning)
 			_system->delayMillis(state == PCodeMachine::kPlayingSound ? 1 : 10);
 	}
+	if (_description->gameNumber >= 1 && _description->gameNumber <= 5 && shouldQuit())
+		saveAutosaveIfEnabled();
 	stopSound();
 	_ready = false;
 	return Common::kNoError;
@@ -309,6 +348,31 @@ void WizardryEngine::present() {
 	}
 	_system->copyRectToScreen(_pixels, width, 0, 0, width, 200);
 	_system->updateScreen();
+}
+
+Common::Error WizardryEngine::loadGameStream(Common::SeekableReadStream *stream) {
+	Common::String message;
+	if (!_ready || !_machine.loadState(*stream, message))
+		return Common::Error(Common::kReadingFailed, message);
+	ConfMan.setBool("original_save_disk", _machine.diskPolicy() == PCodeMachine::kResidentCOM);
+	ConfMan.flushToDisk();
+	// Hardware-buffered PCM is not serialized. Discard pre-load audio and
+	// resume only the pending guest sound, from its saved modeled offset.
+	stopSound();
+	_machine.setRealtime(true);
+	_lastClock = _system->getMillis();
+	if (_machine.state() == PCodeMachine::kPlayingSound)
+		startSound();
+	present();
+	return Common::kNoError;
+}
+
+Common::Error WizardryEngine::saveGameStream(Common::WriteStream *stream, bool) {
+	Common::String message;
+	updateTime();
+	if (!canSaveGameStateCurrently() || !_machine.saveState(*stream, message))
+		return Common::Error(Common::kWritingFailed, message);
+	return Common::kNoError;
 }
 
 } // namespace Wizardry
