@@ -15,6 +15,7 @@ MODULE_OBJS := \
 	vm/loader_keyboard.o \
 	vm/arena.o \
 	vm/snapshot.o \
+	vm/scenario_disk.o \
 	vm/timing.o \
 	vm/random.o \
 	vm/services.o \

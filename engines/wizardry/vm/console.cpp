@@ -304,6 +304,9 @@ bool PCodeConsole::call(bool write, uint16 buffer, uint16 selector, uint16 z, ui
 		// original parameter; the host maps it to a cooperative timed delay.
 		_host.delay(z);
 		break;
+	case 20:
+		_host.setIoResult(_host.formatScenarioDisk(z));
+		break;
 	case 22:
 		// Guest writes update private images; the engine persists campaigns.
 		break;

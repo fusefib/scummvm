@@ -217,6 +217,8 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 	_diskPolicy = saveDisk ? kResidentCOM : _defaultDiskPolicy;
 	_services.clear();
 	_disk = disk;
+	_masterDisk = disk;
+	discardScenarioDisk();
 	_saveDisk = saveDisk ? *saveDisk : Common::Array<byte>();
 	_diskSelectedSave = false;
 	_diskDMABuffer.clear();
@@ -373,6 +375,11 @@ bool PCodeMachine::readRetained(uint16 unit, uint16 block, uint16 count, byte *e
 	error.clear();
 	result = 0;
 	if (_diskPolicy == kResidentCOM) {
+		if (scenarioInProgress()) {
+			bool selected = false;
+			ResidentDiskTransport transport(*this, _masterDisk, _scenarioDisk, selected, nullptr, &_diskDMABuffer);
+			return physicalBase ? transport.readCacheBuffer(block, count, external, physicalBase, result, error, knownPrefix) : (external ? transport.readBuffer(unit, block, count, external, address, result, error) : transport.unitIO(false, unit, address, count, block, 0, result, error));
+		}
 		ResidentDiskTransport transport(*this, _disk, _saveDisk, _diskSelectedSave, activeTransferDisk(), &_diskDMABuffer);
 		if (physicalBase)
 			return transport.readCacheBuffer(block, count, external, physicalBase, result, error, knownPrefix);
@@ -1101,6 +1108,8 @@ PCodeMachine::State PCodeMachine::run(uint32 budget) {
 		else
 			execute(op);
 		finishTransferTransaction();
+		if (scenarioInProgress() && !scenarioOwnerActive())
+			discardScenarioDisk();
 		if (!executionStopped() && _services.checkpoint()) {
 			_idleSnapshot = false;
 			yieldForInput();
@@ -1748,6 +1757,8 @@ void PCodeMachine::unitIO(bool write) {
 			_input.kind = 4;
 		}
 	} else if (unit == 4 || unit == 5 || (unit >= 9 && unit <= 12)) {
+		if (scenarioUnitIO(write, unit, address, y, z))
+			return;
 		if (!write && _ramCache.configured()) {
 			Common::String error;
 			uint16 result = 0;

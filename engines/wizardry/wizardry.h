@@ -68,6 +68,10 @@ private:
 	bool _campaignRecoveryPending = false;
 	bool _campaignSelectionPending = false;
 	uint32 _nextCampaignRetry = 0;
+	Common::Array<byte> _scenarioBackup;
+	Common::String _scenarioError;
+	bool _scenarioFailed = false;
+	bool _scenarioStarted = false;
 	void present();
 	void processEvents();
 	void updateTime();
@@ -75,6 +79,11 @@ private:
 	void stopSound();
 	void onDiskWrite() override { _campaignDirty = true; }
 	bool onStateLoad(const PCodeMachine &candidate, Common::String &error) override;
+	bool canCreateScenarioDisk() const override { return !_scenarioBackup.empty(); }
+	bool onScenarioDiskCreated(const Common::Array<byte> &master,
+							   const Common::Array<byte> &save, Common::String &error) override;
+	bool preserveScenarioSession(Common::String &error);
+	void restoreScenarioSession();
 	CampaignStore::Identity campaignIdentity(const PCodeMachine &machine) const;
 	bool configureCampaign(Common::String &error);
 	bool flushCampaign(Common::String &error, bool force = false);

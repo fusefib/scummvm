@@ -47,6 +47,7 @@ public:
 		return false;
 	}
 	virtual uint16 diskCapacity() const { return 632; }
+	virtual uint16 formatScenarioDisk(uint16) { return 10; }
 	virtual bool keyAvailable() const = 0;
 	virtual bool pollKeyboard() { return keyAvailable(); }
 	// A resident loader may terminate instead of returning from a BIOS call.

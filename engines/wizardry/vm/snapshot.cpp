@@ -566,6 +566,7 @@ bool PCodeMachine::loadState(Common::SeekableReadStream &in, Common::String &err
 	_originalWordHighInitial = candidate._originalWordHighInitial;
 	_sourceSaveDiskCRC = candidate._sourceSaveDiskCRC;
 	_campaignID = candidate._campaignID;
+	discardScenarioDisk();
 	_diskPolicy = candidate._diskPolicy;
 	_diskSelectedSave = candidate._diskSelectedSave;
 	memcpy(_memory, candidate._memory, sizeof(_memory));

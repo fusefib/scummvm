@@ -45,6 +45,9 @@ public:
 	virtual void onTeletype(byte) {}
 	virtual void onDiskWrite() {}
 	virtual bool onStateLoad(const PCodeMachine &, Common::String &) { return true; }
+	virtual bool canCreateScenarioDisk() const { return true; }
+	virtual bool onScenarioDiskCreated(const Common::Array<byte> &,
+		const Common::Array<byte> &, Common::String &) { return true; }
 };
 
 /** Cooperative p-machine for the Wizardry I-V DOS interpreters. */
@@ -75,6 +78,8 @@ public:
 	bool loadCampaignTransfers(const TransferDisks &transfer, Common::String &error);
 	const TransferDisks &transferDisks() const { return _transfer; }
 	bool transferInProgress() const { return _transfer.transaction; }
+	bool atScenarioMenu() const;
+	bool scenarioInProgress() const { return !_scenarioDisk.empty(); }
 	byte transferProfile() const;
 	State run(uint32 instructionBudget = 20000);
 	void queueKey(byte key);
@@ -137,7 +142,7 @@ public:
 	bool loadState(Common::SeekableReadStream &in, Common::String &error,
 		const Common::Array<byte> *expectedSaveDisk = nullptr);
 	bool canSuspend() const {
-		return _state != kFault && _state != kHalted && !_frames.empty() &&
+		return !scenarioInProgress() && _state != kFault && _state != kHalted && !_frames.empty() &&
 			(!_input.active || _state == kWaitingForInput);
 	}
 
@@ -148,7 +153,8 @@ public:
 	bool readDisk(uint32 block, uint32 size, byte *destination) override;
 	bool readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) override;
 	bool cacheControl(uint16 address) override;
-	uint16 diskCapacity() const override { return _diskPolicy == kLegacy632 ? 632 : 1272; }
+	uint16 diskCapacity() const override { return scenarioInProgress() || _diskPolicy == kLegacy632 ? 632 : 1272; }
+	uint16 formatScenarioDisk(uint16 unit) override;
 	bool keyAvailable() const override { return !_loaderKeys.empty() || _keyPosition < _keys.size(); }
 	bool pollKeyboard() override;
 	bool executionStopped() const override { return _state == kHalted || _state == kFault; }
@@ -199,6 +205,11 @@ private:
 	PCodeFile _code;
 	Common::Array<byte> _disk;
 	Common::Array<byte> _saveDisk;
+	Common::Array<byte> _masterDisk; // Immutable installed data for a new campaign.
+	Common::Array<byte> _scenarioDisk;
+	byte _scenarioWritten[79];
+	uint16 _scenarioWrittenCount = 0;
+	uint16 _scenarioUnit = 0;
 	Common::Array<byte> _diskDMABuffer;
 	TransferDisks _transfer;
 	RamDiskCache _ramCache;
@@ -275,6 +286,9 @@ private:
 	byte keyboardMatchProfile() const;
 	bool transferOwnerActive() const;
 	void finishTransferTransaction();
+	bool scenarioOwnerActive() const;
+	bool scenarioUnitIO(bool write, uint16 unit, uint16 address, uint16 count, uint16 block);
+	void discardScenarioDisk();
 	void consumeTransferChoice(byte key);
 	Common::Array<byte> *activeTransferDisk() { return _transfer.active ? &_transfer.images[_transfer.active - 1] : nullptr; }
 	bool prepareLoaderKeys();

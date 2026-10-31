@@ -59,7 +59,7 @@ bool WizardryEngine::hasFeature(EngineFeature feature) const {
 }
 
 bool WizardryEngine::canSaveGameStateCurrently(Common::U32String *) {
-	return _ready && _machine.canSuspend();
+	return _ready && _scenarioBackup.empty() && _machine.canSuspend();
 }
 bool WizardryEngine::canLoadGameStateCurrently(Common::U32String *) { return _ready; }
 
@@ -184,6 +184,16 @@ Common::Error WizardryEngine::run() {
 			break;
 		updateTime();
 		PCodeMachine::State state = _machine.run(20000);
+		if (!_scenarioBackup.empty() && !_machine.atScenarioMenu())
+			_scenarioStarted = true;
+		if (!_scenarioBackup.empty() && (_scenarioFailed || (_scenarioStarted && _machine.atScenarioMenu()))) {
+			restoreScenarioSession();
+			state = _machine.state();
+			if (!_scenarioError.empty()) {
+				campaignWarning(_scenarioError);
+				_scenarioError.clear();
+			}
+		}
 		if (!flushCampaign(message) && !_campaignWarned)
 			campaignWarning(message);
 		_lastClock = _system->getMillis();
@@ -284,8 +294,101 @@ bool WizardryEngine::onStateLoad(const PCodeMachine &machine, Common::String &er
 	_campaignSelectionPending = _campaignDirty = pending;
 	_campaignWarned = false;
 	_nextCampaignRetry = 0;
+	_scenarioBackup.clear();
+	_scenarioError.clear();
+	_scenarioFailed = false;
+	_scenarioStarted = false;
 	error.clear();
 	return true;
+}
+
+bool WizardryEngine::preserveScenarioSession(Common::String &error) {
+	if (!flushCampaign(error, true))
+		return false;
+	int slot = -1;
+	for (int i = 0; i <= getMetaEngine()->getMaximumSaveSlot(); ++i) {
+		if (i != getAutosaveSlot() && !_saveFileMan->exists(getMetaEngine()->getSavegameFile(i, _targetName.c_str()))) {
+			slot = i;
+			break;
+		}
+	}
+	if (slot < 0) {
+		error = "No unused save slot is available to preserve the current campaign";
+		return false;
+	}
+	const Common::Error result = saveGameState(slot, "Before creating a scenario disk");
+	if (result.getCode() != Common::kNoError) {
+		error = "Could not preserve the current campaign in a save slot";
+		return false;
+	}
+	Common::InSaveFile *input = _saveFileMan->openForLoading(getMetaEngine()->getSavegameFile(slot, _targetName.c_str()));
+	byte header[24];
+	bool valid = input && input->read(header, sizeof(header)) == sizeof(header) &&
+				 !memcmp(header, "WZVM", 4) && READ_LE_UINT16(header + 4) == 13 && READ_LE_UINT16(header + 6) == 1 &&
+				 READ_LE_UINT32(header + 8) == _machine.codeFile().checksum() &&
+				 READ_LE_UINT32(header + 12) == _machine.sourceDiskCRC();
+	const uint32 size = valid ? READ_LE_UINT32(header + 16) : 0;
+	valid = valid && size >= 65536 && size <= 6 * 1024 * 1024 && size <= uint64(input->size() - input->pos());
+	if (valid) {
+		_scenarioBackup.resize(sizeof(header) + size);
+		memcpy(_scenarioBackup.data(), header, sizeof(header));
+		valid = input->read(_scenarioBackup.data() + sizeof(header), size) == size && !input->err() &&
+				wizardryCrc32(_scenarioBackup.data() + sizeof(header), size) == READ_LE_UINT32(header + 20);
+	}
+	delete input;
+	if (!valid) {
+		_scenarioBackup.clear();
+		error = "The saved previous campaign could not be verified";
+		return false;
+	}
+	_scenarioFailed = false;
+	_scenarioStarted = false;
+	_scenarioError.clear();
+	return true;
+}
+
+bool WizardryEngine::onScenarioDiskCreated(const Common::Array<byte> &master,
+										   const Common::Array<byte> &save, Common::String &error) {
+	CampaignStore::Identity identity = campaignIdentity(_machine);
+	CampaignStore *candidate = nullptr;
+	bool saved = CampaignStore::findUnusedCampaignId(*_saveFileMan, _targetName, identity, error);
+	if (saved) {
+		candidate = new CampaignStore(*_saveFileMan, _targetName, identity);
+		Common::Array<byte> unusedMaster, unusedSave;
+		saved = candidate->load(unusedMaster, unusedSave, error) == CampaignStore::kEmpty &&
+				candidate->commit(master, save, error, &_machine.transferDisks()) && candidate->select(error);
+	}
+	if (!saved) {
+		delete candidate;
+		_scenarioError = error.empty() ? "The new Wizardry campaign could not be saved" : error;
+		_scenarioFailed = true;
+		return false;
+	}
+	delete _campaign;
+	_campaign = candidate;
+	_campaignDirty = _campaignWarned = _campaignRecoveryPending = _campaignSelectionPending = false;
+	_nextCampaignRetry = 0;
+	_machine.setCampaignID(identity.campaign);
+	_scenarioBackup.clear();
+	return true;
+}
+
+void WizardryEngine::restoreScenarioSession() {
+	Common::String error;
+	Common::MemoryReadStream input(_scenarioBackup.data(), _scenarioBackup.size());
+	// Rollback restores the verified pre-operation VM; it must not write or
+	// reselect anything after the operation's persistence failure.
+	_machine.setObserver(nullptr);
+	const bool restored = _machine.loadState(input, error);
+	_machine.setObserver(this);
+	_scenarioBackup.clear();
+	_scenarioFailed = false;
+	_scenarioStarted = false;
+	if (!restored)
+		_machine.fail(error);
+	_campaignDirty = false;
+	stopSound();
+	_lastClock = _system->getMillis();
 }
 
 bool WizardryEngine::flushCampaign(Common::String &error, bool force) {
@@ -294,7 +397,7 @@ bool WizardryEngine::flushCampaign(Common::String &error, bool force) {
 		return true;
 	// Source deletion and destination insertion are one original operation.
 	// Even a forced quit/fault flush must not persist only half of that move.
-	if (_machine.transferInProgress())
+	if (_machine.transferInProgress() || !_scenarioBackup.empty())
 		return true;
 	const uint32 now = _system->getMillis();
 	if (!force && _nextCampaignRetry && int32(now - _nextCampaignRetry) < 0)
@@ -375,6 +478,13 @@ void WizardryEngine::processEvents() {
 					key -= 'a' - 'A';
 			}
 			break;
+		}
+		if (key == 'M' && _machine.atScenarioMenu() && _scenarioBackup.empty()) {
+			Common::String error;
+			if (!preserveScenarioSession(error)) {
+				campaignWarning(error);
+				continue;
+			}
 		}
 		if (key)
 			_machine.queueKey(key);
