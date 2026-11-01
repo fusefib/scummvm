@@ -300,6 +300,9 @@ private:
 	bool transferOwnerActive() const;
 	int transferOwnerFrame() const;
 	bool transferRollbackActive() const;
+	bool transferRollbackPrompt() const;
+	byte transferRollbackSource(Common::String &error) const;
+	void selectTransferSource(byte source, bool reopening = false);
 	MachineObserver::TransferSourceResult requestTransferSource();
 	void cancelTransfer();
 	void finishTransferTransaction();

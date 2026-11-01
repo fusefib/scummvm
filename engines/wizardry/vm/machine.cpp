@@ -449,7 +449,8 @@ bool PCodeMachine::loaderKeyboardProfile() const {
 
 byte PCodeMachine::transferProfile() const {
 	const byte scenario = TransferDisks::scenario(_code.checksum());
-	// II/III's single-disk utilities can use a separate auxiliary source.
+	// II/III support auxiliary sources in all disk modes; V needs its paired
+	// resident loader for the original three-source conversion workflow.
 	if (_diskPolicy == kLegacy632 && _nativeRevision == 1 && (scenario == 2 || scenario == 3))
 		return scenario;
 	if (_diskPolicy != kResidentCOM || !_originalMemory || (_nativeRevision != 1 && _nativeRevision != 5))
@@ -503,6 +504,48 @@ bool PCodeMachine::transferRollbackActive() const {
 	return false;
 }
 
+byte PCodeMachine::transferRollbackSource(Common::String &error) const {
+	error.clear();
+	if (_services.enabled() || _scriptedInput || !_observer || !_transfer.transaction || !transferRollbackActive())
+		return 0;
+	// The owner keeps the source scenario character after closing its disk.
+	// This guest local also survives snapshots taken before duplicate rollback.
+	const uint16 scenario = readWord(_frames[transferOwnerFrame()].base);
+	if (scenario < '1' || scenario > '0' + TransferDisks::sourceCount(transferProfile()) ||
+		!_transfer.present(scenario - '0')) {
+		error = "The saved transfer source is unavailable or inconsistent";
+		return 0;
+	}
+	return scenario - '0';
+}
+
+bool PCodeMachine::transferRollbackPrompt() const {
+	if (transferProfile() != 5 || _services.enabled() || _scriptedInput || !_observer ||
+		!_transfer.transaction || !transferRollbackActive())
+		return false;
+	// V's rollback uses the ordinary SOURCE prompt, after its resident
+	// three-source chooser has already selected the two character files.
+	for (uint i = 0; i < _frames.size(); ++i) {
+		const Frame &frame = _frames[i];
+		if (frame.segment == 21 && frame.procedure == 14)
+			return readWord(frame.base) == 0 && readWord(frame.base + 2) == 33;
+	}
+	return false;
+}
+
+void PCodeMachine::selectTransferSource(byte source, bool reopening) {
+	if (transferProfile() == 2 || reopening) {
+		_transfer.active = source;
+		_transfer.choosing = false;
+		if (reopening && _diskPolicy == kResidentCOM)
+			_diskSelectedSave = true;
+		_loaderKeys.push_back(0x1c0d);
+	} else {
+		_transfer.choosing = true;
+		consumeTransferChoice(transferProfile() == 3 ? '0' + source : 'A' + source - 1);
+	}
+}
+
 MachineObserver::TransferSourceResult PCodeMachine::requestTransferSource() {
 	if (_services.enabled() || _scriptedInput || !_observer || _transferSourceRequested || transferRollbackActive())
 		return MachineObserver::kTransferUnhandled;
@@ -528,13 +571,7 @@ MachineObserver::TransferSourceResult PCodeMachine::requestTransferSource() {
 		}
 		_transfer = Common::move(candidate);
 		_transfer.transaction = true;
-		if (transferProfile() == 2) {
-			_transfer.active = source;
-			_loaderKeys.push_back(0x1c0d);
-		} else {
-			_transfer.choosing = true;
-			consumeTransferChoice(transferProfile() == 3 ? '0' + source : 'A' + source - 1);
-		}
+		selectTransferSource(source);
 		_observer->onDiskWrite();
 	}
 	return result;
@@ -629,6 +666,16 @@ bool PCodeMachine::prepareLoaderKeys() {
 	if (!keyboardScreenProfile() || !_loaderKeys.empty())
 		return true;
 	if (_transfer.choosing) {
+		Common::String error;
+		const byte source = transferRollbackSource(error);
+		if (!error.empty()) {
+			fail(error);
+			return false;
+		}
+		if (source) {
+			selectTransferSource(source, true);
+			return true;
+		}
 		const MachineObserver::TransferSourceResult result = requestTransferSource();
 		if (result != MachineObserver::kTransferUnhandled)
 			return result == MachineObserver::kTransferSelected && _state != kFault;
@@ -643,10 +690,20 @@ bool PCodeMachine::prepareLoaderKeys() {
 		return true;
 	}
 	const LoaderKeyboard::Action action = LoaderKeyboard::match(keyboardMatchProfile(), _console->keyboardVram());
-	if (action == LoaderKeyboard::kTransferSource || action == LoaderKeyboard::kAuxiliary) {
+	if (action == LoaderKeyboard::kTransferSource || action == LoaderKeyboard::kAuxiliary || transferRollbackPrompt()) {
 		if (!transferProfile()) {
 			fail("Resident transfer requires an authenticated original program");
 			return false;
+		}
+		Common::String error;
+		const byte source = transferRollbackSource(error);
+		if (!error.empty()) {
+			fail(error);
+			return false;
+		}
+		if (source) {
+			selectTransferSource(source, true);
+			return true;
 		}
 		if (!_transfer.transaction) {
 			const MachineObserver::TransferSourceResult result = requestTransferSource();
@@ -2245,10 +2302,28 @@ bool PCodeMachine::validateConsoleInput(const PendingInput &request, bool begin,
 			if (action == LoaderKeyboard::kExit)
 				return true;
 			if ((action == LoaderKeyboard::kTransferSource && transferProfile() == 3) ||
-				(action == LoaderKeyboard::kAuxiliary && transferProfile() == 5)) {
-				choosing = true;
-				console.drawTransferChoice(transferProfile());
+				(action == LoaderKeyboard::kAuxiliary && transferProfile() == 5) || transferRollbackPrompt()) {
+				Common::String error;
+				const byte source = transferRollbackSource(error);
+				if (!error.empty()) {
+					fail(error);
+					return false;
+				}
+				if (source) {
+					queued.push_back(0x1c0d);
+				} else {
+					choosing = true;
+					console.drawTransferChoice(transferProfile());
+				}
 			} else if (action == LoaderKeyboard::kTransferSource || action == LoaderKeyboard::kTransferClose) {
+				if (action == LoaderKeyboard::kTransferSource) {
+					Common::String error;
+					transferRollbackSource(error);
+					if (!error.empty()) {
+						fail(error);
+						return false;
+					}
+				}
 				queued.push_back(0x1c0d);
 			}
 			if (action == LoaderKeyboard::kAuxiliary && transferProfile() != 5) {
@@ -2278,10 +2353,20 @@ bool PCodeMachine::validateConsoleInput(const PendingInput &request, bool begin,
 					choosing = false;
 			}
 		} else if (choosing) {
+			Common::String error;
+			const byte source = transferRollbackSource(error);
+			if (!error.empty()) {
+				fail(error);
+				return false;
+			}
+			if (source) {
+				queued.push_back(0x1c0d);
+				choosing = false;
+			}
 			while (choosing && physical < _keys.size()) {
 				const byte choice = _keys[physical++];
-				byte source = 0;
-				if (LoaderKeyboard::transferChoice(transferProfile(), choice, source, queued))
+				byte selected = 0;
+				if (LoaderKeyboard::transferChoice(transferProfile(), choice, selected, queued))
 					choosing = false;
 			}
 		}
