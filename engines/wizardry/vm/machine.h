@@ -44,6 +44,11 @@ public:
 	virtual bool capturesTeletype() const { return false; }
 	virtual void onTeletype(byte) {}
 	virtual void onDiskWrite() {}
+	// Called before starting a new transfer transaction, never while reopening
+	// SOURCE for rollback. False resumes the guest's source-disk prompts.
+	// An empty image selects an existing private source without replacing it.
+	virtual bool onTransferSourceRequest(byte, const TransferDisks &, byte &,
+		Common::Array<byte> &) { return false; }
 	virtual bool onStateLoad(const PCodeMachine &, Common::String &) { return true; }
 	virtual bool canCreateScenarioDisk() const { return true; }
 	virtual bool onScenarioDiskCreated(const Common::Array<byte> &,
@@ -153,7 +158,7 @@ public:
 	bool readDisk(uint32 block, uint32 size, byte *destination) override;
 	bool readDiskAt(uint32 block, uint32 size, byte *destination, uint16 physicalOffset, uint16 unit) override;
 	bool cacheControl(uint16 address) override;
-	uint16 diskCapacity() const override { return scenarioInProgress() || _diskPolicy == kLegacy632 ? 632 : 1272; }
+	uint16 diskCapacity() const override { return scenarioInProgress() || (_diskPolicy == kLegacy632 && !_transfer.active) ? 632 : 1272; }
 	uint16 formatScenarioDisk(uint16 unit) override;
 	bool keyAvailable() const override { return !_loaderKeys.empty() || _keyPosition < _keys.size(); }
 	bool pollKeyboard() override;

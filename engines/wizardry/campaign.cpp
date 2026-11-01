@@ -47,6 +47,9 @@ bool CampaignStore::validIdentity() const {
 }
 
 byte CampaignStore::transferTarget() const {
+	if ((_identity.profile == kCompatibility || _identity.profile == kOriginal) &&
+		(_identity.gameNumber == 2 || _identity.gameNumber == 3))
+		return byte(_identity.gameNumber);
 	return _identity.profile == kPaired && (_identity.gameNumber == 2 || _identity.gameNumber == 3 || _identity.gameNumber == 5) ? byte(_identity.gameNumber) : 0;
 }
 

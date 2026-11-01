@@ -57,6 +57,7 @@ private:
 	uint32 _lastClock = 0;
 	bool _ready = false;
 	bool _loadingAutosave = false;
+	bool _transferDialogOpen = false;
 	bool _paused = false;
 	bool _soundActive = false;
 	uint64 _soundInstruction = 0;
@@ -78,6 +79,8 @@ private:
 	void startSound();
 	void stopSound();
 	void onDiskWrite() override { _campaignDirty = true; }
+	bool onTransferSourceRequest(byte destination, const TransferDisks &current, byte &source,
+		Common::Array<byte> &image) override;
 	bool onStateLoad(const PCodeMachine &candidate, Common::String &error) override;
 	bool canCreateScenarioDisk() const override { return !_scenarioBackup.empty(); }
 	bool onScenarioDiskCreated(const Common::Array<byte> &master,

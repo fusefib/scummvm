@@ -3,6 +3,8 @@ MODULE := engines/wizardry
 MODULE_OBJS := \
 	wizardry.o \
 	campaign.o \
+	transfer_import.o \
+	transfer_dialog.o \
 	metaengine.o \
 	data/ucsd_disk.o \
 	data/huffman.o \

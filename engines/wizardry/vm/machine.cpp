@@ -388,15 +388,17 @@ bool PCodeMachine::readRetained(uint16 unit, uint16 block, uint16 count, byte *e
 				_graphicsResidue.known(address));
 		return external ? transport.readBuffer(unit, block, count, external, address, result, error) : transport.unitIO(false, unit, address, count, block, 0, result, error);
 	}
+	Common::Array<byte> *auxiliary = activeTransferDisk();
+	const Common::Array<byte> &disk = auxiliary ? *auxiliary : _disk;
 	const uint32 offset = uint32(block) * 512;
-	const uint32 available = offset < _disk.size() ? MIN<uint32>(count, _disk.size() - offset) : 0;
+	const uint32 available = offset < disk.size() ? MIN<uint32>(count, disk.size() - offset) : 0;
 	if (external) {
 		if (available != count) {
 			result = 10;
 			return true;
 		}
 		if (count)
-			memcpy(external, _disk.data() + offset, count);
+			memcpy(external, disk.data() + offset, count);
 		return true;
 	}
 	if (_diskPolicy == kRaw0880) {
@@ -404,12 +406,12 @@ bool PCodeMachine::readRetained(uint16 unit, uint16 block, uint16 count, byte *e
 			error = "Partial-sector disk EOF requires an unmodeled original bounce buffer";
 			return false;
 		}
-	} else if (available != count || block >= 632 || offset + count > 632U * 512) {
+	} else if (available != count || (!auxiliary && (block >= 632 || offset + count > 632U * 512))) {
 		result = 10;
 		return true;
 	}
 	for (uint32 i = 0; i < available; ++i)
-		writeByte(uint16(address + i), _disk[offset + i]);
+		writeByte(uint16(address + i), disk[offset + i]);
 	return true;
 }
 
@@ -444,9 +446,12 @@ bool PCodeMachine::loaderKeyboardProfile() const {
 }
 
 byte PCodeMachine::transferProfile() const {
+	const byte scenario = TransferDisks::scenario(_code.checksum());
+	// II/III's single-disk utilities can use a separate auxiliary source.
+	if (_diskPolicy == kLegacy632 && _nativeRevision == 1 && (scenario == 2 || scenario == 3))
+		return scenario;
 	if (_diskPolicy != kResidentCOM || !_originalMemory || (_nativeRevision != 1 && _nativeRevision != 5))
 		return 0;
-	const byte scenario = TransferDisks::scenario(_code.checksum());
 	return scenario == 2 || scenario == 3 || scenario == 5 ? scenario : 0;
 }
 
@@ -484,8 +489,14 @@ void PCodeMachine::finishTransferTransaction() {
 	// GAMEUTIL:16 (II/III) or :2 (V) retains records after closing SOURCE. Destination
 	// rejection can still reopen SOURCE and restore them. Commit only after
 	// the owning guest procedure has returned or executed its nonlocal EXIT.
-	if (_transfer.transaction && !_transfer.active && !_transfer.choosing && !transferOwnerActive())
+	if (_transfer.transaction && !transferOwnerActive()) {
+		// III's II-source cancellation can return without the close-screen hook.
+		_transfer.active = 0;
+		_transfer.choosing = false;
 		_transfer.transaction = false;
+		if (_diskPolicy == kResidentCOM && (transferProfile() == 3 || transferProfile() == 5))
+			_diskSelectedSave = true;
+	}
 }
 
 void PCodeMachine::consumeTransferChoice(byte key) {
@@ -498,7 +509,7 @@ void PCodeMachine::consumeTransferChoice(byte key) {
 		_transfer.active = source;
 	else if (transferProfile() != 5)
 		_transfer.active = 0;
-	if (source)
+	if (source && _diskPolicy == kResidentCOM)
 		_diskSelectedSave = true;
 }
 
@@ -537,6 +548,31 @@ bool PCodeMachine::prepareLoaderKeys() {
 			fail("Resident transfer requires an authenticated original program");
 			return false;
 		}
+		// Reopened sources belong to guest rollback; replay input is already supplied.
+		if (!_transfer.transaction && !_services.enabled() && !_scriptedInput && _observer) {
+			byte source = 0;
+			Common::Array<byte> image;
+			if (_observer->onTransferSourceRequest(transferProfile(), _transfer, source, image)) {
+				Common::String error;
+				if (source < 1 || source > TransferDisks::sourceCount(transferProfile()) ||
+					(!image.empty() && !_transfer.attach(transferProfile(), source, image, error)) ||
+					!_transfer.present(source)) {
+					fail(error.empty() ? "Invalid source returned by the transfer chooser" : error);
+					return false;
+				}
+				_transfer.transaction = true;
+				if (transferProfile() == 2) {
+					// II has one source (I), not the III/V physical choice overlay.
+					_transfer.active = source;
+					_loaderKeys.push_back(0x1c0d);
+				} else {
+					_transfer.choosing = true;
+					consumeTransferChoice(transferProfile() == 3 ? '0' + source : 'A' + source - 1);
+				}
+				_observer->onDiskWrite(); // The target now owns this private import.
+				return true;
+			}
+		}
 		_transfer.transaction = true;
 		if (transferProfile() == 3 || transferProfile() == 5) {
 			_transfer.choosing = true;
@@ -549,7 +585,7 @@ bool PCodeMachine::prepareLoaderKeys() {
 	}
 	if (action == LoaderKeyboard::kTransferClose) {
 		_transfer.active = 0;
-		if (transferProfile() == 3 || _nativeRevision == 5)
+		if (_diskPolicy == kResidentCOM && (transferProfile() == 3 || _nativeRevision == 5))
 			_diskSelectedSave = true;
 		_loaderKeys.push_back(0x1c0d);
 		finishTransferTransaction();
@@ -1780,8 +1816,10 @@ void PCodeMachine::unitIO(bool write) {
 			setIoResult(result);
 			return;
 		}
+		Common::Array<byte> *auxiliary = activeTransferDisk();
+		Common::Array<byte> &disk = auxiliary ? *auxiliary : _disk;
 		const uint32 offset = uint32(z) * 512;
-		const uint32 available = offset < _disk.size() ? MIN<uint32>(y, _disk.size() - offset) : 0;
+		const uint32 available = offset < disk.size() ? MIN<uint32>(y, disk.size() - offset) : 0;
 		if (_diskPolicy == kRaw0880 && !write) {
 			// Original full-sector EOF reads leave the uncopied guest bytes
 			// intact and return IORESULT=0. A partial-sector EOF additionally
@@ -1791,21 +1829,21 @@ void PCodeMachine::unitIO(bool write) {
 				return;
 			}
 			for (uint32 i = 0; i < available; ++i)
-				writeByte(uint16(address + i), _disk[offset + i]);
+				writeByte(uint16(address + i), disk[offset + i]);
 			setIoResult(0);
 			return;
 		}
 		// Writes stay within the private image instead of extending the DOS
 		// file or ignoring its write errors.
-		if (offset > _disk.size() || available != y || (_diskPolicy == kLegacy632 && (z >= 632 || offset + y > 632U * 512))) {
+		if (offset > disk.size() || available != y || (_diskPolicy == kLegacy632 && !auxiliary && (z >= 632 || offset + y > 632U * 512))) {
 			setIoResult(10);
 			return;
 		}
 		for (uint32 i = 0; i < y; ++i) {
 			if (write)
-				_disk[offset + i] = readByte(uint16(address + i));
+				disk[offset + i] = readByte(uint16(address + i));
 			else
-				writeByte(uint16(address + i), _disk[offset + i]);
+				writeByte(uint16(address + i), disk[offset + i]);
 		}
 		if (write && y)
 			diskWritten();

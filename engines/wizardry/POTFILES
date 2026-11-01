@@ -1,2 +1,3 @@
 engines/wizardry/detection.cpp
 engines/wizardry/metaengine.cpp
+engines/wizardry/transfer_dialog.cpp

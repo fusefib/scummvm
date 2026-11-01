@@ -59,9 +59,9 @@ bool WizardryEngine::hasFeature(EngineFeature feature) const {
 }
 
 bool WizardryEngine::canSaveGameStateCurrently(Common::U32String *) {
-	return _ready && _scenarioBackup.empty() && _machine.canSuspend();
+	return _ready && !_transferDialogOpen && _scenarioBackup.empty() && _machine.canSuspend();
 }
-bool WizardryEngine::canLoadGameStateCurrently(Common::U32String *) { return _ready; }
+bool WizardryEngine::canLoadGameStateCurrently(Common::U32String *) { return _ready && !_transferDialogOpen; }
 
 bool WizardryEngine::canSaveAutosaveCurrently() {
 	return canSaveGameStateCurrently() && _machine.instructions() && !_loadingAutosave;
@@ -589,7 +589,7 @@ void WizardryEngine::present() {
 
 Common::Error WizardryEngine::loadGameStream(Common::SeekableReadStream *stream) {
 	Common::String message;
-	if (!_ready || !_machine.loadState(*stream, message))
+	if (!canLoadGameStateCurrently() || !_machine.loadState(*stream, message))
 		return Common::Error(Common::kReadingFailed, message);
 	ConfMan.setBool("original_save_disk", _machine.diskPolicy() == PCodeMachine::kResidentCOM);
 	ConfMan.flushToDisk();
