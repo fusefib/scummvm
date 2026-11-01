@@ -87,7 +87,8 @@ public:
 	bool loadTransferSource(byte source, const Common::Array<byte> &image, Common::String &error);
 	bool loadCampaignTransfers(const TransferDisks &transfer, Common::String &error);
 	const TransferDisks &transferDisks() const { return _transfer; }
-	bool transferInProgress() const { return _transfer.transaction; }
+	bool transferInProgress() const { return _transfer.transaction || _transfer.active || _transfer.choosing || _transferCancelPending || transferOwnerActive(); }
+	bool discardIdleTransferSources();
 	bool cancellingTransfer() const { return _transferCancelPending; }
 	bool atScenarioMenu() const;
 	bool scenarioInProgress() const { return !_scenarioDisk.empty(); }

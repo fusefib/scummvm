@@ -346,7 +346,7 @@ bool chooseSource(Common::SaveFileManager &manager, byte destination, byte &sour
 			continue;
 		}
 		const Common::U32String message =
-			_("Import characters from this source? The source will not be changed. The game will ask which characters to transfer.");
+			_("Import characters from this source? The source will not be changed. The game will ask which characters to transfer. Finish or cancel the import before saving.");
 		GUI::MessageDialog confirm(message, _("Import"), _("Cancel"));
 		if (confirm.runModal() != GUI::kMessageOK)
 			continue;

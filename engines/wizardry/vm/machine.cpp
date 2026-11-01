@@ -485,6 +485,13 @@ bool PCodeMachine::transferOwnerActive() const {
 	return transferOwnerFrame() >= 0;
 }
 
+bool PCodeMachine::discardIdleTransferSources() {
+	if (transferInProgress() || _transfer.empty())
+		return false;
+	_transfer = TransferDisks();
+	return true;
+}
+
 int PCodeMachine::transferOwnerFrame() const {
 	if (!transferProfile())
 		return -1;
@@ -509,7 +516,6 @@ byte PCodeMachine::transferRollbackSource(Common::String &error) const {
 	if (_services.enabled() || _scriptedInput || !_observer || !_transfer.transaction || !transferRollbackActive())
 		return 0;
 	// The owner keeps the source scenario character after closing its disk.
-	// This guest local also survives snapshots taken before duplicate rollback.
 	const uint16 scenario = readWord(_frames[transferOwnerFrame()].base);
 	if (scenario < '1' || scenario > '0' + TransferDisks::sourceCount(transferProfile()) ||
 		!_transfer.present(scenario - '0')) {

@@ -30,6 +30,7 @@
 #include "common/memstream.h"
 #include "common/savefile.h"
 #include "common/system.h"
+#include "common/translation.h"
 #include "engines/metaengine.h"
 #include "engines/util.h"
 #include "graphics/cursorman.h"
@@ -58,7 +59,12 @@ bool WizardryEngine::hasFeature(EngineFeature feature) const {
 		   feature == kSupportsLoadingDuringRuntime;
 }
 
-bool WizardryEngine::canSaveGameStateCurrently(Common::U32String *) {
+bool WizardryEngine::canSaveGameStateCurrently(Common::U32String *message) {
+	if (_machine.transferInProgress()) {
+		if (message)
+			*message = _("Finish or cancel the character import before saving.");
+		return false;
+	}
 	return _ready && !_transferDialogOpen && _scenarioBackup.empty() && _machine.canSuspend();
 }
 bool WizardryEngine::canLoadGameStateCurrently(Common::U32String *) {
@@ -216,8 +222,6 @@ bool WizardryEngine::configureCampaign(Common::String &error) {
 	delete _campaign;
 	_campaign = nullptr;
 	_campaignDirty = _campaignWarned = false;
-	_campaignRecoveryPending = false;
-	_campaignSelectionPending = false;
 	_nextCampaignRetry = 0;
 	if (_description->gameNumber < 1 || _description->gameNumber > 5)
 		return true;
@@ -262,22 +266,24 @@ CampaignStore::Identity WizardryEngine::campaignIdentity(const PCodeMachine &mac
 }
 
 bool WizardryEngine::onStateLoad(const PCodeMachine &machine, Common::String &error) {
+	if (machine.transferInProgress()) {
+		error = "Cannot load a saved game with an unfinished character import";
+		return false;
+	}
 	CampaignStore *candidate = new CampaignStore(*_saveFileMan, _targetName, campaignIdentity(machine));
 	Common::Array<byte> master, save;
 	const CampaignStore::LoadResult loaded = candidate->load(master, save, error);
-	const bool pending = machine.transferInProgress();
-	if (!pending) {
-		const bool saved = loaded == CampaignStore::kError ? candidate->recoverFromSnapshot(machine.disk(), machine.saveDisk(), error, &machine.transferDisks()) : candidate->commit(machine.disk(), machine.saveDisk(), error, &machine.transferDisks());
-		if (!saved || !candidate->select(error)) {
-			delete candidate;
-			return false;
-		}
+	const TransferDisks transfer;
+	const bool saved = loaded == CampaignStore::kError ?
+		candidate->recoverFromSnapshot(machine.disk(), machine.saveDisk(), error, &transfer) :
+		candidate->commit(machine.disk(), machine.saveDisk(), error, &transfer);
+	if (!saved || !candidate->select(error)) {
+		delete candidate;
+		return false;
 	}
 	delete _campaign;
 	_campaign = candidate;
-	_campaignRecoveryPending = pending && loaded == CampaignStore::kError;
-	_campaignSelectionPending = _campaignDirty = pending;
-	_campaignWarned = false;
+	_campaignDirty = _campaignWarned = false;
 	_nextCampaignRetry = 0;
 	_scenarioBackup.clear();
 	_scenarioError.clear();
@@ -351,7 +357,7 @@ bool WizardryEngine::onScenarioDiskCreated(const Common::Array<byte> &master,
 	}
 	delete _campaign;
 	_campaign = candidate;
-	_campaignDirty = _campaignWarned = _campaignRecoveryPending = _campaignSelectionPending = false;
+	_campaignDirty = _campaignWarned = false;
 	_nextCampaignRetry = 0;
 	_machine.setCampaignID(identity.campaign);
 	_scenarioBackup.clear();
@@ -378,34 +384,23 @@ void WizardryEngine::restoreScenarioSession() {
 
 bool WizardryEngine::flushCampaign(Common::String &error, bool force) {
 	error.clear();
-	if (!_campaign || !_campaignDirty)
+	if (!_campaign)
 		return true;
 	// Source deletion and destination insertion are one original operation.
 	// Even a forced quit/fault flush must not persist only half of that move.
 	if (_machine.transferInProgress() || !_scenarioBackup.empty())
 		return true;
+	if (_machine.discardIdleTransferSources())
+		_campaignDirty = true;
+	if (!_campaignDirty)
+		return true;
 	const uint32 now = _system->getMillis();
 	if (!force && _nextCampaignRetry && int32(now - _nextCampaignRetry) < 0)
 		return true;
-	bool saved;
-	if (_campaignRecoveryPending) {
-		saved = _campaign->recoverFromSnapshot(_machine.disk(), _machine.saveDisk(), error,
-											   &_machine.transferDisks());
-		// The store retains permission to retry a failed recovery write after
-		// preserving the old raw copies. Keep recovery pending until verified.
-		if (!saved) {
-			_nextCampaignRetry = now + 5000;
-			return false;
-		}
-		_campaignRecoveryPending = false;
-	} else {
-		saved = _campaign->commit(_machine.disk(), _machine.saveDisk(), error, &_machine.transferDisks());
-	}
-	if (!saved || (_campaignSelectionPending && !_campaign->select(error))) {
+	if (!_campaign->commit(_machine.disk(), _machine.saveDisk(), error, &_machine.transferDisks())) {
 		_nextCampaignRetry = now + 5000;
 		return false;
 	}
-	_campaignSelectionPending = false;
 	_campaignDirty = _campaignWarned = false;
 	_nextCampaignRetry = 0;
 	debug(2, "Wizardry: campaign committed, generation %llu",
@@ -592,7 +587,11 @@ Common::Error WizardryEngine::loadGameStream(Common::SeekableReadStream *stream)
 Common::Error WizardryEngine::saveGameStream(Common::WriteStream *stream, bool) {
 	Common::String message;
 	updateTime();
-	if (!canSaveGameStateCurrently() || !_machine.saveState(*stream, message))
+	if (!canSaveGameStateCurrently())
+		return Common::kWritingFailed;
+	if (_machine.discardIdleTransferSources())
+		_campaignDirty = true;
+	if (!_machine.saveState(*stream, message))
 		return Common::Error(Common::kWritingFailed, message);
 	return Common::kNoError;
 }

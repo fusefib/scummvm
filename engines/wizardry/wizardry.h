@@ -66,8 +66,6 @@ private:
 	Audio::QueuingAudioStream *_speakerStream = nullptr;
 	CampaignStore *_campaign = nullptr;
 	bool _campaignDirty = false, _campaignWarned = false;
-	bool _campaignRecoveryPending = false;
-	bool _campaignSelectionPending = false;
 	uint32 _nextCampaignRetry = 0;
 	Common::Array<byte> _scenarioBackup;
 	Common::String _scenarioError;
