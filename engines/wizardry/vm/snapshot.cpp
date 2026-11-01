@@ -559,6 +559,8 @@ bool PCodeMachine::loadState(Common::SeekableReadStream &in, Common::String &err
 	_disk = Common::move(candidate._disk);
 	_saveDisk = Common::move(candidate._saveDisk);
 	_transfer = Common::move(candidate._transfer);
+	_transferCancelPending = false;
+	_transferSourceRequested = false;
 	_ramCache = Common::move(candidate._ramCache);
 	_graphicsResidue = Common::move(candidate._graphicsResidue);
 	_diskDMABuffer = Common::move(candidate._diskDMABuffer);

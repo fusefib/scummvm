@@ -41,9 +41,8 @@ const char *const kSourceNames[] = { "I", "II", "III" };
 class TransferSourceDialog : public GUI::ChooserDialog {
 public:
 	TransferSourceDialog() : GUI::ChooserDialog(_("Import characters: select a campaign or disk")) {
-		GUI::ButtonWidget *original = static_cast<GUI::ButtonWidget *>(findWidget("Browser.Cancel"));
-		original->setLabel(_("Original"));
-		original->setTooltip(_("Use the game's original disk prompts. Escape does the same."));
+		GUI::ButtonWidget *cancel = static_cast<GUI::ButtonWidget *>(findWidget("Browser.Cancel"));
+		cancel->setTooltip(_("Cancel the import and return to Utilities. Escape does the same."));
 	}
 };
 
@@ -143,14 +142,13 @@ bool chooseSource(Common::SaveFileManager &manager, byte destination,
 			i->arcMember->getPathInArchive().toString('/').c_str(), i->arcName.c_str()));
 	}
 	if (choices.empty()) {
-		GUI::MessageDialog(_("No supported Wizardry source campaign or disk was found. Returning to the original source-disk handling.")).runModal();
+		GUI::MessageDialog(_("No supported Wizardry source campaign or disk was found. Returning to Utilities.")).runModal();
 		return false;
 	}
 	while (true) {
 		TransferSourceDialog dialog;
 		dialog.setList(labels);
 		const int selected = dialog.runModal();
-		// Closing the picker resumes the guest's disk prompts.
 		if (selected < 0 || uint(selected) >= choices.size())
 			return false;
 		const ImportChoice &choice = choices[selected];
@@ -188,7 +186,7 @@ bool chooseSource(Common::SaveFileManager &manager, byte destination,
 
 } // namespace
 
-bool WizardryEngine::onTransferSourceRequest(byte destination, const TransferDisks &current,
+MachineObserver::TransferSourceResult WizardryEngine::onTransferSourceRequest(byte destination, const TransferDisks &current,
 		byte &source, Common::Array<byte> &image) {
 	// The VM cannot be replaced or suspended inside its source request callback.
 	PauseToken pause = pauseEngine();
@@ -196,7 +194,7 @@ bool WizardryEngine::onTransferSourceRequest(byte destination, const TransferDis
 	present();
 	const bool chosen = chooseSource(*_saveFileMan, destination, current, source, image);
 	_transferDialogOpen = false;
-	return chosen;
+	return chosen ? kTransferSelected : kTransferCancelled;
 }
 
 } // namespace Wizardry

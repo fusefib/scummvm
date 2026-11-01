@@ -235,6 +235,8 @@ bool PCodeMachine::bootInternal(const Common::Array<byte> &code, const Common::A
 	_loaderKeys.clear();
 	_loaderData.clear();
 	_transfer = TransferDisks();
+	_transferCancelPending = false;
+	_transferSourceRequested = false;
 	_error.clear();
 	_heap = 0x6000;
 	_np = 0xf000;
@@ -479,10 +481,102 @@ bool PCodeMachine::loadCampaignTransfers(const TransferDisks &transfer, Common::
 }
 
 bool PCodeMachine::transferOwnerActive() const {
+	return transferOwnerFrame() >= 0;
+}
+
+int PCodeMachine::transferOwnerFrame() const {
+	if (!transferProfile())
+		return -1;
 	for (uint i = 0; i < _frames.size(); ++i)
 		if (_frames[i].segment == 21 && _frames[i].procedure == (transferProfile() == 5 ? 2 : 16))
+			return i;
+	return -1;
+}
+
+bool PCodeMachine::transferRollbackActive() const {
+	const int owner = transferOwnerFrame();
+	if (owner < 0)
+		return false;
+	for (uint i = owner + 1; i < _frames.size(); ++i)
+		if (_frames[i].segment == 21 && _frames[i].procedure == (transferProfile() == 5 ? 16 : 31))
 			return true;
 	return false;
+}
+
+MachineObserver::TransferSourceResult PCodeMachine::requestTransferSource() {
+	if (_services.enabled() || _scriptedInput || !_observer || _transferSourceRequested || transferRollbackActive())
+		return MachineObserver::kTransferUnhandled;
+	_transferSourceRequested = true;
+	byte source = 0;
+	Common::Array<byte> image;
+	const MachineObserver::TransferSourceResult result =
+		_observer->onTransferSourceRequest(transferProfile(), _transfer, source, image);
+	if (result == MachineObserver::kTransferCancelled) {
+		_transferCancelPending = true;
+		_transfer.transaction = true;
+		_state = kWaitingForInput;
+	} else if (result == MachineObserver::kTransferSelected) {
+		TransferDisks candidate(_transfer);
+		candidate.active = 0;
+		candidate.choosing = candidate.transaction = false;
+		Common::String error;
+		if (source < 1 || source > TransferDisks::sourceCount(transferProfile()) ||
+			(!image.empty() && !candidate.attach(transferProfile(), source, image, error)) ||
+			!candidate.present(source)) {
+			fail(error.empty() ? "Invalid source returned by the transfer chooser" : error);
+			return result;
+		}
+		_transfer = Common::move(candidate);
+		_transfer.transaction = true;
+		if (transferProfile() == 2) {
+			_transfer.active = source;
+			_loaderKeys.push_back(0x1c0d);
+		} else {
+			_transfer.choosing = true;
+			consumeTransferChoice(transferProfile() == 3 ? '0' + source : 'A' + source - 1);
+		}
+		_observer->onDiskWrite();
+	}
+	return result;
+}
+
+void PCodeMachine::cancelTransfer() {
+	if (!_transferCancelPending || _state == kFault)
+		return;
+	const int owner = transferOwnerFrame();
+	const byte cleanup = transferProfile() == 5 ? 15 : 30;
+	const PCodeProcedure *procedure = _code.procedure(21, cleanup);
+	Common::String error;
+	if (owner < 0 || transferRollbackActive() || !procedure || procedure->parameterBytes ||
+		(_originalMemory && !validateOriginalState(error))) {
+		fail(error.empty() ? "Cannot cancel outside the initial transfer source request" : error);
+		return;
+	}
+	for (uint i = owner + 1; i < _frames.size(); ++i) {
+		const Frame &frame = _frames[i];
+		const PCodeSegment *caller = _code.segment(frame.returnSegment);
+		if (!caller || frame.returnSegment != _frames[i - 1].segment ||
+			frame.returnIP >= caller->code.size() || frame.stackBase > _stack.size()) {
+			fail("Invalid transfer cancellation frame");
+			return;
+		}
+	}
+	// The keyboard service still owns its operands during the callback. Unwind
+	// only after it returns, then let the guest release its windows and heap.
+	_input = PendingInput();
+	_loaderKeys.clear();
+	clearKeys();
+	_state = kRunning;
+	while (int(_frames.size()) - 1 > owner && _state == kRunning)
+		leave(0);
+	if (_state != kRunning)
+		return;
+	_transfer.active = 0;
+	_transfer.choosing = false;
+	if (_diskPolicy == kResidentCOM)
+		_diskSelectedSave = true;
+	_transferCancelPending = false;
+	enter(21, cleanup, kLocal);
 }
 
 void PCodeMachine::finishTransferTransaction() {
@@ -494,6 +588,7 @@ void PCodeMachine::finishTransferTransaction() {
 		_transfer.active = 0;
 		_transfer.choosing = false;
 		_transfer.transaction = false;
+		_transferSourceRequested = false;
 		if (_diskPolicy == kResidentCOM && (transferProfile() == 3 || transferProfile() == 5))
 			_diskSelectedSave = true;
 	}
@@ -529,9 +624,14 @@ bool PCodeMachine::loadLoaderCom(const Common::Array<byte> &com, Common::String 
 }
 
 bool PCodeMachine::prepareLoaderKeys() {
+	if (_transferCancelPending)
+		return false;
 	if (!keyboardScreenProfile() || !_loaderKeys.empty())
 		return true;
 	if (_transfer.choosing) {
+		const MachineObserver::TransferSourceResult result = requestTransferSource();
+		if (result != MachineObserver::kTransferUnhandled)
+			return result == MachineObserver::kTransferSelected && _state != kFault;
 		if (_services.inputMode())
 			return true; // Physical Q events are applied in replay order.
 		while (_transfer.choosing && _keyPosition < _keys.size())
@@ -548,30 +648,10 @@ bool PCodeMachine::prepareLoaderKeys() {
 			fail("Resident transfer requires an authenticated original program");
 			return false;
 		}
-		// Reopened sources belong to guest rollback; replay input is already supplied.
-		if (!_transfer.transaction && !_services.enabled() && !_scriptedInput && _observer) {
-			byte source = 0;
-			Common::Array<byte> image;
-			if (_observer->onTransferSourceRequest(transferProfile(), _transfer, source, image)) {
-				Common::String error;
-				if (source < 1 || source > TransferDisks::sourceCount(transferProfile()) ||
-					(!image.empty() && !_transfer.attach(transferProfile(), source, image, error)) ||
-					!_transfer.present(source)) {
-					fail(error.empty() ? "Invalid source returned by the transfer chooser" : error);
-					return false;
-				}
-				_transfer.transaction = true;
-				if (transferProfile() == 2) {
-					// II has one source (I), not the III/V physical choice overlay.
-					_transfer.active = source;
-					_loaderKeys.push_back(0x1c0d);
-				} else {
-					_transfer.choosing = true;
-					consumeTransferChoice(transferProfile() == 3 ? '0' + source : 'A' + source - 1);
-				}
-				_observer->onDiskWrite(); // The target now owns this private import.
-				return true;
-			}
+		if (!_transfer.transaction) {
+			const MachineObserver::TransferSourceResult result = requestTransferSource();
+			if (result != MachineObserver::kTransferUnhandled)
+				return result == MachineObserver::kTransferSelected && _state != kFault;
 		}
 		_transfer.transaction = true;
 		if (transferProfile() == 3 || transferProfile() == 5) {
@@ -1128,6 +1208,7 @@ PCodeMachine::State PCodeMachine::run(uint32 budget) {
 	_soundPattern = 0xffff;
 	if (_input.active)
 		completeInput();
+	cancelTransfer();
 	for (uint32 n = 0; n < budget && _state == kRunning; ++n) {
 		const byte op = fetchByte();
 		if (_state == kFault)
@@ -1143,6 +1224,7 @@ PCodeMachine::State PCodeMachine::run(uint32 budget) {
 			push(readWord(uint16(pop() + 2 * (op - 0xf8))));
 		else
 			execute(op);
+		cancelTransfer();
 		finishTransferTransaction();
 		if (scenarioInProgress() && !scenarioOwnerActive())
 			discardScenarioDisk();

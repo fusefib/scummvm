@@ -61,7 +61,9 @@ bool WizardryEngine::hasFeature(EngineFeature feature) const {
 bool WizardryEngine::canSaveGameStateCurrently(Common::U32String *) {
 	return _ready && !_transferDialogOpen && _scenarioBackup.empty() && _machine.canSuspend();
 }
-bool WizardryEngine::canLoadGameStateCurrently(Common::U32String *) { return _ready && !_transferDialogOpen; }
+bool WizardryEngine::canLoadGameStateCurrently(Common::U32String *) {
+	return _ready && !_transferDialogOpen && !_machine.cancellingTransfer();
+}
 
 bool WizardryEngine::canSaveAutosaveCurrently() {
 	return canSaveGameStateCurrently() && _machine.instructions() && !_loadingAutosave;

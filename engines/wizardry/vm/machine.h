@@ -38,6 +38,11 @@ class PCodeMachine;
 /** Host persistence and optional diagnostics, independent of the frontend. */
 class MachineObserver {
 public:
+	enum TransferSourceResult {
+		kTransferUnhandled,
+		kTransferSelected,
+		kTransferCancelled
+	};
 	virtual ~MachineObserver() {}
 	virtual void beforeInput(byte) {}
 	virtual void onDelay(uint16) {}
@@ -45,10 +50,10 @@ public:
 	virtual void onTeletype(byte) {}
 	virtual void onDiskWrite() {}
 	// Called before starting a new transfer transaction, never while reopening
-	// SOURCE for rollback. False resumes the guest's source-disk prompts.
+	// SOURCE for rollback. Unhandled retains the original disk prompts.
 	// An empty image selects an existing private source without replacing it.
-	virtual bool onTransferSourceRequest(byte, const TransferDisks &, byte &,
-		Common::Array<byte> &) { return false; }
+	virtual TransferSourceResult onTransferSourceRequest(byte, const TransferDisks &, byte &,
+		Common::Array<byte> &) { return kTransferUnhandled; }
 	virtual bool onStateLoad(const PCodeMachine &, Common::String &) { return true; }
 	virtual bool canCreateScenarioDisk() const { return true; }
 	virtual bool onScenarioDiskCreated(const Common::Array<byte> &,
@@ -83,6 +88,7 @@ public:
 	bool loadCampaignTransfers(const TransferDisks &transfer, Common::String &error);
 	const TransferDisks &transferDisks() const { return _transfer; }
 	bool transferInProgress() const { return _transfer.transaction; }
+	bool cancellingTransfer() const { return _transferCancelPending; }
 	bool atScenarioMenu() const;
 	bool scenarioInProgress() const { return !_scenarioDisk.empty(); }
 	byte transferProfile() const;
@@ -147,7 +153,7 @@ public:
 	bool loadState(Common::SeekableReadStream &in, Common::String &error,
 		const Common::Array<byte> *expectedSaveDisk = nullptr);
 	bool canSuspend() const {
-		return !scenarioInProgress() && _state != kFault && _state != kHalted && !_frames.empty() &&
+		return !_transferCancelPending && !scenarioInProgress() && _state != kFault && _state != kHalted && !_frames.empty() &&
 			(!_input.active || _state == kWaitingForInput);
 	}
 
@@ -163,7 +169,7 @@ public:
 	bool keyAvailable() const override { return !_loaderKeys.empty() || _keyPosition < _keys.size(); }
 	bool pollKeyboard() override;
 	bool executionStopped() const override { return _state == kHalted || _state == kFault; }
-	bool keyboardBlocked() const override { return _transfer.choosing; }
+	bool keyboardBlocked() const override { return _transfer.choosing || _transferCancelPending; }
 	bool tracedInput() const override { return _services.inputMode(); }
 	bool graphicsInit(bool first) override;
 	void diskWritten() override {
@@ -217,6 +223,8 @@ private:
 	uint16 _scenarioUnit = 0;
 	Common::Array<byte> _diskDMABuffer;
 	TransferDisks _transfer;
+	bool _transferCancelPending = false;
+	bool _transferSourceRequested = false;
 	RamDiskCache _ramCache;
 	GraphicsResidue _graphicsResidue;
 	uint32 _sourceDiskCRC = 0;
@@ -290,6 +298,10 @@ private:
 	bool keyboardScreenProfile() const;
 	byte keyboardMatchProfile() const;
 	bool transferOwnerActive() const;
+	int transferOwnerFrame() const;
+	bool transferRollbackActive() const;
+	MachineObserver::TransferSourceResult requestTransferSource();
+	void cancelTransfer();
 	void finishTransferTransaction();
 	bool scenarioOwnerActive() const;
 	bool scenarioUnitIO(bool write, uint16 unit, uint16 address, uint16 count, uint16 block);

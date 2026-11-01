@@ -79,7 +79,7 @@ private:
 	void startSound();
 	void stopSound();
 	void onDiskWrite() override { _campaignDirty = true; }
-	bool onTransferSourceRequest(byte destination, const TransferDisks &current, byte &source,
+	TransferSourceResult onTransferSourceRequest(byte destination, const TransferDisks &current, byte &source,
 		Common::Array<byte> &image) override;
 	bool onStateLoad(const PCodeMachine &candidate, Common::String &error) override;
 	bool canCreateScenarioDisk() const override { return !_scenarioBackup.empty(); }
