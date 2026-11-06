@@ -254,6 +254,7 @@ public:
 	 * Returns the voice, that is used right now
 	 */
 	TTSVoice getVoice();
+	int getVoiceIndex() const { return _ttsState->_activeVoice; }
 
 	/**
 	 * Sets the speech rate

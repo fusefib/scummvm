@@ -96,6 +96,9 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
 	_schedulerClockRunning = false;
 	_servicingTimer = false;
 	_narrationOwned = false;
+	_narrationNext = 0;
+	_narratorVoice = -1;
+	_narrationCallback = 0;
 	_narrationTimerHeld = false;
 	_narrationCanContinue = false;
 
@@ -306,6 +309,7 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 
 void PreGob_Emmanuelle::clearModuleObjects() {
 	clearNarration();
+	_protectionQuestion.clear();
 	// Captures belong to this module's VM and cannot outlive its region depth.
 	_renderer.discardSavedRegions();
 	if (_platformTag == kOldTotPlatformAtariST)
@@ -550,6 +554,7 @@ void PreGob_Emmanuelle::beginIntroFastForward() {
 }
 
 void PreGob_Emmanuelle::finishIntro() {
+	_protectionQuestion.clear();
 	const bool fastForwarding = _introSkip.fastForwarding();
 	const bool resolved = !fastForwarding || resolveIntroPresentation();
 	_introSkip.finish();
@@ -686,8 +691,13 @@ void PreGob_Emmanuelle::stopSampleAudio() {
 }
 
 void PreGob_Emmanuelle::dispatchScheduled(uint16 target) {
+	// A choice callback can tail-dispatch its text after its sequence has
+	// returned. Retain that caller only for this synchronous narration context.
+	const uint16 previous = _narrationCallback;
+	_narrationCallback = target;
 	if (_executor && !_hostFailed && !_executor->dispatchScheduled(target))
 		failHostOperation("scheduled callback", target);
+	_narrationCallback = previous;
 }
 
 void PreGob_Emmanuelle::runFight(

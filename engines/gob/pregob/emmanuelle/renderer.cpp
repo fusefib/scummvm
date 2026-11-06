@@ -958,6 +958,7 @@ bool PreGob_Emmanuelle::handleProtectionTextNode(uint16 nodeOffset) {
 	for (uint i = 0; i < ARRAYSIZE(variables); ++i)
 		variables[i] = _scriptVM->readVariable(i);
 	installProtectionChallenge(challenge, variables);
+	_protectionQuestion.clear();
 	for (uint i = 1; i < ARRAYSIZE(variables); ++i)
 		_scriptVM->writeVariable(i, variables[i]);
 	return true;

@@ -115,6 +115,16 @@ bool OldTotExecutor::pushDispatch(uint16 offset) {
 	return true;
 }
 
+bool OldTotExecutor::sequenceOwner(uint16 &owner) const {
+	for (uint i = _frames.size(); i; --i) {
+		if (_frames[i - 1].kind == OldTotExecFrame::kSequence) {
+			owner = _frames[i - 1].current;
+			return true;
+		}
+	}
+	return false;
+}
+
 bool OldTotExecutor::replaceWithSequence(uint16 owner, uint16 cursor, byte count) {
 	if (_frames.empty())
 		return stop(kOldTotExecutorMalformedData);

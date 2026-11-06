@@ -67,7 +67,8 @@ bool PreGob_Emmanuelle::narrationPlaying() {
 		return false;
 	}
 	Common::TextToSpeechManager *manager = getNarrationManager();
-	_narrationOwned = manager->isSpeaking() || manager->isPaused();
+	if (!manager->isSpeaking() && !manager->isPaused())
+		continueNarration();
 	return _narrationOwned;
 }
 
@@ -88,8 +89,8 @@ void PreGob_Emmanuelle::clearNarration(const Common::Rect *removed) {
 		}
 		// The gaps between spoken text boxes do not belong to the utterance.
 		bool overlaps = false;
-		for (uint i = 0; i < _narrationRects.size(); ++i)
-			overlaps |= removed->intersects(_narrationRects[i]);
+		for (uint i = 0; i < _narration.size(); ++i)
+			overlaps |= removed->intersects(_narration[i].rect);
 		if (!overlaps)
 			return;
 	} else {
@@ -98,13 +99,126 @@ void PreGob_Emmanuelle::clearNarration(const Common::Rect *removed) {
 	Common::TextToSpeechManager *manager = getNarrationManager();
 	if (_narrationOwned && manager)
 		manager->stop();
-	_lastNarration.clear();
-	_narrationRects.clear();
+	if (_narratorVoice >= 0 && manager)
+		manager->setVoice(_narratorVoice);
+	_narratorVoice = -1;
+	_narration.clear();
+	_narrationNext = 0;
 	_narrationOwned = false;
 	_narrationCanContinue = false;
 	if (_narrationTimerHeld)
 		_schedulerClockRunning = false;
 	_narrationTimerHeld = false;
+}
+
+uint16 PreGob_Emmanuelle::narrationSpeaker(const OldTotTextPlan &plan) const {
+	if (!_scriptVM || !_executor || _currentModule == kModuleInit)
+		return kNarrator;
+	uint16 owner = _narrationCallback;
+	if ((!owner && !_executor->sequenceOwner(owner)) || uint32(owner) + 2 > _tot->size())
+		return kNarrator;
+	if (_narrationCallback && _tot->byteAt(owner) != 0x1C && _tot->byteAt(owner) != 0x1E)
+		return kNarrator;
+	bool playerTopic = false, playerReply = false, displayedTopic = false;
+	bool mario = false, silvinho = false, reveal = false, boatOwner = false, encounterReply = false;
+	uint32 cursor = uint32(owner) + 2;
+	for (uint i = 0; i < _tot->byteAt(owner + 1); ++i) {
+		if (cursor + 2 > _tot->size())
+			return kNarrator;
+		if (_tot->byteAt(cursor) != 0xFF) {
+			cursor += 2;
+			continue;
+		}
+		OldTotInline instruction;
+		if (cursor > 0xFFFF || !_tot->decodeInline(cursor, instruction))
+			return kNarrator;
+		// Topics copy a score from v80..89 to v90. Intimacy choices set v97.
+		// Inspect the complete caller: these assignments can follow its text.
+		playerTopic |= instruction.subOpcode == 6 && instruction.words[0] == 90 &&
+			instruction.words[1] >= 80 && instruction.words[1] <= 89;
+		playerReply |= instruction.subOpcode == 5 && instruction.words[0] == 97 &&
+			instruction.words[1] >= 1 && instruction.words[1] <= 5;
+		displayedTopic |= instruction.subOpcode == 5 && instruction.words[0] == 93 &&
+			instruction.words[1] >= 1 && instruction.words[1] <= 10;
+		mario |= instruction.subOpcode == 5 && instruction.words[0] == 32 && instruction.words[1] == 1;
+		silvinho |= instruction.subOpcode == 5 && instruction.words[0] == 50 && instruction.words[1] == 1;
+		reveal |= instruction.subOpcode == 5 && instruction.words[0] == 57 && instruction.words[1] == 2;
+		boatOwner |= instruction.subOpcode == 5 &&
+			((instruction.words[0] == 47 && instruction.words[1] == 1) ||
+			 (instruction.words[0] == 31 && instruction.words[1] == 0));
+		encounterReply |= (instruction.subOpcode == 7 && instruction.words[0] == 92) ||
+			(instruction.subOpcode == 5 && instruction.words[0] == 13 && instruction.words[1] != 0) ||
+			(_currentModule == kModuleLoadGar && instruction.subOpcode == 5 && instruction.words[0] == 19);
+		cursor += instruction.size;
+	}
+	if (playerTopic || playerReply || (_narrationCallback && displayedTopic && plan.x == 40 && plan.y == 5))
+		return kPlayer;
+	if (_currentModule == kModuleLoadAero && plan.x == 184 && plan.y == 146 && plan.width == 128)
+		return kPlayer;
+	if (_currentModule == kModuleLoadHot && mario)
+		return kMario;
+	if (_currentModule == kModuleLoadHot && silvinho)
+		return kSilvinho;
+	// The airport referral calls her a female friend. Her beach introduction
+	// sets v47; her later aphrodisiac dialogue consumes v31, unlike the contact
+	// who gives the player that bottle. Travel labels retain the narrator.
+	if (_currentModule == kModuleLoadPla && boatOwner && plan.x == 40 && plan.y == 5)
+		return kBoatOwner;
+	// The helicopter conversation has no character ID. Hotel view 5 owns
+	// Samantha's replies; its scheduler displays the player's three topics.
+	if (_currentModule == kModuleLoadHot && _scriptVM->readVariable(17) == 5 &&
+		plan.x == 40 && plan.y == 5 && plan.width == 256 && plan.height == 32)
+		return displayedTopic ? kPlayer : kSamantha;
+	const uint16 character = _scriptVM->readVariable(13);
+	if (_currentModule == kModuleLoadAero && character == 18 && reveal)
+		return plan.y == 140 ? kRevealedCompanion : kPlayer;
+	// Wide captions also serve other people in the same room. Only the
+	// encounter's speaker, score or rebuff callers establish an active reply.
+	if (plan.x == 40 && plan.y == 5 && !encounterReply)
+		return kNarrator;
+	// These are the romantic interactions, not every use of v13. Clerks,
+	// prices, travel labels and unrelated retained IDs keep the narrator.
+	if (!((plan.x == 40 && plan.y == 5 && plan.width == 256 && plan.height == 32) ||
+		(plan.x == 128 && plan.y == 111 && plan.width == 72) ||
+		(plan.x == 104 && plan.y == 19 && plan.width == 128)))
+		return kNarrator;
+	static const struct {
+		ModuleId module;
+		byte character;
+	} companions[] = {
+		{kModuleLoadAero, 1}, {kModuleLoadAero, 2}, // Rio and Iguacu airports
+		{kModuleLoadAero, 3}, {kModuleLoadAero, 4}, // Salvador and Manaus airports
+		{kModuleLoadAero, 13}, {kModuleLoadAero, 18}, {kModuleLoadAero, 19}, // Carnival
+		{kModuleLoadCas, 17},
+		{kModuleLoadGar, 5}, {kModuleLoadGar, 14}, {kModuleLoadGar, 20},
+		{kModuleLoadHot, 14}, {kModuleLoadHot, 15}, {kModuleLoadHot, 16},
+		{kModuleLoadPla, 8}, {kModuleLoadPla, 12}
+	};
+	for (uint i = 0; i < ARRAYSIZE(companions); ++i) {
+		if (companions[i].module == _currentModule && companions[i].character == character) {
+			// The carnival encounter presents as female until the explicit reveal.
+			if (_currentModule == kModuleLoadAero && character == 18 && _scriptVM->readVariable(57) == 2)
+				return kRevealedCompanion;
+			return kFirstCompanion + _currentModule * 32 + character;
+		}
+	}
+	return kNarrator;
+}
+
+static Common::U32String speechFromTextRows(const OldTotTextPlan &plan, int first, int end) {
+	Common::String text;
+	int previousRow = -1;
+	for (uint i = 0; i < plan.glyphs.size(); ++i) {
+		const OldTotTextGlyph &glyph = plan.glyphs[i];
+		if (glyph.cellY < first || glyph.cellY >= end)
+			continue;
+		if (previousRow != glyph.cellY && !text.empty())
+			text += ' ';
+		text += (char)glyph.character;
+		previousRow = glyph.cellY;
+	}
+	text.trim();
+	return Common::U32String(text, Common::kDos850);
 }
 
 void PreGob_Emmanuelle::stageNarration(const OldTotTextPlan &plan,
@@ -114,15 +228,58 @@ void PreGob_Emmanuelle::stageNarration(const OldTotTextPlan &plan,
 	if (plan.x < 40 && plan.width <= 24)
 		return;
 	const Common::Rect rect(plan.x, plan.y, plan.x + plan.width, plan.y + plan.height);
+	if (text.empty()) {
+		clearNarration(&rect);
+		return;
+	}
+	Common::U32String spoken = text;
+	if (_currentModule == kModuleInit) {
+		// Both questions share the visible prefix on the instructions' last
+		// row. The second redraw contains only its changing letter and number.
+		if (plan.x == 0 && plan.y == 0 && plan.height == 200)
+			_protectionQuestion = speechFromTextRows(plan, 128, 136);
+		else if (plan.y == 160 && _pendingNarration.empty() && !_protectionQuestion.empty()) {
+			spoken = _protectionQuestion;
+			spoken += '\n';
+			spoken += text;
+		}
+	}
+	const uint16 speaker = narrationSpeaker(plan);
+	if (speaker == kMario && plan.x == 40 && plan.y == 52 && plan.height == 96) {
+		// Mario explains the rules below a separate, visible title. Keep that
+		// heading with the narrator rather than reading it in his voice.
+		const Common::U32String heading = speechFromTextRows(plan, 52, 60);
+		if (!heading.empty() && spoken.substr(0, heading.size()) == heading) {
+			NarrationText title;
+			title.rect = Common::Rect(plan.x, plan.y, plan.x + plan.width, plan.y + 8);
+			title.text = heading;
+			title.speaker = kNarrator;
+			title.voice = -1;
+			uint index = 0;
+			while (index < _pendingNarration.size() && _pendingNarration[index].rect != title.rect)
+				++index;
+			if (index == _pendingNarration.size())
+				_pendingNarration.push_back(title);
+			else
+				_pendingNarration[index] = title;
+			uint start = heading.size();
+			while (start < spoken.size() && spoken[start] == ' ')
+				++start;
+			spoken = spoken.substr(start);
+		}
+	}
 	for (uint i = 0; i < _pendingNarration.size(); ++i) {
 		if (_pendingNarration[i].rect == rect) {
-			_pendingNarration[i].text = text;
+			_pendingNarration[i].text = spoken;
+			_pendingNarration[i].speaker = speaker;
 			return;
 		}
 	}
 	NarrationText part;
 	part.rect = rect;
-	part.text = text;
+	part.text = spoken;
+	part.speaker = speaker;
+	part.voice = -1;
 	_pendingNarration.push_back(part);
 }
 
@@ -133,36 +290,72 @@ void PreGob_Emmanuelle::speakPendingNarration() {
 		clearNarration();
 		return;
 	}
-	Common::U32String text;
-	Common::Array<Common::Rect> rects;
-	for (uint i = 0; i < _pendingNarration.size(); ++i) {
-		if (_pendingNarration[i].text.empty())
-			continue;
-		if (!text.empty())
-			text += '\n';
-		text += _pendingNarration[i].text;
-		rects.push_back(_pendingNarration[i].rect);
-	}
-	_pendingNarration.clear();
-	if (text == _lastNarration) {
-		_narrationRects.swap(rects);
+	bool same = _pendingNarration.size() == _narration.size();
+	for (uint i = 0; same && i < _pendingNarration.size(); ++i)
+		same = _pendingNarration[i].text == _narration[i].text &&
+			_pendingNarration[i].speaker == _narration[i].speaker;
+	if (same) {
+		for (uint i = 0; i < _pendingNarration.size(); ++i)
+			_narration[i].rect = _pendingNarration[i].rect;
+		_pendingNarration.clear();
 		return;
 	}
+	Common::Array<NarrationText> pending;
+	pending.swap(_pendingNarration);
 	clearNarration();
-	_lastNarration = text;
-	_narrationRects.swap(rects);
-	if (text.empty())
-		return;
+	_narration.swap(pending);
 	Common::TextToSpeechManager *manager = getNarrationManager();
-	manager->say(text, Common::TextToSpeechManager::INTERRUPT_NO_REPEAT);
-	// Backends disagree on say()'s return value. Only active speech may
-	// hold a caption or scheduler; unavailable voices must never block play.
-	_narrationOwned = manager->isSpeaking() || manager->isPaused();
+	_narratorVoice = manager->getVoiceIndex();
+	int male = _narratorVoice, female = _narratorVoice;
+	// Resolve against this language's current voices for each batch. An
+	// unknown-gender voice must not replace the user's selected narrator.
+#ifdef USE_TTS
+	const Common::Array<int> unknownVoices = manager->getVoiceIndicesByGender(Common::TTSVoice::UNKNOWN_GENDER);
+	const Common::Array<int> maleVoices = manager->getVoiceIndicesByGender(Common::TTSVoice::MALE);
+	const Common::Array<int> femaleVoices = manager->getVoiceIndicesByGender(Common::TTSVoice::FEMALE);
+	if (!maleVoices.empty() && (unknownVoices.empty() || maleVoices[0] != unknownVoices[0]))
+		male = maleVoices[0];
+	if (!femaleVoices.empty() && (unknownVoices.empty() || femaleVoices[0] != unknownVoices[0]))
+		female = femaleVoices[0];
+#endif
+	for (uint i = 0; i < _narration.size(); ++i)
+		_narration[i].voice = _narration[i].speaker >= kFirstCompanion ? female :
+			(_narration[i].speaker == kNarrator ? _narratorVoice : male);
+	continueNarration();
 	if (_narrationOwned && _scriptVM && _scriptVM->schedulerEnabled()) {
 		_schedulerDebt = 0;
 		_schedulerMilliseconds = 0;
 		_narrationTimerHeld = true;
 	}
+}
+
+void PreGob_Emmanuelle::continueNarration() {
+	Common::TextToSpeechManager *manager = getNarrationManager();
+	_narrationOwned = false;
+	while (manager && _narrationNext < _narration.size()) {
+		const int voice = _narration[_narrationNext].voice;
+		Common::U32String text;
+		do {
+			const Common::U32String &part = _narration[_narrationNext++].text;
+			if (part.empty()) continue;
+			if (!text.empty()) text += '\n';
+			text += part;
+		} while (_narrationNext < _narration.size() && _narration[_narrationNext].voice == voice);
+		if (text.empty()) continue;
+		if (voice >= 0 && manager->getVoiceIndex() != voice)
+			manager->setVoice(voice);
+		// Suppression above includes the speaker, which backend text-only
+		// suppression cannot distinguish when two people say the same words.
+		manager->say(text, Common::TextToSpeechManager::INTERRUPT);
+		// Backends disagree on say()'s return value. Advance rejected groups
+		// without waiting; only an accepted utterance can hold the whole batch.
+		_narrationOwned = manager->isSpeaking() || manager->isPaused();
+		if (_narrationOwned)
+			return;
+	}
+	if (manager && _narratorVoice >= 0)
+		manager->setVoice(_narratorVoice);
+	_narratorVoice = -1;
 }
 
 void PreGob_Emmanuelle::setInputContext(EmmanuelleInputContext context) {
@@ -336,6 +529,8 @@ void PreGob_Emmanuelle::serviceInterpreterTimer() {
 	if (narrationEnabled()) {
 		// Publish each spoken option before considering another overdue target.
 		// Silent callbacks retain the normal eight-callback service budget.
+		// Rejection is known only after publication, so rejected text can still
+		// spread overdue callbacks across additional bounded service passes.
 		for (uint i = 0; i < 8 && _schedulerDebt; ++i) {
 			_schedulerDebt = _scriptVM->advanceTimer(_schedulerDebt, 1);
 			if (!_pendingNarration.empty() || narrationPlaying())

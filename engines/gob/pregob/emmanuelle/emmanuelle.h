@@ -172,6 +172,8 @@ private:
 	bool narrationPlaying();
 	void setNarrationLanguage();
 	void stageNarration(const OldTotTextPlan &plan, const Common::U32String &text);
+	uint16 narrationSpeaker(const OldTotTextPlan &plan) const;
+	void continueNarration();
 	void speakPendingNarration();
 	void clearNarration(const Common::Rect *removed = nullptr);
 	bool inputIdle(int16 key, MouseButtons mouseButtons) const;
@@ -263,10 +265,18 @@ private:
 	struct NarrationText {
 		Common::Rect rect;
 		Common::U32String text;
+		uint16 speaker;
+		int voice;
 	};
+	enum { kNarrator = 0, kPlayer, kMario, kRevealedCompanion, kSilvinho,
+		kFirstCompanion = 32, kSamantha = kFirstCompanion, kBoatOwner };
 	Common::Array<NarrationText> _pendingNarration;
-	Common::U32String _lastNarration;
-	Common::Array<Common::Rect> _narrationRects;
+	// Retain the completed batch for redraw suppression, including its speakers.
+	Common::Array<NarrationText> _narration;
+	uint _narrationNext;
+	int _narratorVoice;
+	uint16 _narrationCallback;
+	Common::U32String _protectionQuestion;
 	bool _narrationOwned;
 	bool _narrationTimerHeld;
 	bool _narrationCanContinue;

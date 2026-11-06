@@ -117,6 +117,8 @@ public:
 	uint16 suspendedNode() const { return _suspendedNode; }
 	/** Return the opcode-1B node that currently owns the logical input wait. */
 	bool activeInputNode(uint16 &node) const;
+	/** Nearest live sequence, for interpreting the current dialogue context. */
+	bool sequenceOwner(uint16 &owner) const;
 	bool finished() const { return _started && _frames.empty() && !_suspended; }
 	OldTotExecutorStopReason stopReason() const { return _stopReason; }
 
