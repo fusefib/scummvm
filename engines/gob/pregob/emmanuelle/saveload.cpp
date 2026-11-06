@@ -48,7 +48,7 @@ bool validSurfaceLayout(uint16 width, uint16 height, byte bytesPerPixel,
 		return allowEmpty && width == 0 && height == 0 &&
 			bytesPerPixel == 0 && size == 0;
 	return width <= 320 && height <= 200 &&
-		bytesPerPixel >= 1 && bytesPerPixel <= 4 &&
+		(bytesPerPixel == 1 || bytesPerPixel == 2 || bytesPerPixel == 4) &&
 		size == (uint32)width * height * bytesPerPixel;
 }
 
@@ -84,14 +84,16 @@ bool validateSaveState(const EmmanuelleSaveState &state) {
 		!validSurface(state.renderer.amigaPresentedFrame, true))
 		return false;
 	for (uint i = 0; i < state.renderer.savedRegions.size(); ++i) {
-		if (!validSurface(state.renderer.savedRegions[i].surface, false))
+		if (!validSurface(state.renderer.savedRegions[i].surface, false) ||
+			state.renderer.savedRegions[i].surface.bytesPerPixel != state.renderer.framebuffer.bytesPerPixel)
 			return false;
 	}
 	for (uint i = 0; i < state.renderer.activeObjects.size(); ++i) {
 		const EmmanuelleActiveObjectState &object = state.renderer.activeObjects[i];
 		if (!validSurface(object.background, !object.active) ||
 			(object.active && (object.width != object.background.width ||
-			 object.height != object.background.height)))
+			 object.height != object.background.height ||
+			 object.background.bytesPerPixel != state.renderer.framebuffer.bytesPerPixel)))
 			return false;
 	}
 	if ((state.renderer.amigaPresentationMode != 0 &&
@@ -381,9 +383,7 @@ void exportOldTotSurface(const Surface &surface,
 
 bool importOldTotSurface(const EmmanuelleSurfaceState &in,
 								  SurfacePtr &out) {
-	if (in.width == 0 || in.height == 0 || in.bytesPerPixel == 0 ||
-		in.pixels.size() !=
-			(uint32)in.width * in.height * in.bytesPerPixel)
+	if (!validSurface(in, false))
 		return false;
 	SurfacePtr surface(new Surface(in.width, in.height, in.bytesPerPixel));
 	for (uint16 y = 0; y < in.height; ++y) {
@@ -459,7 +459,8 @@ bool validateEmmanuelleRendererState(const EmmanuelleRendererState &state,
 		return false;
 	for (uint i = 0; i < state.savedRegions.size(); ++i) {
 		const EmmanuelleSavedRegionState &region = state.savedRegions[i];
-		if (!validSurface(region.surface, false) || region.x < 0 ||
+		if (!validSurface(region.surface, false) ||
+			region.surface.bytesPerPixel != bytesPerPixel || region.x < 0 ||
 			region.y < 0 || region.x + region.surface.width > width ||
 			region.y + region.surface.height > height)
 			return false;

@@ -97,9 +97,10 @@ bool ActiveSpriteLayer::importState(
 			state.width <= 0 || state.height <= 0 ||
 			state.x + state.width > screenWidth ||
 			state.y + state.height > screenHeight ||
-			!importOldTotSurface(state.background, slot.background) ||
 			state.width != state.background.width ||
-			state.height != state.background.height))
+			state.height != state.background.height ||
+			state.background.bytesPerPixel != _vm->_draw->_backSurface->getBPP() ||
+			!importOldTotSurface(state.background, slot.background)))
 			return false;
 	}
 	_slots.swap(slots);
