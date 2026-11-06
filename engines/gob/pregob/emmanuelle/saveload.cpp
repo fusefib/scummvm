@@ -98,28 +98,14 @@ bool validateSaveState(const EmmanuelleSaveState &state) {
 		 state.renderer.amigaPresentationMode != 43 &&
 		 state.renderer.amigaPresentationMode != 44) ||
 		(state.platform != kOldTotPlatformAmiga &&
-		 state.renderer.amigaPresentationMode != 0) ||
-		state.renderer.amigaPresentationVariant != 0 ||
-		state.renderer.amigaPresentationPhase != 0 ||
-		state.renderer.amigaPresentationPending ||
-		state.renderer.amigaPresentationActive ||
-		state.renderer.amigaPaletteTransitionPending)
-		return false;
-	// ST restore accepts either a complete or a wholly silent sample bank.
-	if ((state.platform == kOldTotPlatformDOS &&
-		 (state.nativeState.sampleBank != 0 || state.nativeState.sampleCount != 0)) ||
-		(state.platform == kOldTotPlatformAtariST &&
-		 (state.nativeState.sampleBank != 2 ||
-		  (state.nativeState.sampleCount != 0 && state.nativeState.sampleCount != 19))) ||
-		(state.platform == kOldTotPlatformAmiga &&
-		 (state.nativeState.sampleBank != 2 || state.nativeState.sampleCount != 19)))
+		 state.renderer.amigaPresentationMode != 0))
 		return false;
 	const EmmanuelleNativeState &native = state.nativeState;
 	if (native.amigaSampleSlot == -1) {
 		if (native.amigaSampleRepeatCount != 0)
 			return false;
 	} else if (state.platform != kOldTotPlatformAmiga || native.amigaSampleSlot < 0 ||
-			native.amigaSampleSlot >= native.sampleCount ||
+			native.amigaSampleSlot >= 19 ||
 			(native.amigaSampleRepeatCount != 1 && native.amigaSampleRepeatCount != 2 &&
 			 native.amigaSampleRepeatCount != -1)) {
 		return false;
@@ -181,7 +167,6 @@ void writePayload(const EmmanuelleSaveState &state,
 	stream.writeByte(state.runtime.savedVideoMode);
 	stream.writeByte(state.runtime.videoInitMarker);
 
-	stream.writeByte(state.vmTransient.savedRegionDepth);
 	stream.writeByte(state.vmTransient.schedulerTargets.size());
 	stream.writeByte(state.vmTransient.schedulerIndex);
 	stream.writeUint16LE(state.vmTransient.schedulerReload);
@@ -192,8 +177,6 @@ void writePayload(const EmmanuelleSaveState &state,
 	// A suspended executor is never empty; zero represents its full stack.
 	stream.writeByte(state.executor.frames.size() == OldTotExecutor::kMaxFrames
 		? 0 : state.executor.frames.size());
-	writeBool(stream, state.executor.started);
-	writeBool(stream, state.executor.suspended);
 	stream.writeUint16LE(state.executor.suspendedNode);
 	for (uint i = 0; i < state.executor.frames.size(); ++i) {
 		const OldTotExecFrame &frame = state.executor.frames[i];
@@ -254,16 +237,8 @@ void writePayload(const EmmanuelleSaveState &state,
 	stream.writeUint32LE(state.renderer.amigaModuleGeneration);
 	stream.writeUint32LE(state.renderer.amigaPresentedGeneration);
 	stream.writeByte(state.renderer.amigaPresentationMode);
-	stream.writeByte(state.renderer.amigaPresentationVariant);
-	stream.writeByte(state.renderer.amigaPresentationPhase);
-	writeBool(stream, state.renderer.amigaPresentationPending);
-	writeBool(stream, state.renderer.amigaPresentationActive);
-	writeBool(stream, state.renderer.amigaPaletteTransitionPending);
 	writeSurface(stream, state.renderer.amigaPresentedFrame);
 
-	stream.writeByte(state.nativeState.sampleBank);
-	stream.writeByte(state.nativeState.sampleCount);
-	writeBool(stream, state.nativeState.initialInitComplete);
 	writeBool(stream, state.nativeState.skipIntermediateSequenceNodes);
 	stream.writeByte(state.nativeState.effectCommand);
 	writeBool(stream, state.nativeState.colorCycleEnabled);
@@ -284,7 +259,6 @@ bool readPayload(Common::SeekableReadStream &stream,
 	state.runtime.savedVideoMode = stream.readByte();
 	state.runtime.videoInitMarker = stream.readByte();
 
-	state.vmTransient.savedRegionDepth = stream.readByte();
 	const uint schedulerCount = stream.readByte();
 	state.vmTransient.schedulerIndex = stream.readByte();
 	state.vmTransient.schedulerReload = stream.readUint16LE();
@@ -300,9 +274,9 @@ bool readPayload(Common::SeekableReadStream &stream,
 		? encodedFrameCount : (uint)OldTotExecutor::kMaxFrames;
 	// Diagnostic step history belongs to the current execution session.
 	state.executor.steps = 0;
-	if (!readBool(stream, state.executor.started) ||
-		!readBool(stream, state.executor.suspended))
-		return false;
+	// Files contain only accepted suspended-input snapshots.
+	state.executor.started = true;
+	state.executor.suspended = true;
 	state.executor.suspendedNode = stream.readUint16LE();
 	if (stream.err())
 		return false;
@@ -338,6 +312,8 @@ bool readPayload(Common::SeekableReadStream &stream,
 	const uint savedRegionCount = stream.readByte();
 	if (stream.err() || savedRegionCount > kMaxSavedRegions)
 		return false;
+	// The VM and renderer own the same capture stack.
+	state.vmTransient.savedRegionDepth = savedRegionCount;
 	state.renderer.savedRegions.resize(savedRegionCount);
 	for (uint i = 0; i < savedRegionCount; ++i) {
 		EmmanuelleSavedRegionState &region =
@@ -375,19 +351,10 @@ bool readPayload(Common::SeekableReadStream &stream,
 	state.renderer.amigaModuleGeneration = stream.readUint32LE();
 	state.renderer.amigaPresentedGeneration = stream.readUint32LE();
 	state.renderer.amigaPresentationMode = stream.readByte();
-	state.renderer.amigaPresentationVariant = stream.readByte();
-	state.renderer.amigaPresentationPhase = stream.readByte();
-	if (!readBool(stream, state.renderer.amigaPresentationPending) ||
-		!readBool(stream, state.renderer.amigaPresentationActive) ||
-		!readBool(stream, state.renderer.amigaPaletteTransitionPending))
-		return false;
 	if (!readSurface(stream, state.renderer.amigaPresentedFrame, true))
 		return false;
 
-	state.nativeState.sampleBank = stream.readByte();
-	state.nativeState.sampleCount = stream.readByte();
-	if (!readBool(stream, state.nativeState.initialInitComplete) ||
-		!readBool(stream, state.nativeState.skipIntermediateSequenceNodes))
+	if (!readBool(stream, state.nativeState.skipIntermediateSequenceNodes))
 		return false;
 	state.nativeState.effectCommand = stream.readByte();
 	if (!readBool(stream, state.nativeState.colorCycleEnabled))
@@ -438,12 +405,6 @@ EmmanuelleRendererState::EmmanuelleRendererState() {
 	amigaPresentedGeneration = 0;
 
 	amigaPresentationMode = 0;
-	amigaPresentationVariant = 0;
-	amigaPresentationPhase = 0;
-
-	amigaPresentationPending = false;
-	amigaPresentationActive = false;
-	amigaPaletteTransitionPending = false;
 
 	for (uint i = 0; i < ARRAYSIZE(atariPalette); ++i)
 		atariPalette[i] = 0;
@@ -452,12 +413,9 @@ EmmanuelleRendererState::EmmanuelleRendererState() {
 }
 
 EmmanuelleNativeState::EmmanuelleNativeState() {
-	sampleBank = 0;
-	sampleCount = 0;
 	amigaSampleSlot = -1;
 	amigaSampleRepeatCount = 0;
 
-	initialInitComplete = false;
 	skipIntermediateSequenceNodes = false;
 
 	effectCommand = 0;
@@ -497,11 +455,7 @@ bool validateEmmanuelleRendererState(const EmmanuelleRendererState &state,
 		 atariPresentationMode != 44) ||
 		(state.amigaPresentationMode != 0 &&
 		 state.amigaPresentationMode != 43 &&
-		 state.amigaPresentationMode != 44) ||
-		state.amigaPresentationVariant != 0 ||
-		state.amigaPresentationPhase != 0 ||
-		state.amigaPresentationPending || state.amigaPresentationActive ||
-		state.amigaPaletteTransitionPending)
+		 state.amigaPresentationMode != 44))
 		return false;
 	for (uint i = 0; i < state.savedRegions.size(); ++i) {
 		const EmmanuelleSavedRegionState &region = state.savedRegions[i];

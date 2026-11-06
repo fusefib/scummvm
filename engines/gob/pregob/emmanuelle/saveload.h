@@ -191,23 +191,15 @@ struct EmmanuelleRendererState {
 	uint32 amigaModuleGeneration;
 	uint32 amigaPresentedGeneration;
 	byte amigaPresentationMode;
-	byte amigaPresentationVariant;
-	byte amigaPresentationPhase;
-	bool amigaPresentationPending;
-	bool amigaPresentationActive;
-	bool amigaPaletteTransitionPending;
 	EmmanuelleSurfaceState amigaPresentedFrame;
 };
 
 struct EmmanuelleNativeState {
 	EmmanuelleNativeState();
 
-	byte sampleBank;
-	byte sampleCount;
 	// Restart the active Amiga sample on load; no mixer position is stored.
 	int16 amigaSampleSlot;
 	int16 amigaSampleRepeatCount;
-	bool initialInitComplete;
 	bool skipIntermediateSequenceNodes;
 	byte effectCommand;
 	bool colorCycleEnabled;

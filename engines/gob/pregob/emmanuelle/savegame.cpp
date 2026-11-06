@@ -132,6 +132,13 @@ bool PreGob_Emmanuelle::exportSaveState(
 		EmmanuelleSaveState &state) const {
 	if (!safeSaveBoundary(nullptr) || !_scriptVM || !_executor)
 		return false;
+	// Ordinary choices follow startup and use the gameplay sample bank.
+	// Validate the live bank before omitting its identity and count.
+	if ((_platformTag == kOldTotPlatformDOS && (_sampleBank != 0 || _sampleCount != 0)) ||
+		(_platformTag != kOldTotPlatformDOS && (!_initialInitComplete || _sampleBank != 2 ||
+		 (_sampleCount != ARRAYSIZE(_samples) &&
+		  (_platformTag != kOldTotPlatformAtariST || _sampleCount != 0)))))
+		return false;
 	state.platform = _platformTag;
 	state.profile = emmanuelleRuntimeProfile(_platformTag, _vm->_language);
 	state.module = _currentModule;
@@ -150,16 +157,12 @@ bool PreGob_Emmanuelle::exportSaveState(
 	if (!_renderer.exportState(state.renderer) ||
 		!_active.exportState(state.renderer))
 		return false;
-	state.nativeState.sampleBank = _sampleBank;
-	state.nativeState.sampleCount = _sampleCount;
 	state.nativeState.amigaSampleSlot = -1;
 	state.nativeState.amigaSampleRepeatCount = 0;
 	if (_platformTag == kOldTotPlatformAmiga && _vm->_sound->blasterPlayingSound()) {
 		state.nativeState.amigaSampleSlot = _audioSlot;
 		state.nativeState.amigaSampleRepeatCount = _audioRepeatCount;
 	}
-	state.nativeState.initialInitComplete =
-		_platformTag == kOldTotPlatformDOS || _initialInitComplete;
 	state.nativeState.skipIntermediateSequenceNodes = _skipIntermediateSequenceNodes;
 	state.nativeState.colorCycleEnabled = _colorCycleEnabled;
 	state.nativeState.colorCycleCounter = _colorCycleCounter;
@@ -276,10 +279,6 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		reason = "invalid Amiga presentation state";
 		return false;
 	}
-	if (!state.nativeState.initialInitComplete) {
-		reason = "startup is not complete";
-		return false;
-	}
 	if (_platformTag == kOldTotPlatformDOS) {
 		byte table[16];
 		byte alternateTable[16];
@@ -350,13 +349,14 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 	resetInitialStateAfterLoad();
 	_cursorDefined = false;
 	_cursorDescriptor = 0;
-	_initialInitComplete = state.nativeState.initialInitComplete;
+	// Accepted saves are ordinary choices after startup.
+	_initialInitComplete = true;
 	_skipIntermediateSequenceNodes = state.nativeState.skipIntermediateSequenceNodes;
 	_colorCycleEnabled = state.nativeState.colorCycleEnabled;
 	_colorCycleCounter = state.nativeState.colorCycleCounter;
 	for (uint i = 0; i < ARRAYSIZE(_samples); ++i)
 		_samples[i].swap(prepared.samples[i]);
-	_sampleBank = state.nativeState.sampleBank;
+	_sampleBank = _platformTag == kOldTotPlatformDOS ? 0 : 2;
 	_sampleCount = prepared.sampleCount;
 	_atariIntroPosition = -1;
 	if (prepared.cursorDefined) {

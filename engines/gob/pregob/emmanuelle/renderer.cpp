@@ -94,6 +94,12 @@ OldTotRenderer::OldTotRenderer(GobEngine *vm) :
 bool OldTotRenderer::exportState(EmmanuelleRendererState &out) const {
 	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface)
 		return false;
+	// Save snapshots describe an idle presentation; keep transient effect
+	// phases in the renderer rather than in the save state.
+	if (_platform == kOldTotPlatformAmiga &&
+		(!presentationQuiescent() || _presentation.variant() ||
+		 _presentation.phase() || _presentation.paletteTransitionPending()))
+		return false;
 	exportOldTotSurface(*_vm->_draw->_backSurface, out.framebuffer);
 	out.savedRegions.clear();
 	for (uint i = 0; i < _savedRegions.size(); ++i) {
@@ -118,12 +124,6 @@ bool OldTotRenderer::exportState(EmmanuelleRendererState &out) const {
 	out.amigaPresentedGeneration = _amigaPresentedGeneration;
 	if (_platform == kOldTotPlatformAmiga) {
 		out.amigaPresentationMode = _presentation.mode();
-		out.amigaPresentationVariant = _presentation.variant();
-		out.amigaPresentationPhase = _presentation.phase();
-		out.amigaPresentationPending = _presentation.pending();
-		out.amigaPresentationActive = _presentation.active();
-		out.amigaPaletteTransitionPending =
-			_presentation.paletteTransitionPending();
 		if (_amigaPresentedSurface)
 			exportOldTotSurface(*_amigaPresentedSurface,
 				out.amigaPresentedFrame);
