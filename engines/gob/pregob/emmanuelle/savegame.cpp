@@ -216,11 +216,6 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		reason);
 	if (!prepared.tot)
 		return false;
-	if (state.executor.suspendedNode >= prepared.tot->size() ||
-		prepared.tot->byteAt(state.executor.suspendedNode) != 0x1B) {
-		reason = "invalid suspended instruction";
-		return false;
-	}
 	if (moduleNeedsLocalGraphicsFile(state.module,
 			moduleUsesLocalGraphics(state.module), _inlineLocalGraphics)) {
 		const char *ixxExtension = _platformTag == kOldTotPlatformAmiga
@@ -247,7 +242,8 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 	}
 	prepared.executor = new OldTotExecutor(
 		*prepared.tot, *prepared.vm, *this);
-	if (!prepared.executor->importState(state.executor)) {
+	if (!prepared.executor->validateSaveState(state.executor, state.vmTransient) ||
+		!prepared.executor->importState(state.executor)) {
 		reason = "invalid executor state";
 		return false;
 	}

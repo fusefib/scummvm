@@ -174,6 +174,86 @@ bool OldTotExecutor::importState(const OldTotExecutorState &in) {
 	return true;
 }
 
+bool OldTotExecutor::validDispatchRecord(uint16 offset) const {
+	if (!valid(offset))
+		return false;
+	const byte op = _data.byteAt(offset);
+	switch (op) {
+	case 0x01: return valid(offset, 3);
+	case 0x06: {
+		OldTotAnimationSetup animation;
+		return _data.decodeAnimationSetup(offset, animation);
+	}
+	case 0x08:
+		return valid(offset, 4) && valid(offset, 7 + 4 * _data.byteAt(offset + 3));
+	case 0x1B:
+		return valid(offset, 6) && valid(offset, 9 + 7 * _data.byteAt(offset + 5));
+	case 0x1C:
+	case 0x1E: return valid(offset, 2);
+	case 0x1D: return valid(offset, 15);
+	case 0x20:
+		return valid(offset, 3) && _data.byteAt(offset + 2) &&
+			valid(offset, 3 + 2 * _data.byteAt(offset + 2));
+	case 0x21: return valid(offset, 12);
+	case 0x24: return true;
+	case 0x2A: {
+		OldTotScheduledCycle cycle;
+		return _data.decodeScheduledCycle(offset, cycle);
+	}
+	default: {
+		OldTotDrawDescriptor descriptor;
+		return op > 0x3F && _data.decodeDrawDescriptor(offset, descriptor);
+	}
+	}
+}
+
+bool OldTotExecutor::validateSaveState(const OldTotExecutorState &in,
+		const OldTotVMTransientState &vmState) const {
+	if (!in.started || !in.suspended || in.frames.empty() || in.frames.size() > kMaxFrames)
+		return false;
+	const OldTotExecFrame &top = in.frames.back();
+	if (top.kind != OldTotExecFrame::kDispatch || top.current != in.suspendedNode ||
+		top.inputState != OldTotExecFrame::kInputPolling || !valid(top.current) ||
+		_data.byteAt(top.current) != 0x1B)
+		return false;
+	uint16 root = 0;
+	_data.getRootSequenceOffset(root);
+	for (uint i = 0; i < in.frames.size(); ++i) {
+		const OldTotExecFrame &frame = in.frames[i];
+		if (frame.kind == OldTotExecFrame::kDispatch) {
+			// Tail branches retain unused sequence fields; only current is live.
+			if (frame.current && !validDispatchRecord(frame.current))
+				return false;
+		} else if (frame.kind == OldTotExecFrame::kSequence) {
+			if (!valid(frame.current, 2) ||
+				(frame.current != root && _data.byteAt(frame.current) != 0x1C &&
+				 _data.byteAt(frame.current) != 0x1E) ||
+				frame.count != _data.byteAt(frame.current + 1) || frame.index > frame.count)
+				return false;
+			uint32 cursor = uint32(frame.current) + 2;
+			// Walk only completed entries, not the rest of the script graph.
+			for (uint n = 0; n < frame.index; ++n) {
+				if (!valid(cursor, 2))
+					return false;
+				OldTotInline instruction;
+				if (_data.byteAt(cursor) == 0xFF) {
+					if (cursor > 0xFFFF || !_data.decodeInline(cursor, instruction))
+						return false;
+					cursor += instruction.size;
+				} else
+					cursor += 2;
+			}
+			if (cursor != frame.cursor)
+				return false;
+		} else
+			return false;
+	}
+	for (uint i = 0; i < vmState.schedulerTargets.size(); ++i)
+		if (vmState.schedulerTargets[i] && !validDispatchRecord(vmState.schedulerTargets[i]))
+			return false;
+	return true;
+}
+
 bool OldTotExecutor::runRoot() {
 	if (_host.executionFailed())
 		return stop(kOldTotExecutorHostFailure);

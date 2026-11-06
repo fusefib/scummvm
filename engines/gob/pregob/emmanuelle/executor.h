@@ -124,9 +124,13 @@ public:
 	/** Export the active input wait as a suspended state without mutating it. */
 	bool exportSuspendedInputState(OldTotExecutorState &out) const;
 	bool importState(const OldTotExecutorState &in);
+	/** Check a save continuation against its prepared script, without running it. */
+	bool validateSaveState(const OldTotExecutorState &in,
+		const OldTotVMTransientState &vmState) const;
 
 private:
 	bool valid(uint32 offset, uint32 length = 1) const;
+	bool validDispatchRecord(uint16 offset) const;
 	bool stop(OldTotExecutorStopReason reason);
 	bool step();
 	bool pushDispatch(uint16 offset);
