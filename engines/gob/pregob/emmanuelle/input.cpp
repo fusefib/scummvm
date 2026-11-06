@@ -347,8 +347,8 @@ void PreGob_Emmanuelle::serviceInterpreterTimer() {
 	_servicingTimer = false;
 }
 
-void PreGob_Emmanuelle::notifyPaused(uint32 duration) {
-	if (_schedulerClockRunning)
+void PreGob_Emmanuelle::pauseChanged(bool paused, uint32 duration) {
+	if (!paused && _schedulerClockRunning)
 		_schedulerServiceTime += duration;
 }
 

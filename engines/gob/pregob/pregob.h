@@ -53,6 +53,10 @@ public:
 	virtual ~PreGob();
 
 	virtual void run() = 0;
+	// Each game defines its save boundary and continuation format. Prepare
+	// resources without changing live ownership; commit only when the old
+	// execution cannot resume through discarded objects. On resume, re-anchor
+	// transient clocks and clear input used by the menu, not saved game state.
 	virtual bool canSaveGameState(Common::U32String *msg = nullptr) const;
 	virtual bool canLoadGameState(Common::U32String *msg = nullptr) const;
 	virtual Common::Error saveGameStream(Common::WriteStream &stream,
@@ -62,8 +66,8 @@ public:
 	virtual void handleCustomAction(Common::CustomEventType action);
 	/** Preserve a press even if its release arrives in the same input pass. */
 	virtual void handleMouseDown(int16 x, int16 y, MouseButtons buttons);
-	/** Resume engine-owned timing after a pause or modal dialog. */
-	virtual void notifyPaused(uint32 duration);
+	/** Duration is zero on entry and elapsed host milliseconds on resume. */
+	virtual void pauseChanged(bool paused, uint32 duration);
 
 	struct AnimProperties {
 		uint16 animation;

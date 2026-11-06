@@ -425,24 +425,24 @@ Common::Error GobEngine::run() {
 }
 
 bool GobEngine::canSaveGameStateCurrently(Common::U32String *msg) {
-	return _gameType == kGameTypeEmmanuelle && _preGob &&
+	return _preGob &&
 		_preGob->canSaveGameState(msg);
 }
 
 bool GobEngine::canLoadGameStateCurrently(Common::U32String *msg) {
-	return _gameType == kGameTypeEmmanuelle && _preGob &&
+	return _preGob &&
 		_preGob->canLoadGameState(msg);
 }
 
 Common::Error GobEngine::saveGameStream(Common::WriteStream *stream,
 		bool isAutosave) {
-	if (_gameType != kGameTypeEmmanuelle || !_preGob || !stream)
+	if (!_preGob || !stream)
 		return Common::kWritingFailed;
 	return _preGob->saveGameStream(*stream, isAutosave);
 }
 
 Common::Error GobEngine::loadGameStream(Common::SeekableReadStream *stream) {
-	if (_gameType != kGameTypeEmmanuelle || !_preGob || !stream)
+	if (!_preGob || !stream)
 		return Common::kReadingFailed;
 	return _preGob->loadGameStream(*stream);
 }
@@ -450,12 +450,14 @@ Common::Error GobEngine::loadGameStream(Common::SeekableReadStream *stream) {
 void GobEngine::pauseEngineIntern(bool pause) {
 	if (pause) {
 		_pauseStart = _system->getMillis();
+		if (_preGob)
+			_preGob->pauseChanged(true, 0);
 	} else {
 		uint32 duration = _system->getMillis() - _pauseStart;
 
 		_util->notifyPaused(duration);
 		if (_preGob)
-			_preGob->notifyPaused(duration);
+			_preGob->pauseChanged(false, duration);
 
 		_game->_startTimeKey += duration;
 		_draw->_cursorTimeKey += duration;

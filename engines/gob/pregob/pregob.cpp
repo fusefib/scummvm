@@ -77,7 +77,7 @@ void PreGob::handleCustomAction(Common::CustomEventType) {
 void PreGob::handleMouseDown(int16, int16, MouseButtons) {
 }
 
-void PreGob::notifyPaused(uint32) {
+void PreGob::pauseChanged(bool, uint32) {
 }
 
 void PreGob::fadeOut() {
