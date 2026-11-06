@@ -420,7 +420,7 @@ bool OldTotExecutor::processDispatch(OldTotExecFrame &f) {
 		return true;
 	}
 	if (op == 0x24) {
-		_host.rememberNode24(current);
+		// Recognize the marker without changing the continuation.
 		_frames.pop_back();
 		return true;
 	}

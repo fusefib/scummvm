@@ -220,10 +220,6 @@ struct EmmanuelleSaveState {
 	OldTotPlatformTag platform;
 	EmmanuelleRuntimeProfile profile;
 	ModuleId module;
-	Common::String moduleFileStem;
-	// Retain version-1 script metadata; restore checks the saved continuation.
-	uint32 moduleSize;
-	byte moduleMD5[16];
 	uint16 variables[512];
 	OldTotRuntimeState runtime;
 	OldTotVMTransientState vmTransient;
@@ -232,7 +228,6 @@ struct EmmanuelleSaveState {
 	uint32 commonRandomSeed;
 	uint32 schedulerAccumulator;
 	uint32 schedulerDebt;
-	uint16 rememberedNode24Offset;
 	uint16 cursorDescriptor;
 	bool cursorDefined;
 	bool cursorVisible;

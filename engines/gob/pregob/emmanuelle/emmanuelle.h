@@ -109,7 +109,6 @@ public:
 	void drawNode(uint16 nodeOffset) override;
 	void textNode(uint16 nodeOffset) override;
 	void animationNode(uint16 nodeOffset) override;
-	void rememberNode24(uint16 nodeOffset) override { _node24Offset = nodeOffset; }
 	bool shouldAbortExecution() const override;
 	bool executionFailed() const override { return _hostFailed; }
 	bool skipIntermediateSequenceNodes() const override;
@@ -241,7 +240,6 @@ private:
 	Common::String _moduleFileStem;
 	ModuleId _currentModule;
 	bool _currentUsesLocalGraphics;
-	uint16 _node24Offset;
 	bool _hostFailed;
 	uint32 _randomState;
 	OldTotPlatformTag _platformTag;

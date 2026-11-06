@@ -135,12 +135,6 @@ bool PreGob_Emmanuelle::exportSaveState(
 	state.platform = _platformTag;
 	state.profile = emmanuelleRuntimeProfile(_platformTag, _vm->_language);
 	state.module = _currentModule;
-	state.moduleFileStem = _moduleFileStem;
-	// Reopening this module could identify replacement data rather than the
-	// script still running. Save the size and hash of its owned bytes.
-	state.moduleSize = _tot->size();
-	if (!_tot->computeMD5(state.moduleMD5))
-		return false;
 	_scriptVM->storeVariables(state.variables, ARRAYSIZE(state.variables));
 	state.runtime = _scriptVM->runtimeState();
 	_scriptVM->exportTransientState(state.vmTransient);
@@ -150,7 +144,6 @@ bool PreGob_Emmanuelle::exportSaveState(
 	state.commonRandomSeed = _vm->_rnd.getSeed();
 	state.schedulerAccumulator = _schedulerAccumulator;
 	state.schedulerDebt = _schedulerDebt;
-	state.rememberedNode24Offset = _node24Offset;
 	state.cursorDescriptor = _cursorDescriptor;
 	state.cursorDefined = _cursorDefined;
 	state.cursorVisible = isCursorVisible();
@@ -192,11 +185,11 @@ Common::Error PreGob_Emmanuelle::saveGameStream(
 			   "module=%s node=0x%04X",
 			   isAutosave ? "autosave" : "manual",
 			   boundary.normalizesExecutor() ? 1U : 0U,
-			   state.moduleFileStem.c_str(), state.executor.suspendedNode);
+			   moduleFileStem(state.module), state.executor.suspendedNode);
 	debugC(2, kDebugSaveLoad,
 		"Emmanuelle: %s profile %u module %s at 0x%04X",
 		isAutosave ? "autosaved" : "saved",
-		(uint)state.profile, state.moduleFileStem.c_str(),
+		(uint)state.profile, moduleFileStem(state.module),
 		state.executor.suspendedNode);
 	return Common::kNoError;
 }
@@ -210,7 +203,7 @@ bool PreGob_Emmanuelle::prepareRestore(const EmmanuelleSaveState &state,
 		return false;
 	}
 	const char *stem = moduleFileStem(state.module);
-	if (!stem || !state.moduleFileStem.equalsIgnoreCase(stem)) {
+	if (!stem) {
 		reason = "invalid module";
 		return false;
 	}
@@ -354,7 +347,6 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 	_vm->_rnd.setSeed(state.commonRandomSeed);
 	_schedulerAccumulator = state.schedulerAccumulator;
 	_schedulerDebt = state.schedulerDebt;
-	_node24Offset = state.rememberedNode24Offset;
 	resetInitialStateAfterLoad();
 	_cursorDefined = false;
 	_cursorDescriptor = 0;
@@ -436,7 +428,7 @@ Common::Error PreGob_Emmanuelle::loadGameStream(
 	commitRestore(state, prepared);
 	debugC(2, kDebugSaveLoad,
 		"Emmanuelle: restored profile %u module %s at 0x%04X",
-		(uint)state.profile, state.moduleFileStem.c_str(),
+		(uint)state.profile, moduleFileStem(state.module),
 		state.executor.suspendedNode);
 	return Common::kNoError;
 }

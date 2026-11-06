@@ -82,7 +82,6 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
 
 	_currentModule = kModuleNone;
 	_currentUsesLocalGraphics = false;
-	_node24Offset = 0;
 	_hostFailed = false;
 	for (uint i = 0; i < ARRAYSIZE(_variables); ++i)
 		_variables[i] = 0;

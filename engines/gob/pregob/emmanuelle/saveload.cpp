@@ -59,11 +59,8 @@ bool validSurface(const EmmanuelleSurfaceState &surface, bool allowEmpty) {
 
 // Check the stored structure here; restore validates it against game resources.
 bool validateSaveState(const EmmanuelleSaveState &state) {
-	const char *stem = moduleFileStem(state.module);
 	if (!emmanuelleProfileMatchesPlatform(state.profile, state.platform) ||
-		!stem || state.moduleFileStem.size() > 15 ||
-		!state.moduleFileStem.equalsIgnoreCase(stem) ||
-		state.moduleSize == 0 || state.moduleSize > 0xFFFF ||
+		!moduleFileStem(state.module) ||
 		state.vmTransient.savedRegionDepth > kMaxSavedRegions ||
 		state.vmTransient.schedulerTargets.size() > kMaxSchedulerTargets ||
 		(state.vmTransient.schedulerTargets.empty()
@@ -145,22 +142,6 @@ bool readBool(Common::ReadStream &stream, bool &value) {
 	return true;
 }
 
-void writeString(Common::WriteStream &stream, const Common::String &value) {
-	stream.writeByte(value.size());
-	stream.write(value.c_str(), value.size());
-}
-
-bool readString(Common::ReadStream &stream, Common::String &value,
-				uint maxLength) {
-	const uint length = stream.readByte();
-	if (stream.err() || length > maxLength)
-		return false;
-	value.clear();
-	for (uint i = 0; i < length; ++i)
-		value += (char)stream.readByte();
-	return !stream.err();
-}
-
 void writeSurface(Common::WriteStream &stream,
 				  const EmmanuelleSurfaceState &surface) {
 	stream.writeUint16LE(surface.width);
@@ -194,9 +175,6 @@ void writePayload(const EmmanuelleSaveState &state,
 	stream.writeByte((byte)state.profile);
 	stream.writeByte((byte)state.module);
 	stream.writeByte(0);
-	writeString(stream, state.moduleFileStem);
-	stream.writeUint32LE(state.moduleSize);
-	stream.write(state.moduleMD5, sizeof(state.moduleMD5));
 	for (uint i = 0; i < ARRAYSIZE(state.variables); ++i)
 		stream.writeUint16LE(state.variables[i]);
 	stream.writeByte(state.runtime.videoMode);
@@ -212,10 +190,8 @@ void writePayload(const EmmanuelleSaveState &state,
 		stream.writeUint16LE(state.vmTransient.schedulerTargets[i]);
 
 	// A suspended executor is never empty; zero represents its full stack.
-	// Earlier unreleased readers accepted at most 128 frames.
 	stream.writeByte(state.executor.frames.size() == OldTotExecutor::kMaxFrames
 		? 0 : state.executor.frames.size());
-	stream.writeUint32LE(state.executor.steps);
 	writeBool(stream, state.executor.started);
 	writeBool(stream, state.executor.suspended);
 	stream.writeUint16LE(state.executor.suspendedNode);
@@ -233,9 +209,7 @@ void writePayload(const EmmanuelleSaveState &state,
 	stream.writeUint32LE(state.commonRandomSeed);
 	stream.writeUint32LE(state.schedulerAccumulator);
 	stream.writeUint32LE(state.schedulerDebt);
-	stream.writeUint16LE(state.rememberedNode24Offset);
-	// Use the formerly zero byte for slot+1 (bits 0..4) and once/twice/loop
-	// (bits 5..6). Silent saves keep their version-1 layout and bytes.
+	// Slot+1 (bits 0..4) and once/twice/loop (bits 5..6); zero is silence.
 	byte playback = 0;
 	if (state.nativeState.amigaSampleSlot >= 0) {
 		playback = state.nativeState.amigaSampleSlot + 1;
@@ -302,12 +276,7 @@ bool readPayload(Common::SeekableReadStream &stream,
 	state.profile = (EmmanuelleRuntimeProfile)stream.readByte();
 	state.module = (ModuleId)stream.readByte();
 	const byte reserved = stream.readByte();
-	if (stream.err() || reserved != 0 ||
-		!readString(stream, state.moduleFileStem, 15))
-		return false;
-	state.moduleSize = stream.readUint32LE();
-	if (stream.read(state.moduleMD5, sizeof(state.moduleMD5)) !=
-			sizeof(state.moduleMD5))
+	if (stream.err() || reserved != 0)
 		return false;
 	for (uint i = 0; i < ARRAYSIZE(state.variables); ++i)
 		state.variables[i] = stream.readUint16LE();
@@ -329,7 +298,8 @@ bool readPayload(Common::SeekableReadStream &stream,
 	const byte encodedFrameCount = stream.readByte();
 	const uint frameCount = encodedFrameCount
 		? encodedFrameCount : (uint)OldTotExecutor::kMaxFrames;
-	state.executor.steps = stream.readUint32LE();
+	// Diagnostic step history belongs to the current execution session.
+	state.executor.steps = 0;
 	if (!readBool(stream, state.executor.started) ||
 		!readBool(stream, state.executor.suspended))
 		return false;
@@ -351,7 +321,6 @@ bool readPayload(Common::SeekableReadStream &stream,
 	state.commonRandomSeed = stream.readUint32LE();
 	state.schedulerAccumulator = stream.readUint32LE();
 	state.schedulerDebt = stream.readUint32LE();
-	state.rememberedNode24Offset = stream.readUint16LE();
 	const byte playback = stream.readByte();
 	state.cursorDescriptor = stream.readUint16LE();
 	if (!readBool(stream, state.cursorDefined) ||
@@ -500,7 +469,6 @@ EmmanuelleSaveState::EmmanuelleSaveState() {
 	platform = kOldTotPlatformUnknown;
 	profile = kEmmanuelleProfileInvalid;
 	module = kModuleNone;
-	moduleSize = 0;
 
 	randomState = 0;
 	commonRandomSeed = 0;
@@ -509,14 +477,10 @@ EmmanuelleSaveState::EmmanuelleSaveState() {
 	schedulerAccumulator = 0;
 	schedulerDebt = 0;
 
-	rememberedNode24Offset = 0;
-
 	cursorDescriptor = 0;
 	cursorDefined = false;
 	cursorVisible = false;
 
-	for (uint i = 0; i < ARRAYSIZE(moduleMD5); ++i)
-		moduleMD5[i] = 0;
 	for (uint i = 0; i < ARRAYSIZE(variables); ++i)
 		variables[i] = 0;
 }
