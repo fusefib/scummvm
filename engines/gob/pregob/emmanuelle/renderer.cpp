@@ -647,6 +647,13 @@ Font *OldTotRenderer::loadLetFont(Common::SeekableReadStream &stream) const {
 		delete[] data;
 		return nullptr;
 	}
+	// This renderer uses 8x8 glyphs, including its clipped stack-buffer path.
+	const uint count = data[3] >= data[2] ? data[3] - data[2] + 1 : 0;
+	if ((data[0] & 0x7F) != 8 || data[1] != 8 || count == 0 ||
+		4U + count * (8U + ((data[0] & 0x80) ? 1U : 0U)) > (uint32)size) {
+		delete[] data;
+		return nullptr;
+	}
 	return new Font(data);
 }
 
