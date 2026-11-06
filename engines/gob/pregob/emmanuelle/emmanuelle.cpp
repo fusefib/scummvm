@@ -32,7 +32,7 @@
 #include "common/rendermode.h"
 #include "common/system.h"
 
-#include "gui/message.h"
+#include "gui/error.h"
 
 #include "gob/console.h"
 #include "gob/dataio.h"
@@ -216,9 +216,13 @@ bool PreGob_Emmanuelle::shouldAbortExecution() const {
 
 void PreGob_Emmanuelle::failHostOperation(const char *operation, uint16 site) {
 	// Do not apply later script effects after a failed draw or region capture.
-	if (!_hostFailed)
+	if (!_hostFailed) {
+		_failureDescription = Common::String::format(
+			"Emmanuelle: %s failed in %s at 0x%04X.",
+			operation, _moduleFileStem.empty() ? "startup" : _moduleFileStem.c_str(), site);
 		warning("Emmanuelle: %s failed in %s at 0x%04X",
 			operation, _moduleFileStem.c_str(), site);
+	}
 	_hostFailed = true;
 	clearNarration();
 }
@@ -231,12 +235,14 @@ bool PreGob_Emmanuelle::loadRecupAssets() {
 	Common::String reason;
 	_recupTot = loadScriptResource(fileName, reason);
 	if (!_recupTot) {
+		failHostOperation(fileName);
 		debugC(1, kDebugFileIO, "Emmanuelle: unable to load %s: %s",
 			fileName, reason.c_str());
 		return false;
 	}
 	if (_recupTot->size() < 0x61 ||
 		_recupTot->byteAt(0x10) != 40) {
+		failHostOperation(fileName);
 		debugC(1, kDebugFileIO, "Emmanuelle: malformed %s", fileName);
 		return false;
 	}
@@ -247,6 +253,7 @@ bool PreGob_Emmanuelle::loadRecupAssets() {
 		if (offset >= _recupTot->size() ||
 			_recupTot->byteAt(offset) != 0x41) {
 			_recupRoots.clear();
+			failHostOperation(fileName, offset);
 			debugC(1, kDebugFileIO,
 				   "Emmanuelle: invalid %s action root %u", fileName, i);
 			return false;
@@ -262,6 +269,7 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 							   : "INIT.I01";
 	Common::SeekableReadStream *stream = openResource(bankName);
 	if (!stream) {
+		failHostOperation(bankName);
 		debugC(1, kDebugFileIO, "Emmanuelle: %s is missing", bankName);
 		return false;
 	}
@@ -269,6 +277,7 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 	_sharedI01 = new OldIxxBank(*stream);
 	delete stream;
 	if (!_sharedI01->valid()) {
+		failHostOperation(bankName);
 		debugC(1, kDebugFileIO, "Emmanuelle: malformed %s", bankName);
 		return false;
 	}
@@ -277,6 +286,7 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 	for (uint i = 0; i < ARRAYSIZE(fontNames); ++i) {
 		stream = openResource(fontNames[i]);
 		if (!stream) {
+			failHostOperation(fontNames[i]);
 			debugC(1, kDebugFileIO, "Emmanuelle: %s is missing",
 				   fontNames[i]);
 			return false;
@@ -284,6 +294,7 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 		_fonts[i] = _renderer.loadLetFont(*stream);
 		delete stream;
 		if (!_fonts[i]) {
+			failHostOperation(fontNames[i]);
 			debugC(1, kDebugFileIO, "Emmanuelle: malformed %s",
 				   fontNames[i]);
 			return false;
@@ -325,6 +336,7 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 		return false;
 	clearModuleObjects();
 	_hostFailed = false;
+	_failureDescription.clear();
 	hideCursor();
 	if (recentersMouseOnModuleLoad(_platformTag))
 		_vm->_util->setMousePos(160, 96);
@@ -344,6 +356,7 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 	Common::String reason;
 	_tot = loadScriptResource(_moduleFileStem + totExtension, reason);
 	if (!_tot) {
+		failHostOperation((_moduleFileStem + totExtension).c_str());
 		debugC(1, kDebugFileIO, "Emmanuelle: unable to load %s%s: %s",
 			stem, totExtension, reason.c_str());
 		return false;
@@ -353,6 +366,7 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 									 _inlineLocalGraphics)) {
 		Common::SeekableReadStream *stream = openResource(_moduleFileStem + ixxExtension);
 		if (!stream) {
+			failHostOperation((_moduleFileStem + ixxExtension).c_str());
 			debugC(1, kDebugFileIO, "Emmanuelle: %s%s is missing", stem,
 				   ixxExtension);
 			return false;
@@ -360,6 +374,7 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 		_localI00 = new OldIxxBank(*stream);
 		delete stream;
 		if (!_localI00->valid()) {
+			failHostOperation((_moduleFileStem + ixxExtension).c_str());
 			debugC(1, kDebugFileIO, "Emmanuelle: malformed %s%s", stem,
 				   ixxExtension);
 			return false;
@@ -387,6 +402,7 @@ bool PreGob_Emmanuelle::loadModule(ModuleId moduleId,
 		paletteApplied = _renderer.applyDosPalette(
 			_moduleFileStem, _runtimeState.videoMode);
 	if (!paletteApplied) {
+		failHostOperation("module palette");
 		debugC(1, kDebugGraphics,
 			   "Emmanuelle: no platform palette for module %s", stem);
 		return false;
@@ -452,13 +468,17 @@ bool PreGob_Emmanuelle::executeLoadedModule() {
 		!_initialInitComplete && _currentModule == kModuleInit) {
 		_initialInitComplete = true;
 		ok = loadSampleBank(2);
-		if (!ok)
+		if (!ok) {
 			_initialTitleState = kInitialTitleNone;
+			failHostOperation("gameplay samples");
+		}
 	}
 	if (ok && !_vm->shouldQuit() &&
 		_initialInitPresentation &&
 		_moduleFileStem.equalsIgnoreCase("INIT"))
 		_initialInitPresentation = false;
+	if (!ok && !_hostFailed && !_vm->shouldQuit())
+		failHostOperation(oldTotExecutorStopReasonName(_executor->stopReason()));
 	return ok;
 }
 
@@ -864,6 +884,7 @@ static const char *loopResultDescription(ModuleLoopResult result) {
 }
 
 void PreGob_Emmanuelle::run() {
+	Common::U32String startupError;
 	setNarrationLanguage();
 	debugC(1, kDebugGameFlow,
 		   "Emmanuelle: starting %s old-TOT runtime",
@@ -885,8 +906,11 @@ void PreGob_Emmanuelle::run() {
 				"without sound samples");
 	}
 	bool ready = loadSharedAssets();
-	if (ready && _platformTag != kOldTotPlatformDOS)
+	if (ready && _platformTag != kOldTotPlatformDOS) {
 		ready = loadSampleBank(1);
+		if (!ready)
+			failHostOperation("intro samples");
+	}
 	if (ready) {
 		ModuleLoopResult result;
 		int startupSlot = -1;
@@ -902,9 +926,7 @@ void PreGob_Emmanuelle::run() {
 				debugC(1, kDebugSaveLoad,
 					"Emmanuelle: failed to load startup slot %d",
 					startupSlot);
-				// Launcher loads bypass the in-game load dialog's error reporting.
-				GUI::MessageDialog dialog(error.getTranslatedDesc());
-				dialog.runModal();
+				startupError = error.getTranslatedDesc();
 				result = kModuleLoopLoadError;
 			} else {
 				result = resumeModuleLoop(
@@ -926,6 +948,9 @@ void PreGob_Emmanuelle::run() {
 		}
 		debugC(1, kDebugGameFlow, "Emmanuelle: runtime stopped: %s",
 			   loopResultDescription(result));
+		if (!_hostFailed && !_vm->shouldQuit() && startupError.empty() &&
+			result != kModuleLoopQuit && result != kModuleLoopExit)
+			failHostOperation(loopResultDescription(result));
 		_active.restoreAll();
 		clearModuleObjects();
 	}
@@ -936,6 +961,15 @@ void PreGob_Emmanuelle::run() {
 	setInputContext(kEmmanuelleInputNone);
 	removeCursor();
 	_cursorOwned = false;
+	// Release game speech and rendering ownership before the GUI takes over.
+	clearNarration();
+	if (!_vm->shouldQuit() && (!startupError.empty() || !_failureDescription.empty())) {
+		stopSampleAudio();
+		if (_platformTag == kOldTotPlatformDOS && _vm->_sound)
+			_vm->_sound->speakerOff();
+		GUI::displayErrorDialog(startupError.empty()
+			? Common::U32String(_failureDescription) : startupError);
+	}
 }
 
 } // End of namespace Emmanuelle

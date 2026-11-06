@@ -390,6 +390,7 @@ void PreGob_Emmanuelle::commitRestore(const EmmanuelleSaveState &state,
 
 void PreGob_Emmanuelle::resetInitialStateAfterLoad() {
 	_hostFailed = false;
+	_failureDescription.clear();
 	_introSkip.finish();
 	_initialInitPresentation = false;
 	_initialTitleState = kInitialTitleNone;

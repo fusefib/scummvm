@@ -241,6 +241,7 @@ private:
 	ModuleId _currentModule;
 	bool _currentUsesLocalGraphics;
 	bool _hostFailed;
+	Common::String _failureDescription;
 	uint32 _randomState;
 	OldTotPlatformTag _platformTag;
 	bool _inlineLocalGraphics;
