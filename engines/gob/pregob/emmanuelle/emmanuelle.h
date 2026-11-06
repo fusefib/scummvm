@@ -56,6 +56,7 @@ namespace Emmanuelle {
 class OldIxxBank;
 class OldTotData;
 struct EmmanuellePreparedRestore;
+struct OldTotTextPlan;
 
 class PreGob_Emmanuelle : public PreGob,
 						  public ModuleHost,
@@ -168,6 +169,12 @@ private:
 	void applyInputBoundary(const InputBoundary &boundary);
 	void discardPendingInput();
 	void serviceInterpreterTimer();
+	bool narrationEnabled() const;
+	bool narrationPlaying();
+	void setNarrationLanguage();
+	void stageNarration(const OldTotTextPlan &plan, const Common::U32String &text);
+	void speakPendingNarration();
+	void clearNarration(const Common::Rect *removed = nullptr);
 	bool inputIdle(int16 key, MouseButtons mouseButtons) const;
 	void waitAtariContinuation();
 	void waitAtariInputRelease();
@@ -252,6 +259,18 @@ private:
 	uint16 _schedulerMilliseconds;
 	bool _schedulerClockRunning;
 	bool _servicingTimer;
+	// Text belongs to a completed publication, not to individual glyph draws.
+	// Neither pending speech nor its repeat suppression is saved.
+	struct NarrationText {
+		Common::Rect rect;
+		Common::U32String text;
+	};
+	Common::Array<NarrationText> _pendingNarration;
+	Common::U32String _lastNarration;
+	Common::Array<Common::Rect> _narrationRects;
+	bool _narrationOwned;
+	bool _narrationTimerHeld;
+	bool _narrationCanContinue;
 	InputLatch _pendingInput;
 	IntroSkipState _introSkip;
 	// Remains active through protection and the title at the end of fresh INIT.

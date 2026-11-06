@@ -96,6 +96,9 @@ PreGob_Emmanuelle::PreGob_Emmanuelle(GobEngine *vm,
 	_schedulerMilliseconds = 0;
 	_schedulerClockRunning = false;
 	_servicingTimer = false;
+	_narrationOwned = false;
+	_narrationTimerHeld = false;
+	_narrationCanContinue = false;
 
 	// The title's minimum duration starts at its first complete visible frame.
 	_initialInitPresentation = false;
@@ -218,6 +221,7 @@ void PreGob_Emmanuelle::failHostOperation(const char *operation, uint16 site) {
 		warning("Emmanuelle: %s failed in %s at 0x%04X",
 			operation, _moduleFileStem.c_str(), site);
 	_hostFailed = true;
+	clearNarration();
 }
 
 bool PreGob_Emmanuelle::loadRecupAssets() {
@@ -291,6 +295,7 @@ bool PreGob_Emmanuelle::loadSharedAssets() {
 }
 
 void PreGob_Emmanuelle::clearModuleObjects() {
+	clearNarration();
 	// Captures belong to this module's VM and cannot outlive its region depth.
 	_renderer.discardSavedRegions();
 	if (_platformTag == kOldTotPlatformAtariST)
@@ -413,6 +418,8 @@ bool PreGob_Emmanuelle::executeLoadedModule() {
 					debugC(2, kDebugSaveLoad,
 						   "EMMA_TRACE event=menu_open module=%s node=0x%04X",
 						   _moduleFileStem.c_str(), _executor->suspendedNode());
+				// The GUI takes over the manager and does not restore its queue.
+				clearNarration();
 				_vm->openMainMenuDialog();
 				_vm->getEventManager()->purgeKeyboardEvents();
 				_vm->getEventManager()->purgeMouseEvents();
@@ -496,6 +503,7 @@ void PreGob_Emmanuelle::schedulerTiming(byte period,
 	_schedulerDebt = 0;
 	_schedulerMilliseconds = 0;
 	_schedulerClockRunning = false;
+	_narrationTimerHeld = false;
 	if (_platformTag == kOldTotPlatformAtariST) {
 		getAtariStSchedulerTiming(period, reload, initialCountdown);
 	} else if (_platformTag == kOldTotPlatformAmiga) {
@@ -511,6 +519,7 @@ void PreGob_Emmanuelle::schedulerTiming(byte period,
 }
 
 void PreGob_Emmanuelle::beginIntroFastForward() {
+	clearNarration();
 	hideCursor();
 	stopSampleAudio();
 	if (_platformTag == kOldTotPlatformDOS && _vm->_sound)
@@ -856,6 +865,7 @@ static const char *loopResultDescription(ModuleLoopResult result) {
 }
 
 void PreGob_Emmanuelle::run() {
+	setNarrationLanguage();
 	debugC(1, kDebugGameFlow,
 		   "Emmanuelle: starting %s old-TOT runtime",
 		   _platformTag == kOldTotPlatformAmiga

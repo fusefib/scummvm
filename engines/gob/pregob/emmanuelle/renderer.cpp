@@ -316,12 +316,15 @@ bool OldTotRenderer::saveScreenRect(uint16 x, uint16 y, uint16 width,
 	return true;
 }
 
-bool OldTotRenderer::restoreScreenRect() {
+bool OldTotRenderer::restoreScreenRect(Common::Rect *restored) {
 	if (!_vm || !_vm->_draw || !_vm->_draw->_backSurface ||
 		_savedRegions.empty())
 		return false;
 
 	const OldTotPreparedSavedRegion saved = _savedRegions.back();
+	if (restored)
+		*restored = Common::Rect(saved.x, saved.y,
+			saved.x + saved.surface->getWidth(), saved.y + saved.surface->getHeight());
 	// Restoring the captured window also removes raised letters. Its saved
 	// caption background is no longer needed and is released with the window.
 	_savedRegions.pop_back();
@@ -667,6 +670,8 @@ void PreGob_Emmanuelle::presentFrame(bool waitForFrame, bool force) {
 		_vm->_video->retrace();
 	if (_platformTag == kOldTotPlatformDOS && !shouldAbortExecution())
 		_renderer.commitDirectFrame();
+	if (!shouldAbortExecution() && _renderer.presentationQuiescent())
+		speakPendingNarration();
 }
 
 bool PreGob_Emmanuelle::servicePresentation() {
@@ -731,6 +736,7 @@ bool PreGob_Emmanuelle::servicePresentation() {
 				_renderer.captureAmigaPresentedFrame();
 			else if (_platformTag == kOldTotPlatformAtariST)
 				_renderer.captureAtariPresentedFrame();
+			speakPendingNarration();
 		}
 		if (_diagnosticTraceEnabled && step.operation != kPresentationFrame &&
 			(step.phase == 0 || step.complete))
@@ -960,8 +966,10 @@ bool PreGob_Emmanuelle::handleProtectionTextNode(uint16 nodeOffset) {
 // the native window restore releases it. This preserves the panel's artwork.
 void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
 	OldTotTextPlan plan;
+	Common::U32String speechText;
+	const bool speak = narrationEnabled() && !_introSkip.fastForwarding();
 	if (!_tot || !_scriptVM ||
-		!planOldTotText(*_tot, *_scriptVM, nodeOffset, plan)) {
+		!planOldTotText(*_tot, *_scriptVM, nodeOffset, plan, speak ? &speechText : nullptr)) {
 		failHostOperation("text plan", nodeOffset);
 		return;
 	}
@@ -1047,6 +1055,8 @@ void PreGob_Emmanuelle::renderTextPlan(uint16 nodeOffset) {
 			dirty.left, dirty.top, dirty.right - 1, dirty.bottom - 1);
 		_renderer.notePresentationDirtyRect(
 			dirty.left, dirty.top, dirty.right - 1, dirty.bottom - 1);
+		if (speak)
+			stageNarration(plan, speechText);
 	}
 }
 
@@ -1196,13 +1206,17 @@ bool PreGob_Emmanuelle::saveScreenRect(uint16 x, uint16 y, uint16 width,
 }
 
 bool PreGob_Emmanuelle::restoreScreenRect() {
-	if (_renderer.restoreScreenRect())
+	Common::Rect restored;
+	if (_renderer.restoreScreenRect(&restored)) {
+		clearNarration(&restored);
 		return true;
+	}
 	failHostOperation("restore screen region");
 	return false;
 }
 
 void PreGob_Emmanuelle::fillScreen(byte color) {
+	clearNarration();
 	_renderer.fillScreen(color);
 }
 

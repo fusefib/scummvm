@@ -28,7 +28,10 @@
 #include "gob/pregob/emmanuelle/emmanuelle.h"
 
 #include "backends/keymapper/keymapper.h"
+#include "common/config-manager.h"
 #include "common/events.h"
+#include "common/language.h"
+#include "common/text-to-speech.h"
 #include "graphics/cursorman.h"
 #include "gob/gob.h"
 #include "gob/global.h"
@@ -37,9 +40,130 @@
 #include "gob/pregob/emmanuelle/amiga.h"
 #include "gob/pregob/emmanuelle/atari.h"
 #include "gob/pregob/emmanuelle/dos.h"
+#include "gob/pregob/emmanuelle/text.h"
 
 namespace Gob {
 namespace Emmanuelle {
+
+static Common::TextToSpeechManager *getNarrationManager() {
+#ifdef USE_TTS
+	return g_system->getTextToSpeechManager();
+#else
+	return nullptr;
+#endif
+}
+
+bool PreGob_Emmanuelle::narrationEnabled() const {
+	Common::TextToSpeechManager *manager = getNarrationManager();
+	return manager && ConfMan.hasKey("tts_enabled") && ConfMan.getBool("tts_enabled") &&
+		(manager->isReady() || manager->isSpeaking() || manager->isPaused());
+}
+
+bool PreGob_Emmanuelle::narrationPlaying() {
+	if (!_narrationOwned)
+		return false;
+	if (!narrationEnabled()) {
+		clearNarration();
+		return false;
+	}
+	Common::TextToSpeechManager *manager = getNarrationManager();
+	_narrationOwned = manager->isSpeaking() || manager->isPaused();
+	return _narrationOwned;
+}
+
+void PreGob_Emmanuelle::setNarrationLanguage() {
+	Common::TextToSpeechManager *manager = getNarrationManager();
+	const char *language = Common::getLanguageCode(_vm->_language);
+	if (manager && language && manager->getLanguage() != Common::String(language, 2))
+		manager->setLanguage(language);
+}
+
+void PreGob_Emmanuelle::clearNarration(const Common::Rect *removed) {
+	if (removed) {
+		for (uint i = 0; i < _pendingNarration.size();) {
+			if (removed->intersects(_pendingNarration[i].rect))
+				_pendingNarration.remove_at(i);
+			else
+				++i;
+		}
+		// The gaps between spoken text boxes do not belong to the utterance.
+		bool overlaps = false;
+		for (uint i = 0; i < _narrationRects.size(); ++i)
+			overlaps |= removed->intersects(_narrationRects[i]);
+		if (!overlaps)
+			return;
+	} else {
+		_pendingNarration.clear();
+	}
+	Common::TextToSpeechManager *manager = getNarrationManager();
+	if (_narrationOwned && manager)
+		manager->stop();
+	_lastNarration.clear();
+	_narrationRects.clear();
+	_narrationOwned = false;
+	_narrationCanContinue = false;
+	if (_narrationTimerHeld)
+		_schedulerClockRunning = false;
+	_narrationTimerHeld = false;
+}
+
+void PreGob_Emmanuelle::stageNarration(const OldTotTextPlan &plan,
+		const Common::U32String &text) {
+	// The narrow cells at the left are cash and meter redraws. Numeric
+	// choices and the casino's number overlay must still be read.
+	if (plan.x < 40 && plan.width <= 24)
+		return;
+	const Common::Rect rect(plan.x, plan.y, plan.x + plan.width, plan.y + plan.height);
+	for (uint i = 0; i < _pendingNarration.size(); ++i) {
+		if (_pendingNarration[i].rect == rect) {
+			_pendingNarration[i].text = text;
+			return;
+		}
+	}
+	NarrationText part;
+	part.rect = rect;
+	part.text = text;
+	_pendingNarration.push_back(part);
+}
+
+void PreGob_Emmanuelle::speakPendingNarration() {
+	if (_pendingNarration.empty())
+		return;
+	if (!narrationEnabled() || shouldAbortExecution() || _introSkip.fastForwarding()) {
+		clearNarration();
+		return;
+	}
+	Common::U32String text;
+	Common::Array<Common::Rect> rects;
+	for (uint i = 0; i < _pendingNarration.size(); ++i) {
+		if (_pendingNarration[i].text.empty())
+			continue;
+		if (!text.empty())
+			text += '\n';
+		text += _pendingNarration[i].text;
+		rects.push_back(_pendingNarration[i].rect);
+	}
+	_pendingNarration.clear();
+	if (text == _lastNarration) {
+		_narrationRects.swap(rects);
+		return;
+	}
+	clearNarration();
+	_lastNarration = text;
+	_narrationRects.swap(rects);
+	if (text.empty())
+		return;
+	Common::TextToSpeechManager *manager = getNarrationManager();
+	manager->say(text, Common::TextToSpeechManager::INTERRUPT_NO_REPEAT);
+	// Backends disagree on say()'s return value. Only active speech may
+	// hold a caption or scheduler; unavailable voices must never block play.
+	_narrationOwned = manager->isSpeaking() || manager->isPaused();
+	if (_narrationOwned && _scriptVM && _scriptVM->schedulerEnabled()) {
+		_schedulerDebt = 0;
+		_schedulerMilliseconds = 0;
+		_narrationTimerHeld = true;
+	}
+}
 
 void PreGob_Emmanuelle::setInputContext(EmmanuelleInputContext context) {
 	Common::Keymapper *keymapper = _vm->getEventManager()->getKeymapper();
@@ -98,6 +222,10 @@ void PreGob_Emmanuelle::processGameEvents() {
 
 	int16 key = kKeyNone;
 	while (_vm->_util->checkKey(key)) {
+		if (_narrationCanContinue && key == kKeyReturn) {
+			clearNarration();
+			continue;
+		}
 		if (_inputContext == kEmmanuelleInputFight &&
 			_platformTag == kOldTotPlatformDOS)
 			_pendingInput.noteLatestKey(key);
@@ -114,6 +242,8 @@ void PreGob_Emmanuelle::processGameEvents() {
 		_vm->_util->forceMouseUp();
 	if (_introSkip.activate(_vm->shouldQuit()))
 		beginIntroFastForward();
+	if (shouldAbortExecution())
+		clearNarration();
 }
 
 int16 PreGob_Emmanuelle::takePendingInput(
@@ -180,6 +310,17 @@ void PreGob_Emmanuelle::serviceInterpreterTimer() {
 	}
 
 	const uint32 now = g_system->getMillis();
+	if (narrationPlaying()) {
+		_schedulerServiceTime = now;
+		_schedulerClockRunning = true;
+		_narrationTimerHeld = true;
+		return;
+	}
+	if (_narrationTimerHeld) {
+		_schedulerServiceTime = now;
+		_schedulerClockRunning = true;
+		_narrationTimerHeld = false;
+	}
 	const uint64 elapsed = _schedulerClockRunning
 		? (uint64)(uint32)(now - _schedulerServiceTime) * _vm->_global->_speedFactor
 		: 1000 / kHostFrameRate;
@@ -192,7 +333,17 @@ void PreGob_Emmanuelle::serviceInterpreterTimer() {
 	// Saturate only at the saved field's representable limit.
 	_schedulerDebt = quanta > 0xFFFFFFFFU ? 0xFFFFFFFFU : (uint32)quanta;
 	_servicingTimer = true;
-	_schedulerDebt = _scriptVM->advanceTimer(_schedulerDebt, 8);
+	if (narrationEnabled()) {
+		// Publish each spoken option before considering another overdue target.
+		// Silent callbacks retain the normal eight-callback service budget.
+		for (uint i = 0; i < 8 && _schedulerDebt; ++i) {
+			_schedulerDebt = _scriptVM->advanceTimer(_schedulerDebt, 1);
+			if (!_pendingNarration.empty() || narrationPlaying())
+				break;
+		}
+	} else {
+		_schedulerDebt = _scriptVM->advanceTimer(_schedulerDebt, 8);
+	}
 	_servicingTimer = false;
 }
 
@@ -312,6 +463,7 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 		_vm->_util->setMousePos(cursorX, cursorY);
 
 	if (key == kKeyEscape || mouseButtons == kMouseButtonsRight) {
+		clearNarration();
 		_schedulerClockRunning = false;
 		if (_diagnosticTraceEnabled)
 			debugC(3, kDebugGameFlow,
@@ -357,6 +509,7 @@ int16 PreGob_Emmanuelle::chooseInputRegion(uint16 nodeOffset, byte count,
 		setInputContext(kEmmanuelleInputNone);
 		return -3;
 	}
+	clearNarration();
 	hideCursor();
 
 	_schedulerClockRunning = false;
@@ -387,6 +540,7 @@ void PreGob_Emmanuelle::waitReturn() {
 		key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
 	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
 			 key != kKeyReturn);
+	clearNarration();
 	do {
 		key = pollInterpreterInput(mouseX, mouseY, mouseButtons);
 	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
@@ -445,16 +599,29 @@ void PreGob_Emmanuelle::waitOpcode03(byte arg, uint16) {
 		fadeAtariFromBlack();
 	noteInitialTomahawkVisible();
 	serviceWaitColorCycle();
+	const bool spokenCaption = narrationPlaying();
+	const EmmanuelleInputContext previousContext = _inputContext;
+	if (spokenCaption) {
+		// A press collected while the caption was being drawn predates it.
+		discardPendingInput();
+		setInputContext(kEmmanuelleInputContinue);
+		_narrationCanContinue = true;
+	}
 	if (_currentModule != kModuleInit) {
 		waitForMinimumDuration(presentationStart, 100 + (arg / 5) * _animationSpeedFactor * 10);
-		return;
+	} else {
+		uint16 milliseconds = opcode03DelayUnits(arg);
+		if (_platformTag == kOldTotPlatformDOS)
+			milliseconds = dosOpcode03DelayMilliseconds(arg);
+		else if (_platformTag == kOldTotPlatformAmiga)
+			milliseconds = amigaNativeDelayMilliseconds(milliseconds);
+		delay(milliseconds);
 	}
-	uint16 milliseconds = opcode03DelayUnits(arg);
-	if (_platformTag == kOldTotPlatformDOS)
-		milliseconds = dosOpcode03DelayMilliseconds(arg);
-	else if (_platformTag == kOldTotPlatformAmiga)
-		milliseconds = amigaNativeDelayMilliseconds(milliseconds);
-	delay(milliseconds);
+	while (!shouldAbortExecution() && !_introSkip.fastForwarding() && narrationPlaying())
+		delay(20);
+	_narrationCanContinue = false;
+	if (spokenCaption)
+		setInputContext(previousContext);
 }
 
 void PreGob_Emmanuelle::delay(uint16 milliseconds) {

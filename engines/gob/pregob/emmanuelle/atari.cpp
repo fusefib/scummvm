@@ -315,6 +315,7 @@ void PreGob_Emmanuelle::waitAtariContinuation() {
 		key = pollGameInput(mouseX, mouseY, mouseButtons);
 	} while (!shouldAbortExecution() && !_introSkip.fastForwarding() &&
 			 !atariStContinuationAcceptsKey(key));
+	clearNarration();
 }
 
 bool PreGob_Emmanuelle::hasAnyAtariSoundFile() const {

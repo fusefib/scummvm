@@ -30,6 +30,7 @@
 
 #include "common/array.h"
 #include "common/scummsys.h"
+#include "common/ustr.h"
 #include "gob/pregob/emmanuelle/interpreter.h"
 #include "gob/pregob/emmanuelle/oldtot.h"
 
@@ -66,7 +67,8 @@ struct OldTotTextPlan {
 /** Decode ordinary opcode 0x1D text using 8x8 LET glyphs and native wrapping.
  * Returns false for the randomized copy-protection form.
  */
-bool planOldTotText(const OldTotData &data, const OldTotVM &vm, uint16 offset, OldTotTextPlan &out);
+bool planOldTotText(const OldTotData &data, const OldTotVM &vm, uint16 offset,
+	OldTotTextPlan &out, Common::U32String *speechText = nullptr);
 
 /** Align the original LET bitmaps without changing wrapping or cell positions.
  * Returns the highest ink row, for restoring pixels above the text rectangle.

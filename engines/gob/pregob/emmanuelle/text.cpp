@@ -33,6 +33,45 @@ namespace Emmanuelle {
 
 static bool isControl(byte c) { return c == '[' || c == ']' || c == '{' || c == '}'; }
 
+static bool isSpeechLetter(uint32 c) {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+		(c >= 0xC0 && c <= 0xD6) || (c >= 0xD8 && c <= 0xF6) ||
+		(c >= 0xF8 && c <= 0xFF);
+}
+
+static Common::U32String makeSpeechText(const Common::Array<byte> &expanded, uint length) {
+	const Common::U32String text((const char *)expanded.data(), length, Common::kDos850);
+	Common::U32String spoken;
+	bool space = false;
+	for (uint i = 0; i < text.size(); ++i) {
+		const uint32 c = text[i];
+		if (c == '[' || c == ']' || c == '{' || c == '}')
+			continue;
+		// Join printed word splits such as "COMPORTAMIEN-@ TO". Hyphens
+		// elsewhere remain part of the text, including compound words.
+		if (c == '-' && !space && !spoken.empty() && isSpeechLetter(spoken.lastChar()) &&
+			i + 1 < text.size() && text[i + 1] == '@') {
+			uint next = i + 2;
+			while (next < text.size() && (text[next] == ' ' || text[next] == '[' ||
+					text[next] == ']' || text[next] == '{' || text[next] == '}'))
+				++next;
+			if (next < text.size() && isSpeechLetter(text[next])) {
+				i = next - 1;
+				continue;
+			}
+		}
+		if (c == '@' || c <= ' ') {
+			space = !spoken.empty();
+			continue;
+		}
+		if (space)
+			spoken += ' ';
+		spoken += c;
+		space = false;
+	}
+	return spoken;
+}
+
 static void appendDecimal(Common::Array<byte> &out, uint16 value, byte width) {
 	byte tmp[6];
 	uint n = 0;
@@ -48,7 +87,10 @@ static void appendDecimal(Common::Array<byte> &out, uint16 value, byte width) {
 		out.push_back(tmp[--n]);
 }
 
-bool planOldTotText(const OldTotData &d, const OldTotVM &vm, uint16 o, OldTotTextPlan &out) {
+bool planOldTotText(const OldTotData &d, const OldTotVM &vm, uint16 o,
+		OldTotTextPlan &out, Common::U32String *speechText) {
+	if (speechText)
+		speechText->clear();
 	if (uint32(o) + 15u > d.size() || d.byteAt(o) != 0x1D)
 		return false;
 	const uint16 flags = d.uint16BEAt(o + 13);
@@ -139,6 +181,8 @@ bool planOldTotText(const OldTotData &d, const OldTotVM &vm, uint16 o, OldTotTex
 		}
 		cy += out.lineAdvance;
 	}
+	if (speechText && pos)
+		*speechText = makeSpeechText(expanded, pos);
 	return true;
 }
 

@@ -179,7 +179,7 @@ public:
 	bool presentAmigaMode44Step(byte variant, byte phase);
 
 	bool saveScreenRect(uint16 x, uint16 y, uint16 width, uint16 height);
-	bool restoreScreenRect();
+	bool restoreScreenRect(Common::Rect *restored = nullptr);
 	void fillScreen(byte color);
 	/** Restore the preceding caption's raised ink, then preserve the new band.
 	 * Returns restored bounds for the caller's existing dirty notification.
