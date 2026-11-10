@@ -107,6 +107,24 @@
 
 	{{"emmanuelle",
 	  nullptr,
+	  AD_ENTRY2s(
+		  "LOADAERO.TOT", "e1ea97cb1d2a0bec567d62c9154db080", 65408,
+		  "LOADER.COM", nullptr, AD_NO_SIZE),
+	  FR_FRA,
+	  kPlatformDOS,
+	  ADGF_UNSTABLE,
+	  GUIO5(GUIO_NOSUBTITLES, GUIO_NOSPEECH,
+			GAMEOPTION_EMMANUELLE_ENHANCED_FIGHTS,
+			GUIO_RENDERCGA, GUIO_RENDEREGA)},
+	 kFeaturesEGA | kFeatures16Colors |
+		 kFeaturesEmmanuelleInlineLocalGraphics |
+		 kFeaturesEmmanuelleAlternateInputGeometry,
+	 nullptr,
+	 "INIT.TOT",
+	 0},
+
+	{{"emmanuelle",
+	  nullptr,
 	  AD_ENTRY1s("LOADAERO.TOT", "060b4ead740a296fcdd57ac1a90025f2", 46336),
 	  EN_ANY,
 	  kPlatformDOS,
@@ -155,6 +173,22 @@
 	  GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)},
 	 kFeaturesEGA | kFeatures16Colors |
 		 kFeaturesEmmanuelleOptionalAtariAudio,
+	 nullptr,
+	 "INIT.TOT",
+	 0},
+
+	{{"emmanuelle",
+	  nullptr,
+	  AD_ENTRY1s("LOADAERO.TOT", "e1ea97cb1d2a0bec567d62c9154db080", 65408),
+	  FR_FRA,
+	  kPlatformDOS,
+	  ADGF_UNSTABLE,
+	  GUIO5(GUIO_NOSUBTITLES, GUIO_NOSPEECH,
+			GAMEOPTION_EMMANUELLE_ENHANCED_FIGHTS,
+			GUIO_RENDERCGA, GUIO_RENDEREGA)},
+	 kFeaturesEGA | kFeatures16Colors |
+		 kFeaturesEmmanuelleInlineLocalGraphics |
+		 kFeaturesEmmanuelleAlternateInputGeometry,
 	 nullptr,
 	 "INIT.TOT",
 	 0},

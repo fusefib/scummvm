@@ -47,6 +47,7 @@ enum EmmanuelleRuntimeProfile : byte {
 	kEmmanuelleProfileInvalid = 0,
 	kEmmanuelleProfileDosEnglish = 1,
 	kEmmanuelleProfileDosSpanish = 2,
+	kEmmanuelleProfileDosFrench = 3,
 	kEmmanuelleProfileAtariEnglish = 4,
 	kEmmanuelleProfileAtariSpanish = 5,
 	kEmmanuelleProfileAtariFrench = 6,
@@ -144,6 +145,7 @@ struct EmmanuelleSurfaceState {
 	byte bytesPerPixel;
 	Common::Array<byte> pixels;
 };
+
 
 void exportOldTotSurface(const Surface &surface, EmmanuelleSurfaceState &out);
 bool importOldTotSurface(const EmmanuelleSurfaceState &in, SurfacePtr &out);
