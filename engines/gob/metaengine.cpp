@@ -50,6 +50,18 @@ static const ADExtraGuiOptionsMap optionsList[] = {
                         0
                 },
         },
+	{
+		GAMEOPTION_EMMANUELLE_ENHANCED_FIGHTS,
+		{
+			_s("Use selected graphics mode for fights"),
+			_s("Keep the selected DOS graphics mode during fight scenes instead "
+			   "of using the original four-color mode."),
+			"emmanuelle_enhanced_fights",
+			false,
+			0,
+			0
+		}
+	},
 #ifdef USE_TTS
 	{
 		GAMEOPTION_TTS,
@@ -100,7 +112,6 @@ Common::Error GobMetaEngine::createInstance(OSystem *syst, Engine **engine, cons
 	return Common::kNoError;
 }
 
-
 #if PLUGIN_ENABLED_DYNAMIC(GOB)
 	REGISTER_PLUGIN_DYNAMIC(GOB, PLUGIN_TYPE_ENGINE, GobMetaEngine);
 #else
@@ -127,7 +138,6 @@ bool GobEngine::gameTypeHasAddOns() const {
 			getGameType() == kGameTypeAdi2 ||
 			getGameType() == kGameTypeAdi4;
 }
-
 
 // Accelerator, to discard some directories we know have no chance to be add-ons
 bool GobEngine::dirCanBeGameAddOn(const Common::FSDirectory &dir) const {
@@ -169,4 +179,3 @@ void GobEngine::initGame(const GOBGameDescription *gd) {
 }
 
 } // End of namespace Gob
-
