@@ -26,45 +26,79 @@
  */
 
 #include "gob/gob.h"
-#include "gob/global.h"
-#include "gob/palanim.h"
 #include "gob/draw.h"
+#include "gob/util.h"
 
 #include "gob/sound/sound.h"
 
 #include "gob/pregob/onceupon/title.h"
+#include "gob/pregob/onceupon/runtime_clock.h"
+#include "gob/pregob/onceupon/palette.h"
+#include "gob/pregob/onceupon/assets.h"
+#include "gob/pregob/onceupon/onceupon.h"
 
 namespace Gob {
 
 namespace OnceUpon {
 
-Title::Title(GobEngine *vm) : SEQFile(vm, "ville.seq") {
+Title::Title(OnceUpon &game) :
+	SEQFile(game._vm, "ville.seq", game._assets.get()), _game(game), _phase(kPhaseNone), _clock(game._clock), _palette(game._palette), _musicStarted(false), _activated(false) {
+	if (_vm->getPlatform() == Common::kPlatformAtariST) {
+		static const char * const files[] = {"baba1.snd", "baba2.snd", "baba3.snd"};
+		for (uint i = 0; i < ARRAYSIZE(files); ++i)
+			_vm->_sound->sampleLoad(&_samples[i], SOUND_SND, files[i]);
+	}
 }
 
 Title::~Title() {
+	end();
 }
 
-void Title::play() {
-	SEQFile::play(true, 0xFFFF, 15);
+void Title::changeFrameRate(int16 rate) {
+	_clock.setFrameRate(rate);
+}
 
-	// After playback, fade out and stop the music
-	if (!_vm->shouldQuit())
-		_vm->_palAnim->fade(nullptr, 0, 0);
+void Title::waitFrame() {
+	_clock.waitFrame();
+}
 
+void Title::begin() {
+	end();
+	_activated = false;
+	// The native title player overrides the SEQ header's 10 fps.
+	beginPlay(12);
+	_phase = kPhasePlaying;
+}
+
+void Title::end() {
+	endPlay();
 	stopMusic();
 }
 
+void Title::activate(MouseButtons buttons) {
+	if (buttons != kMouseButtonsNone)
+		_activated = true;
+}
+
+void Title::handleInput(int16 key, int16 mouseX, int16 mouseY, MouseButtons mouseButtons) {
+	if (_activated)
+		mouseButtons = kMouseButtonsLeft;
+	_activated = false;
+	SEQFile::handleInput(key, mouseX, mouseY, mouseButtons);
+}
+
 void Title::handleFrameEvent() {
-	// On fame 0, start the music and fade in
-	if (getFrame() == 0) {
+	// Start the music and fade in after the first title frame is drawn.
+	if (getFrame() == 0 && !_musicStarted) {
 		playMusic();
 
 		_vm->_draw->forceBlit();
-		_vm->_palAnim->fade(_vm->_global->_pPaletteDesc, 0, 0);
+		_palette.fadeToTarget();
 	}
 }
 
 void Title::playMusic() {
+	_musicStarted = true;
 	// Look at what platform this is and play the appropriate music type
 
 	if      (_vm->getPlatform() == Common::kPlatformDOS)
@@ -91,30 +125,53 @@ void Title::playMusicAmiga() {
 }
 
 void Title::playMusicAtariST() {
-	// Play a Soundblaster composition
-
-	static const int16        titleMusic[21] = { 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 2, 0, 1, 0, 0, 0, 0, 0, -1};
-	static const char * const titleFiles[ 3] = {"baba1.snd", "baba2.snd", "baba3.snd"};
-
-	for (uint i = 0; i < ARRAYSIZE(titleFiles); i++)
-		_vm->_sound->sampleLoad(_vm->_sound->sampleGetBySlot(i), SOUND_SND, titleFiles[i]);
-
-	_vm->_sound->blasterPlayComposition(titleMusic, 0);
+	// Both ST titles repeat four native sample/count pairs, each once.
+	static const int16 titleMusic[] = {0, 1, 0, 2, -1};
+	_vm->_sound->blasterPlayComposition(titleMusic, 0, _samples, ARRAYSIZE(_samples));
 	_vm->_sound->blasterRepeatComposition(-1);
 }
 
 void Title::stopMusic() {
-	// Just stop everything
+	if (!_musicStarted)
+		return;
+	_musicStarted = false;
+	if (_vm->getPlatform() == Common::kPlatformDOS) {
+		_vm->_sound->adlibSetRepeating(0);
+		_vm->_sound->adlibStop();
+	} else if (_vm->getPlatform() == Common::kPlatformAmiga) {
+		_vm->_sound->protrackerStop();
+	} else if (_vm->getPlatform() == Common::kPlatformAtariST) {
+		_vm->_sound->blasterRepeatComposition(0);
+		_vm->_sound->blasterStopComposition();
+		for (uint i = 0; i < ARRAYSIZE(_samples); ++i)
+			_vm->_sound->blasterStop(0, &_samples[i]);
+	}
+}
 
-	_vm->_sound->adlibSetRepeating(0);
-	_vm->_sound->blasterRepeatComposition(0);
+void OnceUpon::beginTitle() {
+	beginScene(kSceneTitle);
+	fadeOut();
+	setGamePalette(10);
+	Title *title = new Title(*this);
+	_scene.reset(title);
+	_vm->_util->clearKeyBuf();
+	title->begin();
+}
 
-	_vm->_sound->adlibStop();
-	_vm->_sound->blasterStopComposition();
-	_vm->_sound->protrackerStop();
+Section::Outcome Title::step() {
+	if (_phase != kPhasePlaying)
+		return kSectionQuit;
 
-	for (int i = 0; i < ::Gob::Sound::kSoundsCount; i++)
-		_vm->_sound->sampleFree(_vm->_sound->sampleGetBySlot(i));
+	const bool playing = stepPlay();
+
+	return playing ? kSectionContinue : kSectionComplete;
+}
+
+bool Title::activateMovie(MouseButtons buttons) {
+	if (_phase != kPhasePlaying)
+		return false;
+	activate(buttons);
+	return true;
 }
 
 } // End of namespace OnceUpon

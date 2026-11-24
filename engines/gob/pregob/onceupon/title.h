@@ -28,24 +28,47 @@
 #ifndef GOB_PREGOB_ONCEUPON_TITLE_H
 #define GOB_PREGOB_ONCEUPON_TITLE_H
 
+#include "gob/sound/sounddesc.h"
+
 #include "gob/pregob/seqfile.h"
+#include "gob/pregob/onceupon/scene.h"
 
 namespace Gob {
 
 namespace OnceUpon {
 
-/** The Once Upon A Time title animation sequence. */
-class Title : public SEQFile {
+class Assets;
+class RuntimeClock;
+class Palette;
+
+/** Shared title sequence for Abracadabra and Baba Yaga. */
+class Title : public SEQFile, public Section {
 public:
-	Title(GobEngine *vm);
+	Title(OnceUpon &game);
 	~Title() override;
 
-	void play();
+	void begin();
+	Outcome step() override;
+	bool activateMovie(MouseButtons buttons) override;
+	void end();
+	void activate(MouseButtons buttons);
 
 protected:
+	void changeFrameRate(int16 rate) override;
+	void waitFrame() override;
 	void handleFrameEvent() override;
+	void handleInput(int16 key, int16 mouseX, int16 mouseY, MouseButtons mouseButtons) override;
 
 private:
+	OnceUpon &_game;
+	enum Phase { kPhaseNone, kPhasePlaying };
+	Phase _phase;
+	RuntimeClock &_clock;
+	Palette &_palette;
+	SoundDesc _samples[3];
+	bool _musicStarted;
+	bool _activated;
+
 	void playMusic();        ///< Play the title music.
 	void playMusicDOS();     ///< Play the title music of the DOS      version.
 	void playMusicAmiga();   ///< Play the title music of the Amiga    version.

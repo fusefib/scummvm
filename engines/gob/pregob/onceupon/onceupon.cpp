@@ -841,9 +841,11 @@ OnceUpon::MenuAction OnceUpon::doIngameMenu() {
 	return action;
 }
 
-SectionOutcome OnceUpon::sceneMenu() {
+SectionOutcome OnceUpon::sceneMenu(bool *resumePage) {
 	_acceptActivations = false;
 	const MenuAction action = doIngameMenu();
+	if (resumePage)
+		*resumePage = action == kMenuActionPlay;
 	discardActivationInput();
 	_acceptActivations = true;
 	if (action == kMenuActionQuit)
@@ -1248,6 +1250,12 @@ void OnceUpon::changeScore(int16 amount) {
 	}
 }
 
+Surface *OnceUpon::captureSceneTextBackground(const Surface &source) const {
+	Surface *background = new Surface(287, 24, 1);
+	background->blit(source, 17, 18, 303, 41, 0, 0);
+	return background;
+}
+
 bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart) {
 	_vm->_draw->_backSurface->blit(background, 0, 0, 286, 23, 17, 18);
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 17, 18, 303, 41);
@@ -1255,8 +1263,15 @@ bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 it
 	const bool drawn = text.draw(*_vm->_draw->_backSurface, item, *_plettre, 10, left, top, right, bottom);
 	if (drawn)
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
+	if (drawn && (!text.finished() || _readingKeys != kNoReading))
+		beginReadingPage(!text.finished() ? kReadingControls : kNoReading);
+	if (_vm->shouldQuit())
+		return text.finished();
 	_vm->_draw->blitInvalidated();
-	_vm->_video->retrace();
+	if (_readingOpening)
+		publishReadingPage();
+	else
+		_vm->_video->retrace();
 	captionStart = _clock.now();
 	return text.finished();
 }

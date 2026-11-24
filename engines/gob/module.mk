@@ -94,6 +94,9 @@ MODULE_OBJS := \
 	pregob/onceupon/input.o \
 	pregob/onceupon/copy_protection.o \
 	pregob/onceupon/animal_names.o \
+	pregob/onceupon/title.o \
+	pregob/onceupon/ending.o \
+	pregob/onceupon/storytext.o \
 	minigames/geisha/evilfish.o \
 	minigames/geisha/oko.o \
 	minigames/geisha/meter.o \

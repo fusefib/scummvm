@@ -335,7 +335,7 @@ private:
 
 	/** Handle the whole ingame menu. */
 	MenuAction doIngameMenu();
-	SectionOutcome sceneMenu();
+	SectionOutcome sceneMenu(bool *resumePage = nullptr);
 
 
 	// -- Menu button helpers --
@@ -373,6 +373,7 @@ private:
 	void drawScore(Surface &dest, uint32 score, uint8 color = 10) const;
 	void changeScore(int16 amount);
 	void beginForest(uint variant);
+	Surface *captureSceneTextBackground(const Surface &source) const;
 	bool drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart);
 	struct EncounterSpec {
 		SceneKind kind;
