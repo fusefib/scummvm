@@ -30,6 +30,7 @@
 
 #include "common/system.h"
 #include "common/array.h"
+#include "common/ptr.h"
 
 namespace Common {
 	class String;
@@ -42,6 +43,7 @@ namespace Gob {
 class GobEngine;
 class Surface;
 class CMPFile;
+class CMPFileProvider;
 
 /** A DEC file, describing a "decal" (background).
  *
@@ -53,8 +55,7 @@ class CMPFile;
 class DECFile {
 public:
 	DECFile(GobEngine *vm, const Common::String &fileName,
-	        uint16 width, uint16 height, uint8 bpp = 1);
-	~DECFile();
+	        uint16 width, uint16 height, uint8 bpp = 1, CMPFileProvider *sheets = nullptr);
 
 	/** Draw the background, including all default layer parts. */
 	void draw(Surface &dest, uint16 scene = 0) const;
@@ -85,7 +86,8 @@ private:
 		bool transp;
 	};
 
-	typedef Common::Array<CMPFile *> LayerArray;
+	typedef Common::SharedPtr<const CMPFile> Layer;
+	typedef Common::Array<Layer>     LayerArray;
 	typedef Common::Array<Part>      PartArray;
 	typedef Common::Array<PartArray> SceneArray;
 
@@ -97,17 +99,15 @@ private:
 
 	byte _hasPadding;
 
-	CMPFile *_backdrop;
+	Layer _backdrop;
 
 	LayerArray _layers;
 	SceneArray _scenes;
 
 
-	void load(Common::SeekableReadStreamEndian &dec, const Common::String &fileName);
+	void load(Common::SeekableReadStreamEndian &dec, const Common::String &fileName, CMPFileProvider *sheets);
 
-	void loadBackdrop(Common::SeekableReadStreamEndian &dec);
-
-	CMPFile *loadLayer(Common::SeekableReadStreamEndian &dec);
+	Layer loadLayer(Common::SeekableReadStreamEndian &dec, CMPFileProvider *sheets);
 
 	void loadParts(PartArray &parts, Common::SeekableReadStreamEndian &dec);
 	void loadPart(Part &part, Common::SeekableReadStreamEndian &dec);

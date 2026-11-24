@@ -41,8 +41,8 @@
 namespace Gob {
 
 DECFile::DECFile(GobEngine *vm, const Common::String &fileName,
-				 uint16 width, uint16 height, uint8 bpp) : _vm(vm),
-	_width(width), _height(height), _bpp(bpp), _hasPadding(false), _backdrop(nullptr) {
+				 uint16 width, uint16 height, uint8 bpp, CMPFileProvider *sheets) : _vm(vm),
+	_width(width), _height(height), _bpp(bpp), _hasPadding(false) {
 
 	bool bigEndian = false;
 	Common::String endianFileName = fileName;
@@ -71,21 +71,14 @@ DECFile::DECFile(GobEngine *vm, const Common::String &fileName,
 		// The big endian version pads a few fields to even size
 		_hasPadding = bigEndian;
 
-		load(sub, fileName);
+		load(sub, fileName, sheets);
 		return;
 	}
 
 	warning("DECFile::DECFile(): No such file \"%s\" (\"%s\")", endianFileName.c_str(), fileName.c_str());
 }
 
-DECFile::~DECFile() {
-	delete _backdrop;
-
-	for (LayerArray::iterator l = _layers.begin(); l != _layers.end(); ++l)
-		delete *l;
-}
-
-void DECFile::load(Common::SeekableReadStreamEndian &dec, const Common::String &fileName) {
+void DECFile::load(Common::SeekableReadStreamEndian &dec, const Common::String &fileName, CMPFileProvider *sheets) {
 	dec.skip(2); // Unused
 
 	uint16 sceneCount   = dec.readUint16();
@@ -99,12 +92,12 @@ void DECFile::load(Common::SeekableReadStreamEndian &dec, const Common::String &
 	}
 
 	// Load the backdrop
-	loadBackdrop(dec);
+	_backdrop = loadLayer(dec, sheets);
 
 	// Load the layers
 	_layers.reserve(MAX(0, layerCount - 1));
 	for (int i = 0; i < layerCount - 1; i++)
-		_layers.push_back(loadLayer(dec));
+		_layers.push_back(loadLayer(dec, sheets));
 
 	// Each scene has its own parts, sharing the backdrop and layer files.
 	_scenes.resize(sceneCount);
@@ -112,22 +105,15 @@ void DECFile::load(Common::SeekableReadStreamEndian &dec, const Common::String &
 		loadParts(_scenes[i], dec);
 }
 
-void DECFile::loadBackdrop(Common::SeekableReadStreamEndian &dec) {
-	// Interestingly, DEC files reference "FOO.LBM" instead of "FOO.CMP"
+DECFile::Layer DECFile::loadLayer(Common::SeekableReadStreamEndian &dec, CMPFileProvider *sheets) {
+	// A backdrop can be named "FOO.LBM" in the DEC. Its pixels are in FOO.CMP.
 	Common::String file = Util::setExtension(Util::readString(dec, 13), "");
 	if (_hasPadding)
 		dec.skip(1);
 
-	if (!file.empty())
-		_backdrop = new CMPFile(_vm, file, _width, _height, _bpp);
-}
-
-CMPFile *DECFile::loadLayer(Common::SeekableReadStreamEndian &dec) {
-	Common::String file = Util::setExtension(Util::readString(dec, 13), "");
-	if (_hasPadding)
-		dec.skip(1);
-
-	return file.empty() ? nullptr : new CMPFile(_vm, file, _width, _height, _bpp);
+	if (file.empty())
+		return Layer();
+	return sheets ? sheets->acquireSheet(file, _width, _height, _bpp) : Layer(new CMPFile(_vm, file, _width, _height, _bpp));
 }
 
 void DECFile::loadParts(PartArray &parts, Common::SeekableReadStreamEndian &dec) {

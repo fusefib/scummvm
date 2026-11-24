@@ -186,7 +186,7 @@ Assets::Terrain Assets::terrain(const Common::String &name, bool forestCorrectio
 		if (_terrain[i].name.equalsIgnoreCase(name) && _terrain[i].forestCorrections == forestCorrections)
 			return _terrain[i].value.lock();
 
-	DECFile *decoded = new DECFile(_vm, name, 320, 200);
+	DECFile *decoded = new DECFile(_vm, name, 320, 200, 1, this);
 	if (forestCorrections && _vm->getPlatform() == Common::kPlatformAmiga &&
 			_vm->getGameType() == kGameTypeAbracadabra && name.equalsIgnoreCase("foret1.dec")) {
 		decoded->setPartX(2, 9, 320);
