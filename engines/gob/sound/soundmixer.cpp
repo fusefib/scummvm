@@ -36,6 +36,7 @@ namespace Gob {
 
 SoundMixer::SoundMixer(Audio::Mixer &mixer, Audio::Mixer::SoundType type) : _mixer(&mixer) {
 	_playingSound = 0;
+	_16bit = false;
 
 	_rate = _mixer->getOutputRate();
 	_end = true;
