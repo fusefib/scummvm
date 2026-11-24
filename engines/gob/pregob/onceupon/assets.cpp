@@ -112,6 +112,7 @@ bool Assets::loadSample(GobEngine *vm, SoundDesc &sample, const char *name) {
 void Assets::invalidate() {
 	_animations.clear();
 	_terrain.clear();
+	_sheets.clear();
 	_images.clear();
 }
 
@@ -123,6 +124,29 @@ Assets::Terrain Assets::acquireBackground(const Common::String &name) {
 	return terrain(name);
 }
 
+Common::SharedPtr<const CMPFile> Assets::acquireSheet(const Common::String &name, uint16 width, uint16 height, uint8 bpp) {
+	// Names resolve within this mounted game. Keep the requested dimensions
+	// because a sheet without an RXY builds its rectangle from them.
+	prune(_sheets);
+	for (uint i = 0; i < _sheets.size(); ++i) {
+		const SheetEntry &entry = _sheets[i];
+		if (entry.width == width && entry.height == height && entry.bpp == bpp && entry.name.equalsIgnoreCase(name))
+			return entry.value.lock();
+	}
+
+	Common::SharedPtr<const CMPFile> sheet(new CMPFile(_vm, name, width, height, bpp));
+	if (!sheet->empty()) {
+		SheetEntry entry;
+		entry.name = name;
+		entry.width = width;
+		entry.height = height;
+		entry.bpp = bpp;
+		entry.value = sheet;
+		_sheets.push_back(entry);
+	}
+	return sheet;
+}
+
 Assets::Animation Assets::animation(const Common::String &name, const ColorMap &colors) {
 	// DataIO archive members and filesystem fallback both resolve names without case.
 	prune(_animations);
@@ -132,7 +156,7 @@ Assets::Animation Assets::animation(const Common::String &name, const ColorMap &
 
 	Animation value;
 	if (colors.identity()) {
-		value = Animation(new ANIFile(_vm, name));
+		value = Animation(new ANIFile(_vm, name, 320, 1, this));
 	} else {
 		Animation source = animation(name);
 		value = Animation(source->cloneRecolored(colors.colors), KeepSource<ANIFile>(source));

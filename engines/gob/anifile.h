@@ -31,6 +31,7 @@
 #include "common/system.h"
 #include "common/str.h"
 #include "common/array.h"
+#include "common/ptr.h"
 
 namespace Common {
 	class SeekableReadStreamEndian;
@@ -41,6 +42,7 @@ namespace Gob {
 class GobEngine;
 class Surface;
 class CMPFile;
+class CMPFileProvider;
 
 /** An ANI file, describing an animation.
  *
@@ -81,8 +83,7 @@ public:
 
 
 	ANIFile(GobEngine *vm, const Common::String &fileName,
-	        uint16 width = 320, uint8 bpp = 1);
-	~ANIFile();
+	        uint16 width = 320, uint8 bpp = 1, CMPFileProvider *sheets = nullptr);
 
 	/** Return the number of animations in this ANI file. */
 	uint16 getAnimationCount() const;
@@ -99,14 +100,12 @@ public:
 	/** Draw an animation frame. */
 	void draw(Surface &dest, uint16 animation, uint16 frame, int16 x, int16 y) const;
 
-	/** Recolor the animation sprites. */
-	void recolor(uint8 from, uint8 to);
-
 	/** Derive independent indexed sheets without rereading/parsing the resource. */
 	ANIFile *cloneRecolored(const byte colors[256]) const;
 
 private:
-	typedef Common::Array<CMPFile *> LayerArray;
+	typedef Common::SharedPtr<const CMPFile> Layer;
+	typedef Common::Array<Layer> LayerArray;
 	typedef Common::Array<Animation> AnimationArray;
 
 	/** A "chunk" of an animation frame. */
@@ -147,9 +146,9 @@ private:
 
 	// Loading helpers
 
-	void load(Common::SeekableReadStreamEndian &ani, const Common::String &fileName);
+	void load(Common::SeekableReadStreamEndian &ani, const Common::String &fileName, CMPFileProvider *sheets);
 
-	CMPFile *loadLayer(Common::SeekableReadStreamEndian &ani);
+	Layer loadLayer(Common::SeekableReadStreamEndian &ani, CMPFileProvider *sheets);
 
 	void loadAnimation(Animation &animation, FrameArray &frames,
 	                   Common::SeekableReadStreamEndian &ani);

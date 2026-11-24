@@ -30,6 +30,7 @@
 
 #include "common/system.h"
 #include "common/array.h"
+#include "common/ptr.h"
 
 namespace Common {
 	class String;
@@ -41,6 +42,15 @@ namespace Gob {
 class GobEngine;
 class Surface;
 class RXYFile;
+class CMPFile;
+
+/** Optional source of decoded, read-only sprite sheets. */
+class CMPFileProvider {
+public:
+	virtual ~CMPFileProvider() {}
+	virtual Common::SharedPtr<const CMPFile> acquireSheet(const Common::String &name,
+		uint16 width, uint16 height, uint8 bpp) = 0;
+};
 
 /** A CMP file, containing a sprite.
  *

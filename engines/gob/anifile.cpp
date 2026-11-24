@@ -39,7 +39,7 @@
 namespace Gob {
 
 ANIFile::ANIFile(GobEngine *vm, const Common::String &fileName,
-				 uint16 width, uint8 bpp) : _vm(vm),
+				 uint16 width, uint8 bpp, CMPFileProvider *sheets) : _vm(vm),
 	_width(width), _bpp(bpp), _hasPadding(false) {
 
 	bool bigEndian = false;
@@ -69,7 +69,7 @@ ANIFile::ANIFile(GobEngine *vm, const Common::String &fileName,
 		// The big endian version pads a few fields to even size
 		_hasPadding = bigEndian;
 
-		load(sub, fileName);
+		load(sub, fileName, sheets);
 		return;
 	}
 
@@ -83,19 +83,14 @@ ANIFile::ANIFile(const ANIFile &source, const byte colors[256]) :
 	assert(_bpp == 1);
 	_layers.reserve(source._layers.size());
 	for (uint i = 0; i < source._layers.size(); ++i)
-		_layers.push_back(source._layers[i] ? source._layers[i]->cloneRecolored(colors) : nullptr);
+		_layers.push_back(Layer(source._layers[i] ? source._layers[i]->cloneRecolored(colors) : nullptr));
 }
 
 ANIFile *ANIFile::cloneRecolored(const byte colors[256]) const {
 	return new ANIFile(*this, colors);
 }
 
-ANIFile::~ANIFile() {
-	for (LayerArray::iterator l = _layers.begin(); l != _layers.end(); ++l)
-		delete *l;
-}
-
-void ANIFile::load(Common::SeekableReadStreamEndian &ani, const Common::String &fileName) {
+void ANIFile::load(Common::SeekableReadStreamEndian &ani, const Common::String &fileName, CMPFileProvider *sheets) {
 	ani.skip(2); // Unused
 
 	uint16 animationCount = ani.readUint16();
@@ -113,7 +108,7 @@ void ANIFile::load(Common::SeekableReadStreamEndian &ani, const Common::String &
 
 		_layers.reserve(layerCount - 1);
 		for (int i = 0; i < layerCount - 1; i++)
-			_layers.push_back(loadLayer(ani));
+			_layers.push_back(loadLayer(ani, sheets));
 	}
 
 	_maxWidth  = 0;
@@ -258,12 +253,12 @@ void ANIFile::loadFrames(FrameArray &frames, Common::SeekableReadStreamEndian &a
 	}
 }
 
-CMPFile *ANIFile::loadLayer(Common::SeekableReadStreamEndian &ani) {
+ANIFile::Layer ANIFile::loadLayer(Common::SeekableReadStreamEndian &ani, CMPFileProvider *sheets) {
 	Common::String file = Util::setExtension(Util::readString(ani, 13), "");
 	if (_hasPadding)
 		ani.skip(1);
 
-	return new CMPFile(_vm, file, _width, 0, _bpp);
+	return sheets ? sheets->acquireSheet(file, _width, 0, _bpp) : Layer(new CMPFile(_vm, file, _width, 0, _bpp));
 }
 
 uint16 ANIFile::getAnimationCount() const {
@@ -323,11 +318,6 @@ void ANIFile::drawLayer(Surface &dest, uint16 layer, uint16 part,
 		return;
 
 	_layers[layer]->draw(dest, part, x, y, transp);
-}
-
-void ANIFile::recolor(uint8 from, uint8 to) {
-	for (LayerArray::iterator l = _layers.begin(); l != _layers.end(); ++l)
-		(*l)->recolor(from, to);
 }
 
 } // End of namespace Gob

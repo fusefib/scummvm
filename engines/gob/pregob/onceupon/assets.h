@@ -31,6 +31,7 @@
 #include "common/array.h"
 #include "common/ptr.h"
 #include "common/str.h"
+#include "gob/cmpfile.h"
 #include "gob/pregob/seqfile.h"
 
 namespace Gob {
@@ -53,7 +54,7 @@ struct ColorMap {
  * Entries are weak; live scenes own the data they use. Game resources must
  * remain fixed during a run. invalidate() drops lookups when the run ends.
  */
-class Assets : public SEQFile::ResourceProvider {
+class Assets : public SEQFile::ResourceProvider, private CMPFileProvider {
 public:
 	typedef Common::SharedPtr<const ANIFile> Animation;
 	typedef Common::SharedPtr<const DECFile> Terrain;
@@ -86,6 +87,12 @@ private:
 		bool forestCorrections;
 		Common::WeakPtr<const DECFile> value;
 	};
+	struct SheetEntry {
+		Common::String name;
+		uint16 width, height;
+		uint8 bpp;
+		Common::WeakPtr<const CMPFile> value;
+	};
 	struct ImageEntry {
 		Common::String name;
 		uint16 width, height;
@@ -96,7 +103,10 @@ private:
 	GobEngine *_vm;
 	Common::Array<AnimationEntry> _animations;
 	Common::Array<TerrainEntry> _terrain;
+	Common::Array<SheetEntry> _sheets;
 	Common::Array<ImageEntry> _images;
+
+	Common::SharedPtr<const CMPFile> acquireSheet(const Common::String &name, uint16 width, uint16 height, uint8 bpp) override;
 };
 
 } // End of namespace OnceUpon
