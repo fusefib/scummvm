@@ -101,6 +101,8 @@ MODULE_OBJS := \
 	pregob/onceupon/ending.o \
 	pregob/onceupon/storytext.o \
 	pregob/onceupon/dwelling.o \
+	pregob/onceupon/forest_actor.o \
+	pregob/onceupon/forest.o \
 	pregob/onceupon/character_preview.o \
 	minigames/geisha/evilfish.o \
 	minigames/geisha/oko.o \

@@ -383,7 +383,7 @@ private:
 	void changeScore(int16 amount);
 	void beginForest(uint variant);
 	Surface *captureSceneTextBackground(const Surface &source) const;
-	bool drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart);
+	bool drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart, bool terminal = false);
 	struct EncounterSpec {
 		SceneKind kind;
 		int16 exteriorPalette, fightPalette, frameRate, retrySection;

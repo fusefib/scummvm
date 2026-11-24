@@ -1257,15 +1257,15 @@ Surface *OnceUpon::captureSceneTextBackground(const Surface &source) const {
 	return background;
 }
 
-bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart) {
+bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart, bool terminal) {
 	_vm->_draw->_backSurface->blit(background, 0, 0, 286, 23, 17, 18);
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 17, 18, 303, 41);
 	int16 left, top, right, bottom;
 	const bool drawn = text.draw(*_vm->_draw->_backSurface, item, *_plettre, 10, left, top, right, bottom);
 	if (drawn)
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
-	if (drawn && (!text.finished() || _readingKeys != kNoReading))
-		beginReadingPage(!text.finished() ? kReadingControls : kNoReading);
+	if (drawn && (!text.finished() || terminal || _readingKeys != kNoReading))
+		beginReadingPage(!text.finished() ? kReadingControls : terminal ? kReadingAny : kNoReading);
 	if (_vm->shouldQuit())
 		return text.finished();
 	_vm->_draw->blitInvalidated();
