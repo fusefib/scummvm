@@ -40,7 +40,7 @@
 namespace Gob {
 
 SEQFile::SEQFile(GobEngine *vm, const Common::String &fileName, ResourceProvider *resources) : _vm(vm),
-	_frame(0), _abortPlay(false), _savedFrameRate(0),
+	_frame(0), _abortPlay(false), _authoredFrameRate(0), _savedFrameRate(0),
 	_playing(false),
 	_nextBackgroundKey(0) {
 	for (uint i = 0; i < kObjectCount; i++) {
@@ -99,7 +99,7 @@ void SEQFile::load(Common::SeekableReadStream &seq, ResourceProvider *resources)
 			Common::SharedPtr<const ANIFile>(new ANIFile(_vm, ani)));
 	}
 
-	seq.skip(2); // The scene selects the rate instead of using this header word.
+	_authoredFrameRate = MAX<int16>(0, seq.readSint16LE());
 
 	// Load background change keys
 
@@ -175,7 +175,7 @@ void SEQFile::beginPlay(uint16 frameRate) {
 	// Set the frame rate
 
 	_savedFrameRate = _vm->_util->getFrameRate();
-	changeFrameRate(frameRate);
+	changeFrameRate(frameRate ? frameRate : _authoredFrameRate);
 	_playing = true;
 }
 

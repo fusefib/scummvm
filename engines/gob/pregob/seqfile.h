@@ -68,8 +68,8 @@ public:
 	SEQFile(GobEngine *vm, const Common::String &fileName, ResourceProvider *resources = nullptr);
 	virtual ~SEQFile();
 
-	/** Start frame-by-frame playback at the rate selected by the scene. */
-	void beginPlay(uint16 frameRate);
+	/** Start frame-by-frame playback. Zero uses the rate in the SEQ header. */
+	void beginPlay(uint16 frameRate = 0);
 	bool stepPlay();
 	void endPlay();
 	bool isAborted() const { return _abortPlay; }
@@ -143,6 +143,7 @@ private:
 	uint16 _frame;     ///< The current frame.
 	bool   _abortPlay; ///< Was the end of the playback requested?
 
+	int16 _authoredFrameRate;
 	int16 _savedFrameRate;
 	bool _playing;
 	// Consumed keys stay consumed across frame-word wraparound.
