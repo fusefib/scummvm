@@ -1244,7 +1244,9 @@ SectionOutcome OnceUpon::stepScene() {
 		return kSectionRestore;
 	if (!_scene || _vm->shouldQuit() || _quit)
 		return kSectionQuit;
-	const SectionOutcome outcome = _scene->step();
+	SectionOutcome outcome = _scene->step();
+	if (outcome == kSectionSkipRoom && !_pendingRestore)
+		outcome = skipForestRoom();
 	return _pendingRestore ? kSectionRestore : outcome;
 }
 
@@ -1423,7 +1425,7 @@ bool OnceUpon::acceptCaption(const SceneInput &input, bool &pressed) {
 void OnceUpon::discardActivationInput() {
 	expireReadingInput();
 	_activations.clear();
-	_keyboard.clearForestPress();
+	_keyboard.clearForestInput();
 	_freshInput = true;
 	if (!_pendingRestore)
 		_vm->_util->clearKeyBuf();

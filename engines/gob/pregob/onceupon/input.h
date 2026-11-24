@@ -33,7 +33,7 @@ namespace Gob {
 namespace OnceUpon {
 
 enum InputContext { kPointerInput, kForestInput, kTextInput };
-
+const Common::CustomEventType kSkipLevel = 1;
 
 Common::KeymapArray createKeymaps();
 
@@ -49,11 +49,13 @@ public:
 	static void moveActionPointer(int16 &x, int16 &y, uint32 heldKeys);
 	void releaseActions();
 	bool notifyEvent(const Common::Event &event) override;
-	bool takeFocusLost();
 	uint32 heldKeys() const;
 	uint32 forestPress() const { return _forestPress; }
 	void trackForestPress(bool track) { _trackForestPress = track; }
 	void clearForestPress() { _forestPress = 0; }
+	bool takeSkipLevel();
+	bool takeFocusLost();
+	void clearForestInput();
 	uint8 confirmationKeys() const;
 
 private:
@@ -63,6 +65,7 @@ private:
 	InputContext _context;
 	uint32 _forestPress;
 	bool _trackForestPress;
+	bool _skipLevel;
 	bool _focusLost;
 	void applyContext();
 	bool mappedControlsActive() const;

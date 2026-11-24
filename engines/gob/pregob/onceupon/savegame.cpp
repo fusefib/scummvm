@@ -252,8 +252,7 @@ void OnceUpon::commitRestore() {
 	_vm->_draw->_noInvalidated = false;
 	hideCursor();
 	if (checkpoint.forest()) {
-		const uint variant = _progress.section == 4 ? 0 : _progress.section == 8 ? 1 : 2;
-		beginForest(variant, checkpoint.room, checkpoint.energy);
+		beginForestRoom(checkpoint.room, checkpoint.energy);
 	} else if (!intro) {
 		beginStorySection();
 	}

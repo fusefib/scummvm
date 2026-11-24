@@ -301,7 +301,7 @@ void Forest::drawBabaDosWipePass(uint pass) {
 }
 
 void Forest::enterScene(bool resetPlayer, bool decorations, bool publish) {
-	_game._keyboard.clearForestPress();
+	_game._keyboard.clearForestInput();
 	ForestActor::State &player = _actors[kPlayer]._state;
 	if (resetPlayer) {
 		_comment = 0;
@@ -524,6 +524,20 @@ void OnceUpon::beginForest(uint variant, uint room, uint energy) {
 	forest->enter(variant, room, energy);
 }
 
+void OnceUpon::beginForestRoom(uint room, uint energy) {
+	const uint variant = _progress.section == 4 ? 0 : _progress.section == 8 ? 1 : 2;
+	beginForest(variant, room, energy);
+}
+
+SectionOutcome OnceUpon::skipForestRoom() {
+	const Forest &forest = *static_cast<const Forest *>(_scene.get());
+	const uint nextRoom = forest.room() + 1;
+	if (nextRoom == (_progress.section == 12 ? 12U : 6U))
+		return kSectionComplete;
+	beginForestRoom(nextRoom, forest.energy());
+	return kSectionContinue;
+}
+
 void Forest::loadSounds() {
 	const char *attack = _route == kFirstOutward ? "mag.snd" : "eclair.snd";
 	if (returning() && _vm->getGameType() == kGameTypeAbracadabra)
@@ -633,6 +647,8 @@ Section::Outcome Forest::step() {
 	const OnceUpon::SceneInput input = _game.readSceneInput(reading ? OnceUpon::kReadingInput : OnceUpon::kSceneInput);
 	if (input.key == kKeyEscape || input.buttons == kMouseButtonsRight)
 		return _game.sceneMenu();
+	if (_game._keyboard.takeSkipLevel())
+		return kSectionSkipRoom;
 	const bool accepted = input.activation;
 	if (_phase == kPhaseText) {
 		if (_game.captionReady(accepted, _captionStart))
@@ -860,6 +876,7 @@ Section::Outcome Forest::step() {
 		_game.captureRoomCheckpoint(room(), energy());
 		if (usesBabaDosWipe()) {
 			showBabaDosWipe();
+			_game._keyboard.clearForestInput();
 			return _game._pendingRestore ? kSectionRestore :
 				(_vm->shouldQuit() || _game._quit) ? kSectionQuit : kSectionContinue;
 		}

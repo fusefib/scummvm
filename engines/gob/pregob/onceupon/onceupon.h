@@ -433,6 +433,8 @@ private:
 	void drawScore(Surface &dest, uint32 score, uint8 color = 10) const;
 	void changeScore(int16 amount);
 	void beginForest(uint variant, uint room = 0, uint energy = 180);
+	void beginForestRoom(uint room, uint energy);
+	SectionOutcome skipForestRoom();
 	Surface *captureSceneTextBackground(const Surface &source) const;
 	bool drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart, bool terminal = false);
 	struct EncounterSpec {

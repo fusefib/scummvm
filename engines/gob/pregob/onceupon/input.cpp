@@ -90,6 +90,9 @@ Common::KeymapArray createKeymaps() {
 	addKey(*forest, "CROUCH_RIGHT", _("Crouch right"), KEYCODE_PAGEDOWN, 0, "PAGEDOWN", "KP3");
 	addKey(*forest, "CAST", _("Cast a spell"), KEYCODE_SPACE, ASCII_SPACE, "SPACE", "JOY_X");
 	addKey(*forest, "STOP", _("Stop"), KEYCODE_LCTRL, 0, "LCTRL", "RCTRL");
+	action = new Action("SKIP_LEVEL", _("Skip Level"));
+	action->setCustomEngineActionEvent(kSkipLevel);
+	forest->addAction(action);
 
 	// Ctrl+F5 and controller Start remain the global map's main-menu actions.
 	KeymapArray maps;
@@ -128,7 +131,24 @@ void KeyboardInput::end() {
 
 void KeyboardInput::releaseActions() {
 	memset(_mapped, 0, sizeof(_mapped));
+	clearForestInput();
+}
+
+bool KeyboardInput::takeSkipLevel() {
+	const bool skip = _skipLevel;
+	_skipLevel = false;
+	return skip;
+}
+
+bool KeyboardInput::takeFocusLost() {
+	const bool lost = _focusLost;
+	_focusLost = false;
+	return lost;
+}
+
+void KeyboardInput::clearForestInput() {
 	clearForestPress();
+	_skipLevel = false;
 }
 
 void KeyboardInput::setContext(InputContext context) {
@@ -184,6 +204,11 @@ bool KeyboardInput::isControlKey(Common::KeyCode key) {
 }
 
 bool KeyboardInput::notifyEvent(const Common::Event &event) {
+	if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START && event.customType == kSkipLevel &&
+		_context == kForestInput && mappedControlsActive()) {
+		_skipLevel = true;
+		return true;
+	}
 	if (event.type == Common::EVENT_FOCUS_LOST) {
 		_focusLost = true;
 		memset(_pressed, 0, sizeof(_pressed));
@@ -214,12 +239,6 @@ bool KeyboardInput::notifyEvent(const Common::Event &event) {
 		return true;
 	}
 	return false;
-}
-
-bool KeyboardInput::takeFocusLost() {
-	const bool lost = _focusLost;
-	_focusLost = false;
-	return lost;
 }
 
 uint32 KeyboardInput::heldKeys() const {

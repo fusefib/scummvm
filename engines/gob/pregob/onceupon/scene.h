@@ -43,7 +43,8 @@ enum SectionOutcome {
 	kSectionRetry,
 	kSectionRestart,
 	kSectionQuit,
-	kSectionRestore
+	kSectionRestore,
+	kSectionSkipRoom
 };
 
 /** An active story controller. The story loop adopts loads after step returns. */
