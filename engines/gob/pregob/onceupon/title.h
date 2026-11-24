@@ -49,8 +49,10 @@ public:
 
 	void begin();
 	Outcome step() override;
+	void suspendMovie() override { suspendPlay(); }
 	bool activateMovie(MouseButtons buttons) override;
 	void end();
+	bool atSaveBoundary() const override { return hasPublishedFrame(); }
 	void activate(MouseButtons buttons);
 
 protected:

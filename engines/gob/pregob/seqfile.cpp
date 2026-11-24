@@ -41,7 +41,7 @@ namespace Gob {
 
 SEQFile::SEQFile(GobEngine *vm, const Common::String &fileName, ResourceProvider *resources) : _vm(vm),
 	_frame(0), _abortPlay(false), _authoredFrameRate(0), _savedFrameRate(0),
-	_playing(false),
+	_playing(false), _framePublished(false), _suspended(false),
 	_nextBackgroundKey(0) {
 	for (uint i = 0; i < kObjectCount; i++) {
 		_objects[i].object = nullptr;
@@ -180,19 +180,30 @@ void SEQFile::beginPlay(uint16 frameRate) {
 }
 
 bool SEQFile::stepPlay() {
-	if (!_playing || _vm->shouldQuit() || _abortPlay)
+	if (!_playing || _suspended || _vm->shouldQuit() || _abortPlay)
 		return false;
 
-	playFrame();
-	handleFrameEvent();
-	_vm->_draw->blitInvalidated();
+	if (!_framePublished) {
+		playFrame();
+		handleFrameEvent();
+		if (_suspended)
+			return true;
+		_vm->_draw->blitInvalidated();
+		_framePublished = true;
+	}
 
 	// Wait for the frame to end
+	if (_suspended)
+		return true;
 	waitFrame();
+	if (_suspended)
+		return true;
 
 	// Handle input
 
 	_vm->_util->processInput();
+	if (_suspended)
+		return true;
 
 	int16 key = _vm->_util->checkKey();
 
@@ -202,6 +213,7 @@ bool SEQFile::stepPlay() {
 	_vm->_util->forceMouseUp();
 
 	handleInput(key, mouseX, mouseY, mouseButtons);
+	_framePublished = false;
 
 	++_frame;
 	return !_vm->shouldQuit() && !_abortPlay;
@@ -211,6 +223,7 @@ void SEQFile::endPlay() {
 	if (_playing)
 		changeFrameRate(_savedFrameRate);
 	_playing = false;
+	_framePublished = _suspended = false;
 }
 
 void SEQFile::playFrame() {

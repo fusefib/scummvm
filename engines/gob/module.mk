@@ -100,6 +100,7 @@ MODULE_OBJS := \
 	pregob/onceupon/charactercreation.o \
 	pregob/onceupon/ending.o \
 	pregob/onceupon/storytext.o \
+	pregob/onceupon/savegame.o \
 	pregob/onceupon/dwelling.o \
 	pregob/onceupon/forest_actor.o \
 	pregob/onceupon/forest.o \

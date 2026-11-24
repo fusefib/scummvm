@@ -70,15 +70,19 @@ const int16 Forest::kDecorationRates[2][6][5] = {
 // Return legs reuse the original DEC scenes in reverse order. Their LE
 // tables and checkpoint offsets remain distinct from the outward passages.
 const Forest::RouteDescription Forest::kRoutes[4] = {
-	{"foret1.dec", "animaux2.ani", 'G',  1, 0, 0},
-	{"foret2.dec", "animaux1.ani", 'M',  1, 1, 1},
-	{"foret2.dec", "animaux1.ani", 'R', -1, 1, 2},
-	{"foret1.dec", "animaux2.ani", 'F', -1, 0, 2}
+	{"foret1.dec", "animaux2.ani", 'G',  1, 0, 0, 0},
+	{"foret2.dec", "animaux1.ani", 'M',  1, 1, 1, 0},
+	{"foret2.dec", "animaux1.ani", 'R', -1, 1, 2, 0},
+	{"foret1.dec", "animaux2.ani", 'F', -1, 0, 2, 6}
 };
 
 static void alignActorArea(Common::Rect &area) {
 	area.left &= ~7;
 	area.right = ((area.right - 1) | 7) + 1;
+}
+
+uint Forest::room() const {
+	return routeDescription().checkpointBase + (returning() ? 5 - _sceneIndex : _sceneIndex);
 }
 
 const int16 Forest::kSceneScore[3] = {1000, 1500, 3000};
@@ -103,12 +107,15 @@ Forest::~Forest() {
 	delete _frame;
 }
 
-void Forest::prepare(uint initialVariant, uint difficulty, byte hair, byte jacket, byte trousers) {
-	assert(initialVariant < 3 && difficulty < 3);
-	_route = (Route)initialVariant;
+void Forest::prepare(uint initialVariant, uint difficulty, byte hair, byte jacket, byte trousers,
+		uint room, uint energy) {
+	assert(initialVariant < 3 && difficulty < 3 && room < (initialVariant == 2 ? 12 : 6));
+	assert(energy > 0 && energy <= 180 && energy % 5 == 0);
+	// Save room addresses span both return legs; resources still use scene 0..5.
+	_route = initialVariant == 2 && room >= 6 ? kReturnFirst : (Route)initialVariant;
 	_difficulty = difficulty;
-	_sceneIndex = returning() ? 5 : 0;
-	_energy = 180;
+	_sceneIndex = returning() ? 5 - room % 6 : room;
+	_energy = energy;
 	const uint height = _vm->getPlatform() == Common::kPlatformAmiga ? 160 : 200;
 	_background = new Surface(320, height, 1);
 	_frame = new Surface(320, height, 1);
@@ -470,11 +477,11 @@ void Forest::render() {
 	}
 }
 
-void OnceUpon::beginForest(uint variant) {
+void OnceUpon::beginForest(uint variant, uint room, uint energy) {
 	beginScene(kSceneForest);
 	Forest *forest = new Forest(*this);
 	_scene.reset(forest);
-	forest->enter(variant);
+	forest->enter(variant, room, energy);
 }
 
 void Forest::loadSounds() {
@@ -508,7 +515,7 @@ void Forest::drawPage() {
 		kPhasePlaying : kPhaseText;
 }
 
-void Forest::enter(uint route) {
+void Forest::enter(uint route, uint room, uint energy) {
 	_game.fadeOut();
 	_game.hideCursor();
 	_game.setGamePalette(4);
@@ -518,7 +525,7 @@ void Forest::enter(uint route) {
 	colors.replace(2, 10);
 	colors.replace(7, 15);
 	const Assets::Image heads = _assets.image("elchoix.cmp", 320, 200, colors);
-	prepare(route, _game._progress.difficulty, _game._progress.hair == 7 ? 15 : 12, _game._progress.jacket, _game._progress.trousers);
+	prepare(route, _game._progress.difficulty, _game._progress.hair == 7 ? 15 : 12, _game._progress.jacket, _game._progress.trousers, room, energy);
 	Surface portrait(41, 31, 1);
 	CharacterCreation::drawPortrait(*heads, _game._progress.head, portrait);
 	drawInterface(portrait);
@@ -526,10 +533,14 @@ void Forest::enter(uint route) {
 	loadText(routeDescription().terrainFamily == 0);
 	loadSounds();
 	begin();
-
+	_game.captureRoomCheckpoint(this->room(), this->energy());
 	_game._clock.setFrameRate(12);
 	_game.discardActivationInput();
+	if (_game._pendingRestore)
+		return;
 	drawCaption(0);
+	if (_game._pendingRestore)
+		return;
 	_game.drawScore();
 	_vm->_draw->forceBlit();
 	_game.fadeIn();
@@ -540,10 +551,10 @@ void Forest::enter(uint route) {
 }
 
 void Forest::showBabaDosWipe() {
-
+	_game._yield = OnceUpon::kNativeEffectYield;
 	// The patterned DOS path has nine retrace waits. Approximate its timing
 	// with 50 ms host slots; native startup benchmarking may skip the pattern.
-	for (uint slot = 0; slot < 9 && !_vm->shouldQuit() && !_game._quit; ++slot) {
+	for (uint slot = 0; slot < 9 && !_game._pendingRestore && !_vm->shouldQuit() && !_game._quit; ++slot) {
 		const uint32 started = _game._clock.now();
 
 		if (slot)
@@ -555,7 +566,7 @@ void Forest::showBabaDosWipe() {
 #endif
 		for (;;) {
 			_vm->_util->processInput();
-			if (_vm->shouldQuit() || _game._quit)
+			if (_game._pendingRestore || _vm->shouldQuit() || _game._quit)
 				break;
 #ifdef USE_TTS
 			_game._narration.update(g_system->getMillis());
@@ -567,12 +578,12 @@ void Forest::showBabaDosWipe() {
 			_vm->_util->delay(MAX<uint32>(_vm->_global->_speedFactor, MIN<uint32>(10, 50 - elapsed)));
 		}
 	}
-	if (!_vm->shouldQuit() && !_game._quit) {
+	if (!_game._pendingRestore && !_vm->shouldQuit() && !_game._quit) {
 		drawBabaDosWipePass(8);
 		_vm->_draw->blitInvalidated();
 		_vm->_video->retrace();
 	}
-
+	_game._yield = OnceUpon::kNotYielded;
 }
 
 Section::Outcome Forest::step() {
@@ -614,6 +625,8 @@ Section::Outcome Forest::step() {
 	ForestActor &actor = _actors[kPlayer];
 	ForestActor::State &player = actor._state;
 	for (;;) {
+		if (_game._pendingRestore)
+			return kSectionRestore;
 		switch (_resume) {
 		case kFrameStart:
 			stepDecorations();
@@ -621,6 +634,8 @@ Section::Outcome Forest::step() {
 			if (++_comment == 50) {
 				_comment = 0;
 				drawCaption(2, _vm->_util->getRandom(4));
+				if (_game._pendingRestore)
+					return kSectionRestore;
 				if (_phase == kPhaseText) {
 					_game.endFrame();
 					return kSectionContinue;
@@ -648,6 +663,8 @@ Section::Outcome Forest::step() {
 				if (cue >= 0 && !_sounds[cue].empty())
 					_game.replaceSample(_sounds[cue], repeats);
 			}
+			if (_game._pendingRestore)
+				return kSectionRestore;
 
 			startProjectile();
 			for (uint i = 0; i < 4; ++i) {
@@ -661,6 +678,8 @@ Section::Outcome Forest::step() {
 					effect.place(enemy._state.lastDrawnArea.left, 140, 0);
 				effect._state.status = ForestActor::kActive;
 				_game.changeScore(kEnemyScore[routeDescription().weaponTier]);
+				if (_game._pendingRestore)
+					return kSectionRestore;
 			}
 			activateEnemies();
 			if ((player.animation == 18 || player.animation == 19) && player.frame == 4 && (input.keys & 0x60002))
@@ -670,11 +689,15 @@ Section::Outcome Forest::step() {
 				_transition = !returning() ? (_sceneIndex == 5 ? kEnd : kNextScene) :
 					_sceneIndex ? kNextScene : _route == kReturnSecond ? kFirstForest : kEnd;
 				_game.changeScore(kSceneScore[routeDescription().weaponTier]);
+				if (_game._pendingRestore)
+					return kSectionRestore;
 				_resume = kCrossing;
 				if (_transition == kNextScene)
 					drawCaption(3, _vm->_util->getRandom(3));
 				else
 					drawCaption(!returning() ? 6 : 7);
+				if (_game._pendingRestore)
+					return kSectionRestore;
 				if (_phase == kPhaseText) {
 					_game.endFrame();
 					return kSectionContinue;
@@ -698,11 +721,15 @@ Section::Outcome Forest::step() {
 					player.x = player.lastDrawnArea.left;
 					actor.setAnimation(player.direction == 0 ? 50 : 51);
 					_game.changeScore(kDamageScore[routeDescription().weaponTier]);
+					if (_game._pendingRestore)
+						return kSectionRestore;
 				}
 			}
 			if ((player.animation == 50 || player.animation == 51) && actor.lastFrame()) {
 				_resume = kLoseEnergy;
 				drawCaption(4, _vm->_util->getRandom(4));
+				if (_game._pendingRestore)
+					return kSectionRestore;
 				if (_phase == kPhaseText) {
 					_game.endFrame();
 					return kSectionContinue;
@@ -738,6 +765,8 @@ Section::Outcome Forest::step() {
 				loadText(true);
 				if (_vm->getPlatform() == Common::kPlatformAmiga)
 					loadSounds();
+				if (_game._pendingRestore)
+					return kSectionRestore;
 			} else {
 				_sceneIndex += routeDescription().sceneStep;
 			}
@@ -755,6 +784,8 @@ Section::Outcome Forest::step() {
 				_energy = 180;
 				drawEnergy();
 				drawCaption(5);
+				if (_game._pendingRestore)
+					return kSectionRestore;
 				if (_phase == kPhaseText) {
 					_game.endFrame();
 					return kSectionContinue;
@@ -766,12 +797,13 @@ Section::Outcome Forest::step() {
 			_resume = kAdvance;
 			break;
 		}
-		// A wipe yields so
+		// Commit the prepared attempt before presentation. A wipe yields so
 		// the driver reads fresh input before damage or animation updates.
-
+		_game.captureRoomCheckpoint(room(), energy());
 		if (usesBabaDosWipe()) {
 			showBabaDosWipe();
-			return (_vm->shouldQuit() || _game._quit) ? kSectionQuit : kSectionContinue;
+			return _game._pendingRestore ? kSectionRestore :
+				(_vm->shouldQuit() || _game._quit) ? kSectionQuit : kSectionContinue;
 		}
 	}
 }

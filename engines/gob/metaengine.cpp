@@ -27,7 +27,6 @@
 
 #include "engines/advancedDetector.h"
 
-#include "common/config-manager.h"
 #include "common/hashmap.h"
 
 #include "common/translation.h"
@@ -63,7 +62,6 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 		}
 	},
 #endif
-
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 
@@ -76,6 +74,10 @@ public:
 	bool hasFeature(MetaEngineFeature f) const override;
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const Gob::GOBGameDescription *desc) const override;
+	SaveStateList listSaves(const char *target) const override;
+	bool removeSaveState(const char *target, int slot) const override;
+	SaveStateDescriptor querySaveMetaInfos(const char *target, int slot) const override;
+	Common::String getSavegameFile(int saveGameIdx, const char *target = nullptr) const override;
 
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
 		return optionsList;
@@ -83,14 +85,66 @@ public:
 };
 
 bool GobMetaEngine::hasFeature(MetaEngineFeature f) const {
+	return f == kSupportsListSaves ||
+		f == kSupportsDeleteSave ||
+		f == kSavesSupportMetaInfo ||
+		f == kSavesSupportThumbnail ||
+		f == kSavesSupportCreationDate ||
+		f == kSavesSupportPlayTime ||
+		f == kSimpleSavesNames ||
+		f == kSavesUseExtendedFormat;
+}
+
+static bool supportsPreGobSaves(const Common::String &gameId) {
+	static const char *const supportedGames[] = {
+		"abracadabra",
+		"babayaga"
+	};
+
+	for (uint i = 0; i < ARRAYSIZE(supportedGames); ++i) {
+		if (gameId == supportedGames[i])
+			return true;
+	}
 	return false;
 }
 
+SaveStateList GobMetaEngine::listSaves(const char *target) const {
+	if (!target || !supportsPreGobSaves(getGameId(target)))
+		return SaveStateList();
+	return MetaEngine::listSaves(target);
+}
+
+bool GobMetaEngine::removeSaveState(const char *target, int slot) const {
+	return target && supportsPreGobSaves(getGameId(target)) &&
+		MetaEngine::removeSaveState(target, slot);
+}
+
+SaveStateDescriptor GobMetaEngine::querySaveMetaInfos(
+		const char *target, int slot) const {
+	if (!target || !supportsPreGobSaves(getGameId(target)))
+		return SaveStateDescriptor();
+	return MetaEngine::querySaveMetaInfos(target, slot);
+}
+
+Common::String GobMetaEngine::getSavegameFile(int saveGameIdx,
+		const char *target) const {
+	if (target && supportsPreGobSaves(getGameId(target)))
+		return MetaEngine::getSavegameFile(saveGameIdx, target);
+	if (!target)
+		target = getName();
+	return saveGameIdx == kSavegameFilePattern
+		? Common::String::format("%s.s##", target)
+		: Common::String::format("%s.s%02d", target, saveGameIdx);
+}
+
 bool Gob::GobEngine::hasFeature(EngineFeature f) const {
+	const bool isPreGobGame = _gameType == kGameTypeAbracadabra || _gameType == kGameTypeBabaYaga;
 	// Only Woodruff reads the subtitles setting (Init_v4::updateConfig)
 	return
 		(f == kSupportsReturnToLauncher) ||
-		(f == kSupportsSubtitleOptions && _gameType == kGameTypeWoodruff);
+		(f == kSupportsSubtitleOptions && _gameType == kGameTypeWoodruff) ||
+		(isPreGobGame &&
+		(f == kSupportsLoadingDuringRuntime || f == kSupportsSavingDuringRuntime));
 }
 
 Common::Error GobMetaEngine::createInstance(OSystem *syst, Engine **engine, const Gob::GOBGameDescription *gd) const {

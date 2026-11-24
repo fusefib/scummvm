@@ -78,6 +78,10 @@ public:
 	void handleMouseDown(int16 x, int16 y, MouseButtons buttons) override;
 	bool handleKeyEvent(const Common::Event &event) override;
 	void pauseChanged(bool paused, uint32 duration) override;
+	bool canSaveGameState(Common::U32String *msg = nullptr) const override;
+	bool canLoadGameState(Common::U32String *msg = nullptr) const override;
+	Common::Error saveGameStream(Common::WriteStream &stream, bool isAutosave = false) const override;
+	Common::Error loadGameStream(Common::SeekableReadStream &stream) override;
 
 
 private:
@@ -248,8 +252,25 @@ private:
 	void expireReadingInput();
 	void endReadingPage();
 
+	enum YieldPoint { kNotYielded, kFrameYield, kMovieYield, kInputYield, kNativeEffectYield };
+	YieldPoint _yield;
 	enum IntroStage { kIntroLoading, kIntroQuote, kIntroTitle, kIntroGameTitle, kIntroReady, kIntroDone };
 	IntroStage _introStage;
+	// A committed entry, independent of the live scene's partial progress.
+	struct Checkpoint {
+		Progress progress;
+		uint32 randomSeed;
+		byte room, energy;
+		bool valid;
+		Checkpoint() : randomSeed(0), room(0), energy(0), valid(false) {}
+		bool intro() const { return valid && progress.section == 0; }
+		bool forest() const {
+			return progress.section == 4 || progress.section == 8 || progress.section == 12;
+		}
+	};
+	Checkpoint _checkpoint;
+	Checkpoint *_pendingRestore;
+	bool _initialized;
 	SoundDesc _commonSounds[kSoundCount];
 	void playSample(SoundDesc &sample, int16 repeats, int16 frequency = 0);
 	void replaceSample(SoundDesc &sample, int16 repeats, int16 frequency = 0);
@@ -282,12 +303,18 @@ private:
 	void narrateText(const Common::String &text);
 #endif
 	void resetProgress();
+	void captureChapterCheckpoint();
+	void captureRoomCheckpoint(uint room, uint energy);
+	bool validCheckpoint(const Checkpoint &checkpoint) const;
+	void commitRestore();
+	void discardRestore();
 	void beginScene(SceneKind kind);
 	void finishScene();
 	void beginStorySection();
 	SectionOutcome stepScene();
-	void leaveScene();
+	void leaveScene(SectionOutcome outcome);
 	void completeScene(SectionOutcome outcome);
+	bool atSaveBoundary() const;
 #ifdef USE_TTS
 	void cancelNarration();
 	void publishCaptionNarration();
@@ -401,7 +428,7 @@ private:
 	void drawScore(uint8 color = 10);
 	void drawScore(Surface &dest, uint32 score, uint8 color = 10) const;
 	void changeScore(int16 amount);
-	void beginForest(uint variant);
+	void beginForest(uint variant, uint room = 0, uint energy = 180);
 	Surface *captureSceneTextBackground(const Surface &source) const;
 	bool drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart, bool terminal = false);
 	struct EncounterSpec {

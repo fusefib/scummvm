@@ -279,7 +279,11 @@ SectionOutcome DwellingSearch::step() {
 		_game._activations.clear();
 		_game.changeScore(1000);
 		// A load during the score flash must not publish the old result caption.
+		if (_game._pendingRestore)
+			return kSectionRestore;
 		drawCaption(15);
+		if (_game._pendingRestore)
+			return kSectionRestore;
 		_vm->_draw->blitInvalidated();
 		_game.publishReadingPage();
 		return kSectionContinue;

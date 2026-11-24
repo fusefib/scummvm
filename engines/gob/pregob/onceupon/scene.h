@@ -42,21 +42,24 @@ enum SectionOutcome {
 	kSectionComplete,
 	kSectionRetry,
 	kSectionRestart,
-	kSectionQuit
+	kSectionQuit,
+	kSectionRestore
 };
 
-/** An active story controller. The story loop advances after step returns. */
+/** An active story controller. The story loop adopts loads after step returns. */
 class Section {
 public:
 	typedef SectionOutcome Outcome;
 	virtual ~Section() {}
 	virtual Outcome step() = 0;
+	virtual bool atSaveBoundary() const { return false; }
 	virtual bool acceptsKeyRepeat(const Common::KeyState &) const { return false; }
 	virtual void resumeAfterPause() {}
+	virtual void suspendMovie() {}
 	virtual bool activateMovie(MouseButtons) { return false; }
 };
 
-// Story choices shared by the scenes.
+// Story choices shared by the live game and its committed entry checkpoint.
 struct Progress {
 	int16 difficulty, section, maximumSection;
 	uint32 score;

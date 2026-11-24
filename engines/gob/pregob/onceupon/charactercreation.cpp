@@ -336,6 +336,8 @@ void CharacterCreation::drawCaption(uint item) {
 	syncCaption();
 	if (item == 11)
 		_game.beginReadingPage(OnceUpon::kReadingAny);
+	if (_game._pendingRestore)
+		return;
 	_vm->_draw->blitInvalidated();
 	if (item == 11)
 		_game.publishReadingPage();
@@ -355,10 +357,10 @@ Section::Outcome CharacterCreation::stepNameReveal() {
 		_vm->_draw->blitInvalidated();
 		_vm->_video->retrace();
 		_vm->_util->delay(20);
-
+		_game._yield = OnceUpon::kInputYield;
 		_vm->_util->processInput();
-
-		return kSectionContinue;
+		_game._yield = OnceUpon::kNotYielded;
+		return _game._pendingRestore ? kSectionRestore : kSectionContinue;
 	}
 
 	_frame->blit(*_background);
@@ -409,10 +411,12 @@ Section::Outcome CharacterCreation::step() {
 
 	if (input.awaitingRelease) {
 		_game.waitInputDelay(10);
-
+		if (_game._pendingRestore)
+			return kSectionRestore;
+		_game._yield = OnceUpon::kInputYield;
 		_vm->_util->processInput();
-
-		return kSectionContinue;
+		_game._yield = OnceUpon::kNotYielded;
+		return _game._pendingRestore ? kSectionRestore : kSectionContinue;
 	}
 
 	const bool timedOut = _game._clock.now() - _activityStart > 15000;
@@ -421,6 +425,8 @@ Section::Outcome CharacterCreation::step() {
 		KeyboardInput::clampActionPointer(input.x, input.y);
 		_vm->_util->setMousePos(input.x, input.y);
 	}
+	if (_game._pendingRestore)
+		return kSectionRestore;
 	_phase = kPhasePlaying;
 	_awaitNameRelease = false;
 
@@ -438,6 +444,8 @@ Section::Outcome CharacterCreation::step() {
 			_game.stopSound();
 			_game.playSound(OnceUpon::kSoundJump);
 		}
+		if (_game._pendingRestore)
+			return kSectionRestore;
 
 		const bool click = input.activation || (pressed && !_previousPress);
 		_previousPress = pressed;
@@ -447,6 +455,8 @@ Section::Outcome CharacterCreation::step() {
 #endif
 			_game.stopSound();
 			_game.playSound(OnceUpon::kSoundClick);
+			if (_game._pendingRestore)
+				return kSectionRestore;
 		}
 	}
 
@@ -460,6 +470,8 @@ Section::Outcome CharacterCreation::step() {
 			int16 left, top, right, bottom;
 			_text->clear(captionBackground(), left, top, right, bottom);
 			syncCaption();
+			if (_game._pendingRestore)
+				return kSectionRestore;
 			prepareName();
 			return stepNameReveal();
 		}
@@ -485,6 +497,8 @@ Section::Outcome CharacterCreation::step() {
 #ifdef USE_TTS
 			_game.publishCaptionNarration();
 #endif
+			if (_game._pendingRestore)
+				return kSectionRestore;
 		} else if (editName(input.key)) {
 #ifdef USE_TTS
 			_game._narration.cancel();

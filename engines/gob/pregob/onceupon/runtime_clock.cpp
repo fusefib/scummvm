@@ -39,7 +39,7 @@ namespace OnceUpon {
 
 RuntimeClock::RuntimeClock(GobEngine *vm) : _vm(vm), _time(0),
 	_lastWall(g_system->getMillis()), _speed(MAX<int16>(1, vm->_global->_speedFactor)),
-	_pauseDepth(0), _limitActionCursor(false), _frameStart(0), _menuFrameStart(_lastWall) {
+	_pauseDepth(0), _waitInterrupted(false), _limitActionCursor(false), _frameStart(0), _menuFrameStart(_lastWall) {
 }
 
 uint32 RuntimeClock::now() const {
@@ -71,7 +71,19 @@ void RuntimeClock::setFrameRate(int16 rate) {
 	_menuFrameStart = g_system->getMillis();
 }
 
+void RuntimeClock::restart() {
+	_waitInterrupted = false;
+	_time = 0;
+	_lastWall = g_system->getMillis();
+	_speed = MAX<int16>(1, _vm->_global->_speedFactor);
+	_vm->_util->setFrameRate(15);
+	_frameStart = 0;
+	_menuFrameStart = _lastWall;
+}
+
 bool RuntimeClock::waitFrame() {
+	if (_waitInterrupted)
+		return false;
 	// Menus share the pacing order but use wall milliseconds while gameplay is
 	// frozen. A nested engine pause cannot shift either scene deadline twice.
 	const bool menu = _pauseDepth != 0;
@@ -80,6 +92,8 @@ bool RuntimeClock::waitFrame() {
 	const int32 elapsed = current - started;
 	if (elapsed > 1000 || elapsed < 0) {
 		_vm->_video->retrace();
+		if (_waitInterrupted)
+			return false;
 		started = menu ? g_system->getMillis() : now();
 		return true;
 	}
@@ -91,6 +105,8 @@ bool RuntimeClock::waitFrame() {
 			g_system->delayMillis(MAX<int32>(1, MIN<int32>(remaining, 10) / speed));
 		}
 		_vm->_util->processInput();
+		if (_waitInterrupted)
+			return false;
 		if (_limitActionCursor && !menu) {
 			int16 x = 0, y = 0;
 			_vm->_util->getMouseState(&x, &y, nullptr);
@@ -99,9 +115,13 @@ bool RuntimeClock::waitFrame() {
 			if (x != boundedX || y != boundedY) {
 				_vm->_util->setMousePos(boundedX, boundedY);
 				_vm->_util->processInput();
+				if (_waitInterrupted)
+					return false;
 			}
 		}
 		_vm->_video->retrace();
+		if (_waitInterrupted)
+			return false;
 		current = menu ? g_system->getMillis() : now();
 		remaining = interval - (int32)(current - started);
 	} while (remaining > 0);

@@ -56,11 +56,15 @@ class Forest : public Section {
 public:
 	Forest(OnceUpon &game);
 	~Forest() override;
-	void enter(uint variant);
+	void enter(uint variant, uint room, uint energy);
 	Outcome step() override;
+	uint room() const;
+	uint energy() const { return _energy; }
 
 private:
-	void prepare(uint initialVariant, uint difficulty, byte hair, byte jacket, byte trousers);
+	// The return passage has twelve rooms: six in each route leg.
+	void prepare(uint initialVariant, uint difficulty, byte hair, byte jacket, byte trousers,
+		uint room = 0, uint energy = 180);
 	void drawInterface(const Surface &portrait);
 	void begin();
 	void render();
@@ -80,7 +84,7 @@ private:
 		const char *terrain, *enemies;
 		char enemyPrefix;
 		int16 sceneStep;
-		uint terrainFamily, weaponTier;
+		uint terrainFamily, weaponTier, checkpointBase;
 	};
 	static const RouteDescription kRoutes[4];
 	const RouteDescription &routeDescription() const { return kRoutes[_route]; }

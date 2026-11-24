@@ -48,7 +48,7 @@ class Assets;
 /** Presentation, surfaces and input for the Chapter 3 and Chapter 5 encounters. */
 class Encounter : public Section {
 public:
-	enum EventType { kText, kFlash, kShake, kWait, kDelay, kPostFightHold, kFrame, kComplete };
+	enum EventType { kText, kFlash, kShake, kWait, kDelay, kPostFightHold, kFrame, kComplete, kRestore };
 	struct Event {
 		EventType type;
 		int16 value, selection;

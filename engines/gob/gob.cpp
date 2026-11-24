@@ -422,6 +422,29 @@ Common::Error GobEngine::run() {
 	return Common::kNoError;
 }
 
+bool GobEngine::canSaveGameStateCurrently(Common::U32String *msg) {
+	return _preGob &&
+		_preGob->canSaveGameState(msg);
+}
+
+bool GobEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+	return _preGob &&
+		_preGob->canLoadGameState(msg);
+}
+
+Common::Error GobEngine::saveGameStream(Common::WriteStream *stream,
+		bool isAutosave) {
+	if (!_preGob || !stream)
+		return Common::kWritingFailed;
+	return _preGob->saveGameStream(*stream, isAutosave);
+}
+
+Common::Error GobEngine::loadGameStream(Common::SeekableReadStream *stream) {
+	if (!_preGob || !stream)
+		return Common::kReadingFailed;
+	return _preGob->loadGameStream(*stream);
+}
+
 void GobEngine::pauseEngineIntern(bool pause) {
 	if (pause) {
 		_pauseStart = _system->getMillis();

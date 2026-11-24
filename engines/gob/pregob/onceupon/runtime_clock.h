@@ -44,12 +44,17 @@ public:
 	void setFrameRate(int16 rate);
 	bool waitFrame();
 	void limitActionCursor(bool limited) { _limitActionCursor = limited; }
+	void interruptWait() { _waitInterrupted = true; }
+	void cancelWaitInterrupt() { _waitInterrupted = false; }
+	/** Begin a fresh scene epoch without changing an outer modal pause. */
+	void restart();
 
 private:
 	GobEngine *_vm;
 	mutable uint32 _time, _lastWall;
 	mutable uint16 _speed;
 	uint _pauseDepth;
+	bool _waitInterrupted;
 	bool _limitActionCursor;
 	uint32 _frameStart, _menuFrameStart;
 };

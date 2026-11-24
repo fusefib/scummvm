@@ -28,9 +28,7 @@
 #include "gob/pregob/onceupon/onceupon.h"
 #include "gob/pregob/onceupon/assets.h"
 
-#ifdef USE_TTS
 #include "common/config-manager.h"
-#endif
 
 #include "gob/gob.h"
 #include "gob/global.h"
@@ -116,7 +114,8 @@ OnceUpon::OnceUpon(GobEngine *vm) : PreGob(vm), _openedArchives(false),
 	_jeudak(nullptr), _lettre(nullptr), _plettre(nullptr), _glettre(nullptr), _palette(vm),
 	_assets(new Assets(vm)), _clock(vm), _sceneKind(kSceneNone), _sceneFrameRate(15),
 	_readingKeys(kNoReading), _readingVisible(false), _readingOpening(false), _readingAdvance(false), _readingMenu(0),
-	_introStage(kIntroLoading),
+	_yield(kNotYielded),
+	_introStage(kIntroLoading), _pendingRestore(nullptr), _initialized(false),
 	_paused(false),
 	_selectionCursor(false), _actionCursorANI(nullptr),
 	_actionCursorAnimation(0), _actionCursorFrame(0), _actionCursorX(0), _actionCursorY(0),
@@ -211,6 +210,7 @@ void OnceUpon::init() {
 
 	resetProgress();
 	_introStage = kIntroLoading;
+	_initialized = true;
 	_keyboard.begin();
 }
 
@@ -221,7 +221,10 @@ void OnceUpon::resetProgress() {
 }
 
 void OnceUpon::deinit() {
-
+	discardRestore();
+	_yield = kNotYielded;
+	_initialized = false;
+	_checkpoint = Checkpoint();
 #ifdef USE_TTS
 	cancelNarration();
 #endif
@@ -279,7 +282,7 @@ void OnceUpon::fadeOut() {
 }
 
 void OnceUpon::fadeIn() {
-	if (!_palette.holdingBlack() || _vm->shouldQuit())
+	if (!_palette.holdingBlack() || _vm->shouldQuit() || _pendingRestore)
 		return;
 	_vm->_draw->blitInvalidated();
 	_palette.fadeToTarget();
@@ -346,7 +349,7 @@ void OnceUpon::holdActionCursor() {
 void OnceUpon::drawLineByLine(const Surface &src, int16 left, int16 top, int16 right, int16 bottom,
 							  int16 x, int16 y) const {
 
-	if (_vm->shouldQuit())
+	if (_vm->shouldQuit() || _pendingRestore)
 		return;
 
 	const int16 width  = right  - left + 1;
@@ -357,7 +360,7 @@ void OnceUpon::drawLineByLine(const Surface &src, int16 left, int16 top, int16 r
 
 	// Draw the even lines downwards
 	for (int16 i = 0; i < height; i += 2) {
-		if (_vm->shouldQuit())
+		if (_vm->shouldQuit() || _pendingRestore)
 			return;
 
 		_vm->_draw->_backSurface->blit(src, left, top + i, right, top + i, x, y + i);
@@ -371,7 +374,7 @@ void OnceUpon::drawLineByLine(const Surface &src, int16 left, int16 top, int16 r
 
 	// Draw the odd lines upwards
 	for (int16 i = (height & 1) ? height : (height - 1); i >= 0; i -= 2) {
-		if (_vm->shouldQuit())
+		if (_vm->shouldQuit() || _pendingRestore)
 			return;
 
 		_vm->_draw->_backSurface->blit(src, left, top + i, right, top + i, x, y + i);
@@ -402,8 +405,9 @@ void OnceUpon::backupScreen(ScreenBackup &backup, bool setDefaultCursor) {
 }
 
 void OnceUpon::restoreScreen(ScreenBackup &backup, bool keepBlack) {
-	// Cursor-stack cleanup is still required when quitting.
-	if (!_vm->shouldQuit()) {
+	// A pending replacement owns the next raster and palette publication.
+	// Cursor-stack cleanup is still required before adopting that replacement.
+	if (!_vm->shouldQuit() && !_pendingRestore) {
 		_vm->_draw->_backSurface->blit(*backup.screen);
 		_vm->_draw->forceBlit();
 		if (keepBlack)
@@ -422,11 +426,12 @@ void OnceUpon::finishMenu(ScreenBackup &backup, bool fade) {
 #ifdef USE_TTS
 	cancelNarration();
 #endif
-	if (fade)
-		fadeOut();
-	else
-		clearIngameMenu(*backup.screen);
-
+	if (!_pendingRestore) {
+		if (fade)
+			fadeOut();
+		else
+			clearIngameMenu(*backup.screen);
+	}
 	restoreScreen(backup, fade);
 	endMenuInput();
 }
@@ -436,9 +441,11 @@ void OnceUpon::waitInputDelay(uint16 milliseconds) {
 	const uint32 deadline = _vm->_util->getTimeKey() + milliseconds;
 	do {
 		_vm->_video->waitRetrace();
-
+		_yield = kInputYield;
 		_vm->_util->processInput();
-
+		_yield = kNotYielded;
+		if (_pendingRestore)
+			return;
 		_vm->_util->delay(15);
 	} while (!_vm->shouldQuit() && _vm->_util->getTimeKey() < deadline);
 }
@@ -469,14 +476,16 @@ void OnceUpon::publishCaptionNarration() {
 
 #endif
 void OnceUpon::endFrame() {
+	if (_pendingRestore)
+		return;
 	_vm->_draw->blitInvalidated();
+	_yield = kFrameYield;
 	publishReadingPage();
-
 	const bool waited = _clock.waitFrame();
-	if (waited)
+	if (waited && !_pendingRestore)
 		_vm->_util->processInput();
-
-	if (!waited)
+	_yield = kNotYielded;
+	if (!waited || _pendingRestore)
 		return;
 #ifdef USE_TTS
 	publishCaptionNarration();
@@ -497,8 +506,10 @@ void OnceUpon::publishMenuNarration() {
 }
 
 void OnceUpon::waitMenuNarration() {
-	while (!_vm->shouldQuit() && _narration.update(g_system->getMillis())) {
+	while (!_vm->shouldQuit() && !_pendingRestore && _narration.update(g_system->getMillis())) {
 		endFrame();
+		if (_pendingRestore)
+			break;
 		int16 x, y;
 		MouseButtons buttons;
 		const int16 key = checkMenuInput(x, y, buttons);
@@ -593,8 +604,10 @@ void OnceUpon::doStartMenu() {
 	const MenuButton *animalsButton = &animalNamesButton();
 	clearScreen();
 
-	while (!_vm->shouldQuit() && !_quit) {
+	while (!_vm->shouldQuit() && !_quit && !_pendingRestore) {
 		MenuAction action = handleStartMenu(animalsButton);
+		if (_pendingRestore)
+			break;
 		if (action == kMenuActionPlay)
 			break;
 		if (action == kMenuActionQuit) {
@@ -610,6 +623,8 @@ void OnceUpon::doStartMenu() {
 
 OnceUpon::MenuAction OnceUpon::handleStartMenu(const MenuButton *animalsButton) {
 	beginMenuInput();
+	if (_pendingRestore)
+		return kMenuActionNone;
 	ScreenBackup screenBackup;
 	backupScreen(screenBackup, true);
 
@@ -623,8 +638,10 @@ OnceUpon::MenuAction OnceUpon::handleStartMenu(const MenuButton *animalsButton) 
 #endif
 
 	MenuAction action = kMenuActionNone;
-	while (!_vm->shouldQuit() && (action == kMenuActionNone)) {
+	while (!_vm->shouldQuit() && !_pendingRestore && (action == kMenuActionNone)) {
 		endFrame();
+		if (_pendingRestore)
+			break;
 
 		// Check user input
 
@@ -676,6 +693,8 @@ OnceUpon::MenuAction OnceUpon::handleStartMenu(const MenuButton *animalsButton) 
 
 OnceUpon::MenuAction OnceUpon::handleMainMenu() {
 	beginMenuInput();
+	if (_pendingRestore)
+		return kMenuActionNone;
 	_progress.score = 0;
 	ScreenBackup screenBackup;
 	backupScreen(screenBackup, true);
@@ -690,8 +709,10 @@ OnceUpon::MenuAction OnceUpon::handleMainMenu() {
 #endif
 
 	MenuAction action = kMenuActionNone;
-	while (!_vm->shouldQuit() && (action == kMenuActionNone)) {
+	while (!_vm->shouldQuit() && !_pendingRestore && (action == kMenuActionNone)) {
 		endFrame();
+		if (_pendingRestore)
+			break;
 
 		// Check user input
 
@@ -730,7 +751,7 @@ OnceUpon::MenuAction OnceUpon::handleMainMenu() {
 		int section = checkButton(kSectionButtons, ARRAYSIZE(kSectionButtons), mouseX, mouseY);
 		if ((section >= 0) && (section <= _progress.maximumSection)) {
 			_progress.section = section;
-
+			_checkpoint = Checkpoint();
 			action   = kMenuActionRestart;
 		}
 
@@ -743,15 +764,20 @@ OnceUpon::MenuAction OnceUpon::handleMainMenu() {
 
 OnceUpon::MenuAction OnceUpon::handleIngameMenu() {
 	beginMenuInput();
+	if (_pendingRestore)
+		return kMenuActionNone;
 	ScreenBackup screenBackup;
 	backupScreen(screenBackup, true);
 
 	drawIngameMenu();
-	showCursor();
+	if (!_pendingRestore)
+		showCursor();
 
 	MenuAction action = kMenuActionNone;
-	while (!_vm->shouldQuit() && (action == kMenuActionNone)) {
+	while (!_vm->shouldQuit() && !_pendingRestore && (action == kMenuActionNone)) {
 		endFrame();
+		if (_pendingRestore)
+			break;
 
 		// Check user input
 
@@ -787,6 +813,8 @@ void OnceUpon::beginMenuInput() {
 	cancelNarration();
 #endif
 	_vm->_util->clearKeyBuf();
+	if (_pendingRestore)
+		return;
 	_activations.clear();
 	_vm->_util->forceMouseButtonsSync();
 	int16 x, y;
@@ -808,6 +836,11 @@ void OnceUpon::endMenuInput() {
 }
 
 int16 OnceUpon::checkMenuInput(int16 &x, int16 &y, MouseButtons &buttons) {
+	if (_pendingRestore) {
+		x = y = 0;
+		buttons = kMouseButtonsNone;
+		return 0;
+	}
 	_vm->_util->forceMouseButtonsSync();
 	MouseButtons held;
 	_vm->_util->getMouseState(&x, &y, &held);
@@ -884,9 +917,10 @@ void OnceUpon::drawIngameMenu() {
 		               button.dstX, button.dstY);
 	}
 
-	_vm->_draw->forceBlit();
-	_vm->_video->retrace();
-
+	if (!_pendingRestore) {
+		_vm->_draw->forceBlit();
+		_vm->_video->retrace();
+	}
 }
 
 void OnceUpon::drawMenuDifficulty() {
@@ -952,6 +986,10 @@ OnceUpon::MenuAction OnceUpon::doIngameMenu() {
 #endif
 	// Show the ingame menu
 	MenuAction action = handleIngameMenu();
+	if (_pendingRestore) {
+		_clock.resume();
+		return kMenuActionNone;
+	}
 
 	if ((action == kMenuActionQuit) || _vm->shouldQuit()) {
 
@@ -981,6 +1019,8 @@ SectionOutcome OnceUpon::sceneMenu(bool *resumePage) {
 	const MenuAction action = doIngameMenu();
 	if (resumePage)
 		*resumePage = action == kMenuActionPlay;
+	if (_pendingRestore)
+		return kSectionRestore;
 	discardActivationInput();
 	_acceptActivations = true;
 	if (action == kMenuActionQuit)
@@ -1033,12 +1073,16 @@ void OnceUpon::run() {
 }
 
 void OnceUpon::runStory() {
+	// Adopt loads after the current step returns, before scene exit,
+	// story progression or further publication from the old scene.
 	while (!_vm->shouldQuit() && !_quit) {
+		if (_pendingRestore)
+			commitRestore();
 		if (_sceneKind == kSceneNone) {
 			if (_introStage != kIntroDone) {
 				switch (_introStage) {
 				case kIntroLoading:
-
+					captureChapterCheckpoint();
 					showWait(10);
 					break;
 				case kIntroQuote: beginStoryText(-1); break;
@@ -1060,7 +1104,7 @@ void OnceUpon::runStory() {
 			continue;
 		}
 		const SectionOutcome outcome = stepScene();
-		if (outcome != kSectionContinue)
+		if (outcome != kSectionContinue && outcome != kSectionRestore)
 			completeScene(outcome);
 	}
 	if (!_vm->shouldQuit())
@@ -1081,7 +1125,7 @@ void OnceUpon::beginStorySection() {
 		return;
 	}
 	const StoryEntry &section = sections[_progress.section];
-
+	captureChapterCheckpoint();
 	switch (section.kind) {
 	case kSceneHouse: beginHouseChoice(); break;
 	case kSceneStory: beginStoryText(section.argument); break;
@@ -1095,13 +1139,17 @@ void OnceUpon::beginStorySection() {
 }
 
 SectionOutcome OnceUpon::stepScene() {
+	if (_pendingRestore)
+		return kSectionRestore;
 	if (!_scene || _vm->shouldQuit() || _quit)
 		return kSectionQuit;
 	const SectionOutcome outcome = _scene->step();
-	return outcome;
+	return _pendingRestore ? kSectionRestore : outcome;
 }
 
-void OnceUpon::leaveScene() {
+void OnceUpon::leaveScene(SectionOutcome outcome) {
+	if (outcome == kSectionRestore || _pendingRestore)
+		return;
 	const SceneKind kind = _sceneKind;
 	// Title music continues through its normal exit fade.
 	if (kind == kSceneTitle)
@@ -1120,7 +1168,9 @@ void OnceUpon::leaveScene() {
 
 void OnceUpon::completeScene(SectionOutcome outcome) {
 	const SceneKind kind = _sceneKind;
-	leaveScene();
+	leaveScene(outcome);
+	if (outcome == kSectionRestore || _pendingRestore)
+		return;
 	if (outcome == kSectionQuit) {
 		_quit = true;
 		return;
@@ -1234,7 +1284,7 @@ void OnceUpon::publishReadingPage() {
 		return;
 	_vm->_util->processInput();
 	collectReadingInput();
-	if (_vm->shouldQuit() || _paused || _menuInputActive)
+	if (_pendingRestore || _vm->shouldQuit() || _paused || _menuInputActive)
 		return;
 	_readingOpening = false;
 	_readingVisible = true;
@@ -1273,7 +1323,8 @@ void OnceUpon::discardActivationInput() {
 	expireReadingInput();
 	_activations.clear();
 	_freshInput = true;
-	_vm->_util->clearKeyBuf();
+	if (!_pendingRestore)
+		_vm->_util->clearKeyBuf();
 }
 
 void OnceUpon::pauseChanged(bool paused, uint32 duration) {
@@ -1414,7 +1465,7 @@ bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 it
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
 	if (drawn && (!text.finished() || terminal || _readingKeys != kNoReading))
 		beginReadingPage(!text.finished() ? kReadingControls : terminal ? kReadingAny : kNoReading);
-	if (_vm->shouldQuit())
+	if (_pendingRestore || _vm->shouldQuit())
 		return text.finished();
 	_vm->_draw->blitInvalidated();
 	if (_readingOpening)

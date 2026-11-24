@@ -54,6 +54,8 @@ public:
 	~Parents() override;
 	void enter();
 	Outcome step() override;
+	bool atSaveBoundary() const override;
+	void suspendMovie() override;
 	bool activateMovie(MouseButtons buttons) override;
 	void resumeAfterPause() override;
 
@@ -66,6 +68,7 @@ private:
 		Movie(OnceUpon &game, const Common::String &seq, GCTFile &caption);
 		~Movie() override;
 
+		bool atSaveBoundary() const { return hasPublishedFrame() || (!_sequenceUpdating && (_waitingText || _textFramePending)); }
 
 		void begin();
 		Outcome step();
@@ -116,7 +119,7 @@ private:
 		bool _finished;
 		uint _textItem;
 		uint32 _textStart;
-		bool _textFramePending;
+		bool _sequenceUpdating, _textFramePending;
 		bool _waitingText;
 
 

@@ -29,6 +29,8 @@
 #define GOB_PREGOB_PREGOB_H
 
 #include "common/str.h"
+#include "common/error.h"
+#include "common/ustr.h"
 #include "common/array.h"
 
 #include "gob/util.h"
@@ -55,8 +57,15 @@ public:
 	virtual void handleMouseDown(int16 x, int16 y, MouseButtons buttons) {}
 	/** Duration is zero on entry and elapsed host milliseconds on resume. */
 	virtual void pauseChanged(bool paused, uint32 duration) {}
-	/** Return true to consume a key-down before it enters the shared buffer. */
+	/** Observe both key edges; return true to skip shared key-down buffering. */
 	virtual bool handleKeyEvent(const Common::Event &event) { return false; }
+	// Games define their save format and eligible boundaries. Prepare loads
+	// without changing live ownership; commit after the old execution unwinds.
+	// Re-anchor transient clocks and discard input consumed by menus.
+	virtual bool canSaveGameState(Common::U32String *msg = nullptr) const { return false; }
+	virtual bool canLoadGameState(Common::U32String *msg = nullptr) const { return false; }
+	virtual Common::Error saveGameStream(Common::WriteStream &stream, bool isAutosave = false) const { return Common::kWritingFailed; }
+	virtual Common::Error loadGameStream(Common::SeekableReadStream &stream) { return Common::kReadingFailed; }
 
 	struct AnimProperties {
 		uint16 animation;

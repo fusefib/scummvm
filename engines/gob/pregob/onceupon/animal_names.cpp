@@ -135,6 +135,8 @@ void OnceUpon::handleAnimalNames() {
 	const char * const *names = abra ? kAbracadabraAnimalNames : kBabaYagaAnimalNames;
 	const uint count = ARRAYSIZE(kAbracadabraAnimalButtons);
 	beginMenuInput();
+	if (_pendingRestore)
+		return;
 	fadeOut();
 	clearScreen();
 
@@ -149,7 +151,7 @@ void OnceUpon::handleAnimalNames() {
 	int8 _animal = -1;
 
 	AnimalNamesState state = kANStateChoose;
-	while (!_vm->shouldQuit() && (state != kANStateFinish)) {
+	while (!_vm->shouldQuit() && !_pendingRestore && (state != kANStateFinish)) {
 		showCursor();
 		fadeIn();
 #ifdef USE_TTS
@@ -157,6 +159,8 @@ void OnceUpon::handleAnimalNames() {
 #endif
 
 		endFrame();
+		if (_pendingRestore)
+			break;
 
 		// Check user input
 
@@ -203,6 +207,8 @@ void OnceUpon::handleAnimalNames() {
 		int language = checkButton(kLanguageButtons, ARRAYSIZE(kLanguageButtons), mouseX, mouseY);
 		if ((state == kANStateNames) && (language >= 0))
 			anPlayAnimalName(names[_animal], language);
+		if (_pendingRestore)
+			break;
 
 		// We clicked on an animal
 		if ((state == kANStateChoose) && (_animal >= 0)) {
@@ -225,7 +231,8 @@ void OnceUpon::handleAnimalNames() {
 #ifdef USE_TTS
 	cancelNarration();
 #endif
-	fadeOut();
+	if (!_pendingRestore)
+		fadeOut();
 
 	// Restore the cursor
 	if (!cursorVisible)
@@ -350,15 +357,17 @@ void OnceUpon::anPlayAnimalName(const Common::String &animal, uint language) {
 	if (_vm->_sound->sampleLoad(&sound, SOUND_SND, soundFile.c_str())) {
 		_vm->_sound->blasterPlay(&sound, 0, 0);
 		_vm->_util->forceMouseUp();
-		while (!_vm->shouldQuit() && _vm->_sound->blasterPlayingSound()) {
+		while (!_vm->shouldQuit() && !_pendingRestore && _vm->_sound->blasterPlayingSound()) {
 			endFrame();
-			if (hasInput())
+			if (_pendingRestore || hasInput())
 				break;
 		}
 		_vm->_util->forceMouseUp();
 		// The mixer borrows this stack descriptor; release only this cue.
 		_vm->_sound->blasterStop(0, &sound);
 	}
+	if (_pendingRestore)
+		return;
 
 	// Restore the screen
 	_vm->_draw->_backSurface->blit(backup, 0, 0, 161, 22, 78, 123);

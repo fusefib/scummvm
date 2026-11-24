@@ -75,7 +75,7 @@ Parents::Movie::Movie(OnceUpon &game, const Common::String &seq, GCTFile &captio
 	_brightPalette(kGamePalettes[13]), _gct(&caption),
 	_frameCounter(0), _finished(false),
 	_textItem(0), _textStart(0),
-	_textFramePending(false), _waitingText(false) {
+	_sequenceUpdating(false), _textFramePending(false), _waitingText(false) {
 
 	// Load sounds
 	for (int i = 0; i < kSoundCount; i++)
@@ -96,7 +96,7 @@ void Parents::Movie::changeFrameRate(int16 rate) {
 
 void Parents::Movie::waitFrame() {
 	_game.publishReadingPage();
-	if (_vm->shouldQuit())
+	if (isSuspended() || _game._pendingRestore || _vm->shouldQuit())
 		return;
 	_clock.waitFrame();
 }
@@ -106,7 +106,7 @@ void Parents::Movie::begin() {
 	discardNarration();
 #endif
 	_frameCounter = 0;
-	_textFramePending = false;
+	_sequenceUpdating = _textFramePending = false;
 	_finished = false;
 	_waitingText = false;
 	_game.endReadingPage();
@@ -115,10 +115,16 @@ void Parents::Movie::begin() {
 }
 
 bool Parents::Movie::stepPlay() {
+	if (isSuspended())
+		return false;
 	if (_finished)
 		return false;
-	if (!_waitingText) {
+	if (!_waitingText || hasPublishedFrame()) {
+		_sequenceUpdating = true;
 		const bool playing = SEQFile::stepPlay();
+		_sequenceUpdating = false;
+		if (isSuspended())
+			return false;
 #ifdef USE_TTS
 		if (isAborted() || _vm->shouldQuit())
 			discardNarration();
@@ -133,6 +139,8 @@ bool Parents::Movie::stepPlay() {
 
 	// Native showTextItem finishes intermediate pages before the next SEQ frame.
 	_vm->_util->processInput();
+	if (isSuspended())
+		return false;
 	int16 x, y;
 	MouseButtons buttons;
 	_vm->_util->getMouseState(&x, &y, &buttons);
@@ -155,6 +163,8 @@ bool Parents::Movie::stepPlay() {
 	_vm->_draw->blitInvalidated();
 	_textFramePending = true;
 	waitFrame();
+	if (isSuspended())
+		return false;
 	_textFramePending = false;
 #ifdef USE_TTS
 	publishNarration();
@@ -381,6 +391,8 @@ Section::Outcome Parents::step() {
 	if (_phase == kSearch)
 		return _dwelling->step();
 	const Outcome outcome = _movie->step();
+	if (_game._pendingRestore)
+		return kSectionRestore;
 	if (outcome != kSectionComplete)
 		return outcome;
 
@@ -397,6 +409,15 @@ Section::Outcome Parents::step() {
 	return kSectionContinue;
 }
 
+bool Parents::atSaveBoundary() const {
+	return _movie && _movie->atSaveBoundary();
+}
+
+void Parents::suspendMovie() {
+	if (_movie)
+		_movie->suspendPlay();
+}
+
 bool Parents::activateMovie(MouseButtons buttons) {
 	if (!_movie)
 		return false;
@@ -410,9 +431,11 @@ void Parents::resumeAfterPause() {
 }
 
 Section::Outcome Parents::Movie::step() {
-
+	_game._yield = OnceUpon::kMovieYield;
 	const bool playing = stepPlay();
-
+	_game._yield = OnceUpon::kNotYielded;
+	if (_game._pendingRestore)
+		return kSectionRestore;
 	if (playing)
 		return kSectionContinue;
 	if (_vm->shouldQuit())

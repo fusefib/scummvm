@@ -57,7 +57,7 @@ class ANIObject;
  */
 class SEQFile {
 public:
-	/** Optional immutable resource owner; existing clients keep private assets. */
+	/** Optional source of shared, immutable animations and backgrounds. */
 	class ResourceProvider {
 	public:
 		virtual ~ResourceProvider() {}
@@ -76,6 +76,9 @@ public:
 	void resumePlay() { _abortPlay = false; }
 
 	/** Yield after the current publication without repeating its effects. */
+	void suspendPlay() { _suspended = true; }
+	bool isSuspended() const { return _suspended; }
+	bool hasPublishedFrame() const { return _framePublished; }
 
 
 protected:
@@ -146,6 +149,7 @@ private:
 	int16 _authoredFrameRate;
 	int16 _savedFrameRate;
 	bool _playing;
+	bool _framePublished, _suspended;
 	// Consumed keys stay consumed across frame-word wraparound.
 	uint _nextBackgroundKey;
 	uint _nextAnimationKey[kObjectCount];

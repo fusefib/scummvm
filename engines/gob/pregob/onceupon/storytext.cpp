@@ -280,6 +280,8 @@ void StoryText::drawPage() {
 	TXTFile &page = this->page(_page);
 	page.draw(*vm->_draw->_backSurface, fonts, ARRAYSIZE(fonts), -1, &drawnText);
 	_game.beginReadingPage(OnceUpon::kReadingAny);
+	if (_game._pendingRestore || vm->shouldQuit())
+		return;
 	vm->_draw->forceBlit();
 	_game.publishReadingPage();
 	_game.fadeIn();
@@ -306,6 +308,8 @@ Section::Outcome StoryText::step() {
 	if (_phase == kPhaseDelay) {
 		_game.collectReadingInput();
 		if (_game._clock.now() - _waitStart >= 500) {
+			if (_game._pendingRestore)
+				return kSectionRestore;
 			_phase = kPhaseWait;
 		} else {
 #ifdef USE_TTS

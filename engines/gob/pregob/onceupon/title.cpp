@@ -155,16 +155,18 @@ void OnceUpon::beginTitle() {
 	Title *title = new Title(*this);
 	_scene.reset(title);
 	_vm->_util->clearKeyBuf();
-	title->begin();
+	if (!_pendingRestore)
+		title->begin();
 }
 
 Section::Outcome Title::step() {
 	if (_phase != kPhasePlaying)
 		return kSectionQuit;
-
+	_game._yield = OnceUpon::kMovieYield;
 	const bool playing = stepPlay();
-
-	return playing ? kSectionContinue : kSectionComplete;
+	_game._yield = OnceUpon::kNotYielded;
+	return _game._pendingRestore ? kSectionRestore :
+		playing ? kSectionContinue : kSectionComplete;
 }
 
 bool Title::activateMovie(MouseButtons buttons) {

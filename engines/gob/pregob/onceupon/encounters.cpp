@@ -200,7 +200,7 @@ void CastleEncounter::renderSearch() {
 }
 
 CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uint32 heldKeys) {
-	while (true) {
+	while (!_game._pendingRestore) {
 		switch (_stage) {
 		case kFightInput:
 			if (_animation < 19 || _animation > 24)
@@ -220,6 +220,8 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 				_animationFrame = 0;
 				++_damage;
 				_game.changeScore(-100);
+				if (_game._pendingRestore)
+					return Event(kRestore);
 				copyScore();
 			} else if (_animation == 12 && animationEnded()) {
 				_animation = 17;
@@ -239,6 +241,8 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 				_animation = _animation == 20 ? 23 : 22;
 				_animationFrame = 0;
 				playCue(2);
+				if (_game._pendingRestore)
+					return Event(kRestore);
 				return Event(kText, 7);
 			}
 			if ((_animation == 22 || _animation == 23) && animationEnded()) {
@@ -267,6 +271,8 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 			_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 49, 319, 199);
 			_frame->blit(*_background);
 			_game.changeScore(1500);
+			if (_game._pendingRestore)
+				return Event(kRestore);
 			// The search reuses these surfaces after the second score award.
 			copyScore();
 			_cursorFrame = 0;
@@ -300,7 +306,11 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 					_animationFrame = 0;
 					if (++_hits == 10) {
 						playCue(5);
+						if (_game._pendingRestore)
+							return Event(kRestore);
 						_game.changeScore(1500);
+						if (_game._pendingRestore)
+							return Event(kRestore);
 						copyScore();
 						_animation = 19;
 						_animationFrame = 0;
@@ -327,6 +337,8 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 			_stage = kFightFrame;
 			if (++_attackClock > 49 && (_animation == 16 || _animation == 17)) {
 				playCue(0);
+				if (_game._pendingRestore)
+					return Event(kRestore);
 				_stage = kEnemyAnimation;
 				return Event(kText, 2, _vm->_util->getRandom(3));
 			}
@@ -401,6 +413,7 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 			return Event(kComplete, _success ? 1 : 0);
 		}
 	}
+	return Event(kRestore);
 }
 
 // Chapter 5 boss encounter
@@ -510,7 +523,7 @@ void BossEncounter::renderSearch() {
 }
 
 BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 heldKeys) {
-	while (true) {
+	while (!_game._pendingRestore) {
 		switch (_stage) {
 		case kFightInput:
 			readInput(x, y, pressed, heldKeys);
@@ -529,6 +542,8 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 				_animationFrame = 0;
 				++_damage;
 				_game.changeScore(-500);
+				if (_game._pendingRestore)
+					return Event(kRestore);
 				copyScore();
 			}
 			if (_damage == 5) {
@@ -576,6 +591,8 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 			if (_spellActive && _animation != 18) {
 				if (!_spellFrame) {
 					playCue(1);
+					if (_game._pendingRestore)
+						return Event(kRestore);
 				}
 				if (++_spellFrame >= _ani->getAnimationInfo(_spell).frameCount) {
 					_spellActive = false;
@@ -583,6 +600,8 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 					_animationFrame = 0;
 					++_hits;
 					playCue(4);
+					if (_game._pendingRestore)
+						return Event(kRestore);
 					_stage = kHit;
 					return Event(kFlash, 1, 0);
 				}
@@ -612,7 +631,11 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 			if (_hits != 15)
 				return Event(kText, 3, _vm->_util->getRandom(4));
 			playCue(5);
+			if (_game._pendingRestore)
+				return Event(kRestore);
 			_game.changeScore(2000);
+			if (_game._pendingRestore)
+				return Event(kRestore);
 			copyScore();
 			_animation = 18;
 			_animationFrame = 0;
@@ -621,6 +644,8 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 			_stage = kFightFrame;
 			if (++_attackClock > 49 && _animation == 12) {
 				playCue(0);
+				if (_game._pendingRestore)
+					return Event(kRestore);
 				_stage = kEnemyAnimation;
 				return Event(kText, 2, _vm->_util->getRandom(3));
 			}
@@ -663,6 +688,8 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 					if (_objects < 5 || _counted[i]) {
 						_counted[i] = true;
 						playCue(3);
+						if (_game._pendingRestore)
+							return Event(kRestore);
 						_stage = kSearchToggle;
 						return Event(kText, 7, _vm->_util->getRandom(5));
 					}
@@ -703,6 +730,7 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 			return Event(kComplete, _success ? 1 : 0);
 		}
 	}
+	return Event(kRestore);
 }
 
 // Encounter scene driver
@@ -776,6 +804,8 @@ void Encounter::beginFight() {
 	_vm->_util->setMousePos(160, 100);
 	_vm->_util->processInput();
 	_game.discardActivationInput();
+	if (_game._pendingRestore)
+		return;
 	_game._acceptActivations = true;
 	_needsFadeIn = true;
 	_captionPressed = false;
@@ -862,6 +892,8 @@ Section::Outcome Encounter::step() {
 		}
 		_vm->_util->clearKeyBuf();
 		_game._activations.clear();
+		if (_game._pendingRestore)
+			return kSectionRestore;
 		if (_vm->shouldQuit())
 			return kSectionQuit;
 		_phase = kPlaying;
@@ -919,6 +951,8 @@ Section::Outcome Encounter::step() {
 	bool pressed = input.activation || (input.buttons & kMouseButtonsLeft) || (input.keys & 0x0010) || input.key == kKeyReturn;
 	const uint32 keys = input.activation ? input.keys & ~0xFU : input.keys;
 	for (;;) {
+		if (_game._pendingRestore)
+			return kSectionRestore;
 		const Event event = next(input.x, input.y, pressed, keys);
 		switch (event.type) {
 		case Encounter::kText:
@@ -990,6 +1024,8 @@ Section::Outcome Encounter::step() {
 			return kSectionContinue;
 		case Encounter::kComplete:
 			return event.value ? kSectionComplete : kSectionRetry;
+		case Encounter::kRestore:
+			return kSectionRestore;
 		}
 	}
 }
@@ -1004,9 +1040,10 @@ void Encounter::shake(int16 first, int16 second) {
 	for (uint i = 0; i < ARRAYSIZE(offsets); ++i) {
 		_vm->_util->delay(20);
 		_vm->_util->processInput();
-		if (_vm->shouldQuit()) {
+		if (_vm->shouldQuit() || _game._pendingRestore) {
 			g_system->setShakePos(0, 0);
-			_vm->_video->retrace();
+			if (!_game._pendingRestore)
+				_vm->_video->retrace();
 			return;
 		}
 		g_system->setShakePos(0, -offsets[i]);

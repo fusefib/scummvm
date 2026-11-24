@@ -193,7 +193,7 @@ bool OnceUpon::doCopyProtection() {
 	int8  animalShape = -1;
 	bool  hasCorrect  = false;
 
-	while (!_vm->shouldQuit() && (state != kCPStateFinish)) {
+	while (!_vm->shouldQuit() && !_pendingRestore && (state != kCPStateFinish)) {
 		clearAnim(anims);
 
 		// Set up the screen
@@ -214,6 +214,8 @@ bool OnceUpon::doCopyProtection() {
 		fadeIn();
 
 		endFrame();
+		if (_pendingRestore)
+			break;
 
 		int16 mouseX, mouseY;
 		MouseButtons mouseButtons;
@@ -243,6 +245,10 @@ bool OnceUpon::doCopyProtection() {
 #endif
 	freeAnims(anims);
 
+	if (_pendingRestore) {
+		hideCursor();
+		return true;
+	}
 	fadeOut();
 	hideCursor();
 	clearScreen();
@@ -252,7 +258,7 @@ bool OnceUpon::doCopyProtection() {
 		cpWrong();
 
 	// The story driver adopts a load requested on either protection screen.
-	return hasCorrect;
+	return hasCorrect || _pendingRestore;
 }
 
 int8 OnceUpon::cpSetup(const uint8 colors[7], const uint8 shapes[7 * 20], const uint8 obfuscate[4],
@@ -333,7 +339,7 @@ int8 OnceUpon::cpSetup(const uint8 colors[7], const uint8 shapes[7 * 20], const 
 }
 
 void OnceUpon::cpWrong() {
-	if (_vm->shouldQuit())
+	if (_pendingRestore || _vm->shouldQuit())
 		return;
 
 	// Speak the centered failure message once the caption is visible.
@@ -354,12 +360,12 @@ void OnceUpon::cpWrong() {
 
 	do {
 		endFrame();
-	} while (!_vm->shouldQuit() && !hasInput());
+	} while (!_pendingRestore && !_vm->shouldQuit() && !hasInput());
 
 #ifdef USE_TTS
 	cancelNarration();
 #endif
-	if (_vm->shouldQuit())
+	if (_pendingRestore || _vm->shouldQuit())
 		return;
 
 	fadeOut();
