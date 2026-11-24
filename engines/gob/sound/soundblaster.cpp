@@ -123,7 +123,8 @@ void SoundBlaster::setSample(SoundDesc &sndDesc, int16 repCount, int16 frequency
 void SoundBlaster::checkEndSample() {
 	if (_compositionPos != -1) {
 		nextCompositionPos();
-		return;
+		if (_compositionPos != -1)
+			return;
 	}
 
 	if (_compositionRepCount != 0) {
