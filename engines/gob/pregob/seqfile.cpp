@@ -41,9 +41,11 @@ namespace Gob {
 
 SEQFile::SEQFile(GobEngine *vm, const Common::String &fileName) : _vm(vm),
 	_frame(0), _abortPlay(false), _frameRate(0), _endFrame(0xFFFF), _savedFrameRate(0),
-	_playing(false), _abortable(true) {
-	for (uint i = 0; i < kObjectCount; i++)
+	_playing(false), _nextBackgroundKey(0), _abortable(true) {
+	for (uint i = 0; i < kObjectCount; i++) {
 		_objects[i].object = nullptr;
+		_nextAnimationKey[i] = 0;
+	}
 
 	Common::SeekableReadStream *seq = _vm->_dataIO->getFile(Util::setExtension(fileName, ".SEQ"));
 	if (!seq) {
@@ -175,6 +177,7 @@ void SEQFile::beginPlay(bool abortable, uint16 endFrame, uint16 frameRate) {
 
 	_frame = 0;
 	_abortPlay = false;
+	resetKeyCursors(0);
 
 	for (uint i = 0; i < kObjectCount; i++) {
 		delete _objects[i].object;
@@ -201,7 +204,7 @@ void SEQFile::beginPlay(bool abortable, uint16 endFrame, uint16 frameRate) {
 }
 
 bool SEQFile::stepPlay() {
-	if (!_playing || _vm->shouldQuit() || _abortPlay || _frame >= _endFrame)
+	if (!_playing || _vm->shouldQuit() || _abortPlay || (_endFrame != 0xFFFF && _frame >= _endFrame))
 		return false;
 
 	// Handle the frame contents
@@ -239,9 +242,11 @@ bool SEQFile::stepPlay() {
 	}
 
 	// If we didn't loop, advance the frame and look if we should end here.
-	if (!looped)
+	if (looped)
+		resetKeyCursors(_frame);
+	else
 		++_frame;
-	return !_vm->shouldQuit() && !_abortPlay && _frame < _endFrame;
+	return !_vm->shouldQuit() && !_abortPlay && (_endFrame == 0xFFFF || _frame < _endFrame);
 }
 
 void SEQFile::endPlay() {
@@ -255,21 +260,25 @@ void SEQFile::playFrame() {
 	clearAnims();
 
 	// Handle background keys, directly updating the background
-	for (const auto &bg : _bgKeys) {
-		if (!bg.background || (bg.frame != _frame))
-			continue;
-
-		bg.background->draw(*_vm->_draw->_backSurface);
-
-		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0, 319, 199);
+	if (_nextBackgroundKey < _bgKeys.size() && _bgKeys[_nextBackgroundKey].frame == _frame) {
+		const BackgroundKey &bg = _bgKeys[_nextBackgroundKey++];
+		if (bg.background) {
+			bg.background->draw(*_vm->_draw->_backSurface);
+			_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0, 319, 199);
+		}
 	}
 
 	// Handle the animation keys, updating the objects
-	for (const auto &anim : _animKeys) {
+	for (uint i = 0; i < kObjectCount; ++i) {
+		uint &nextKey = _nextAnimationKey[i];
+		if (nextKey >= _animKeys.size() || _animKeys[nextKey].object != i)
+			continue;
+		const AnimationKey &anim = _animKeys[nextKey];
 		if (anim.frame != _frame)
 			continue;
+		++nextKey;
 
-		Object &object = _objects[anim.object];
+		Object &object = _objects[i];
 
 		delete object.object;
 		object.object = nullptr;
@@ -292,6 +301,19 @@ void SEQFile::playFrame() {
 
 	// Draw the animations
 	drawAnims();
+}
+
+void SEQFile::resetKeyCursors(uint16 frame) {
+	_nextBackgroundKey = 0;
+	while (_nextBackgroundKey < _bgKeys.size() && _bgKeys[_nextBackgroundKey].frame < frame)
+		++_nextBackgroundKey;
+	for (uint i = 0; i < kObjectCount; ++i) {
+		uint key = 0;
+		while (key < _animKeys.size() && (_animKeys[key].object < i ||
+			(_animKeys[key].object == i && _animKeys[key].frame < frame)))
+			++key;
+		_nextAnimationKey[i] = key;
+	}
 }
 
 // NOTE: This is really not at all efficient. However, since there's only a

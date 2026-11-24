@@ -167,6 +167,9 @@ private:
 	uint16 _endFrame;
 	int16 _savedFrameRate;
 	bool _playing;
+	// Consumed keys stay consumed across frame-word wraparound.
+	uint _nextBackgroundKey;
+	uint _nextAnimationKey[kObjectCount];
 
 	Backgrounds _backgrounds; ///< All backgrounds in this SEQ.
 	Animations  _animations;  ///< All animations in this SEQ.
@@ -191,6 +194,7 @@ private:
 	// -- Playback helpers --
 
 	void playFrame();
+	void resetKeyCursors(uint16 frame);
 
 	/** Get a list of objects ordered by drawing order. */
 	Objects getOrderedObjects();
