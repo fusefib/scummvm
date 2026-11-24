@@ -28,69 +28,109 @@
 #ifndef GOB_PREGOB_ONCEUPON_PARENTS_H
 #define GOB_PREGOB_ONCEUPON_PARENTS_H
 
+#include "common/ptr.h"
+#include "common/str.h"
+
 #include "gob/sound/sounddesc.h"
 
 #include "gob/pregob/seqfile.h"
+#include "gob/pregob/onceupon/scene.h"
 
 namespace Gob {
 
 class Font;
-
 class GCTFile;
 
 namespace OnceUpon {
 
-/** The home / parents animation sequence. */
-class Parents : public SEQFile {
+class DwellingSearch;
+class RuntimeClock;
+class Palette;
+
+/** Parents chapter shared by both titles: movie, dwelling search and reward. */
+class Parents : public Section {
 public:
-	Parents(GobEngine *vm, const Common::String &seq, const Common::String &gct,
-	        const Common::String &childName, uint8 house, const Font &font,
-	        const byte *normalPalette, const byte *brightPalette, uint paletteSize);
+	explicit Parents(OnceUpon &game);
 	~Parents() override;
-
-	void play();
-	void begin();
-
-protected:
-	void handleFrameEvent() override;
-	void handleInput(int16 key, int16 mouseX, int16 mouseY, MouseButtons mouseButtons) override;
+	void enter();
+	Outcome step() override;
+	bool activateMovie(MouseButtons buttons) override;
+	void resumeAfterPause() override;
 
 private:
-	static const uint kLoopCount = 7;
+	enum Phase { kMovie, kSearch };
+	class Movie : public SEQFile {
+	public:
+		typedef Section::Outcome Outcome;
+		// Borrow the chapter's caption file; movie sounds and captures stay here.
+		Movie(OnceUpon &game, const Common::String &seq, GCTFile &caption);
+		~Movie() override;
 
-	static const uint16 kLoop[kLoopCount][3];
 
-	enum Sound {
-		kSoundCackle  = 0,
-		kSoundThunder    ,
-		kSoundCount
+		void begin();
+		Outcome step();
+		bool stepPlay();
+		void resumePlay();
+		void activate(MouseButtons buttons);
+		void requireFreshInput();
+
+	protected:
+		void changeFrameRate(int16 rate) override;
+		void waitFrame() override;
+		void handleFrameEvent() override;
+		void handleInput(int16 key, int16 mouseX, int16 mouseY, MouseButtons mouseButtons) override;
+
+	private:
+		OnceUpon &_game;
+		RuntimeClock &_clock;
+		Palette &_palette;
+		static const uint kHoldCount = 7;
+		static const uint16 kHoldFrames[kHoldCount][2];
+		static const uint16 kLightningFrames[2][9];
+
+		enum Sound {
+			kSoundCackle  = 0,
+			kSoundThunder    ,
+			kSoundCount
+		};
+
+		static const char *kSound[kSoundCount];
+
+
+		uint8 _house;
+
+		const Font *_font;
+
+		uint _paletteSize;
+		const byte *_normalPalette;
+		const byte *_brightPalette;
+
+		SoundDesc _sounds[kSoundCount];
+
+		GCTFile *_gct;
+
+		uint _frameCounter;
+		bool _finished;
+		uint _textItem;
+		uint32 _textStart;
+		bool _textFramePending;
+		bool _waitingText;
+
+
+		void lightningEffect();
+
+		void playSound(Sound sound);
+		void setPalette(const byte *palette, uint size);
+
+		void drawGCT(uint item, bool resetCounter = false);
 	};
 
-	static const char *kSound[kSoundCount];
-
-
-	uint8 _house;
-
-	const Font *_font;
-
-	uint _paletteSize;
-	const byte *_normalPalette;
-	const byte *_brightPalette;
-
-	SoundDesc _sounds[kSoundCount];
-
-	GCTFile *_gct;
-
-	uint _loopID[kLoopCount];
-	uint _currentLoop;
-
-
-	void lightningEffect();
-
-	void playSound(Sound sound);
-	void setPalette(const byte *palette, uint size);
-
-	void drawGCT(uint item, uint loop = 0xFFFF);
+	OnceUpon &_game;
+	Common::ScopedPtr<GCTFile> _text;
+	Common::ScopedPtr<Movie> _movie;
+	Common::ScopedPtr<DwellingSearch> _dwelling;
+	Phase _phase;
+	bool _cabin;
 };
 
 } // End of namespace OnceUpon

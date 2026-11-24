@@ -193,8 +193,17 @@ private:
 
 	bool _quit; ///< Did the user request a normal game quit?
 
+	/** Each dwelling keeps its animation frames and orientation between visits. */
+	struct DwellingHotspots {
+		int16 cabin[13], castle[11];
+		bool cabinMirrored, castleMirrored;
+		DwellingHotspots();
+		void enter(bool inCabin, bool mirror);
+	};
+
 	Common::ScopedPtr<Assets> _assets;
 	RuntimeClock _clock;
+	DwellingHotspots _dwellingHotspots;
 	Progress _progress;
 	Common::ScopedPtr<Section> _scene;
 	SceneKind _sceneKind;

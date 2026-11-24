@@ -25,96 +25,156 @@
  *
  */
 
+#include "common/system.h"
+
 #include "gob/gob.h"
 #include "gob/global.h"
-#include "gob/dataio.h"
-#include "gob/palanim.h"
+#include "gob/util.h"
 #include "gob/draw.h"
+#include "gob/surface.h"
 #include "gob/video.h"
 
 #include "gob/sound/sound.h"
 
 #include "gob/pregob/gctfile.h"
 
-#include "gob/pregob/onceupon/palettes.h"
 #include "gob/pregob/onceupon/parents.h"
+#include "gob/pregob/onceupon/runtime_clock.h"
+#include "gob/pregob/onceupon/palette.h"
+#include "gob/pregob/onceupon/assets.h"
+#include "gob/pregob/onceupon/dwelling.h"
+#include "gob/pregob/onceupon/onceupon.h"
 
 namespace Gob {
 
 namespace OnceUpon {
 
-const char *Parents::kSound[kSoundCount] = {
+const char *Parents::Movie::kSound[kSoundCount] = {
 	"rire.snd", // kSoundCackle
 	"tonn.snd"  // kSoundThunder
 };
 
-// So that every GCT line is displayed for 12 seconds
-const uint16 Parents::kLoop[kLoopCount][3] = {
-	{ 72,  77, 33},
-	{105, 109, 38},
-	{141, 145, 38},
-	{446, 454, 23},
-	{456, 464, 23},
-	{466, 474, 23},
-	{476, 484, 23}
+// Both games rewind at these gates until 100 movie frames have elapsed.
+// SEQFile increments the written frame before drawing the next frame.
+const uint16 Parents::Movie::kHoldFrames[kHoldCount][2] = {
+	{ 77,  72}, {109, 105}, {145, 141}, {454, 446},
+	{464, 456}, {474, 466}, {484, 476}
 };
 
+// The cabin and castle movies have distinct cues in both titles.
+// Thunder follows each flash by 15 movie frames.
+const uint16 Parents::Movie::kLightningFrames[2][9] = {
+	{188, 228, 237, 257, 275, 426, 0xFFFF, 0xFFFF, 0xFFFF},
+	{209, 216, 237, 248, 272, 277, 403, 408, 417}
+};
 
-Parents::Parents(GobEngine *vm, const Common::String &seq, const Common::String &gct,
-				 const Common::String &childName, uint8 house, const Font &font,
-				 const byte *normalPalette, const byte *brightPalette, uint paletteSize) :
-	SEQFile(vm, seq),
-	_gct(nullptr), _house(house), _font(&font),
-	_paletteSize(paletteSize), _normalPalette(normalPalette), _brightPalette(brightPalette) {
+Parents::Movie::Movie(OnceUpon &game, const Common::String &seq, GCTFile &caption) :
+	SEQFile(game._vm, seq, game._assets.get()), _game(game), _clock(game._clock), _palette(game._palette),
+	_house(game._progress.house), _font(game._plettre),
+	_paletteSize(kPaletteSize), _normalPalette(kGamePalettes[_house == 1 || _house == 2 ? 14 : 15]),
+	_brightPalette(kGamePalettes[13]), _gct(&caption),
+	_frameCounter(0), _finished(false),
+	_textItem(0), _textStart(0),
+	_textFramePending(false), _waitingText(false) {
 
 	// Load sounds
 	for (int i = 0; i < kSoundCount; i++)
-		_vm->_sound->sampleLoad(&_sounds[i], SOUND_SND, kSound[i]);
-
-	// Load GCT
-	Common::SeekableReadStream *gctStream = _vm->_dataIO->getFile(gct);
-	if (gctStream) {
-		_gct = new GCTFile(*gctStream, _vm->_rnd);
-
-		delete gctStream;
-	} else
-		error("Parents::Parents(): Failed to open \"%s\"", gct.c_str());
-
-	_gct->setArea(17, 18, 303, 41);
-	_gct->setText(1, childName);
-
-	_gct->selectLine(2, _house);
-	_gct->selectLine(4, _house);
-
-	for (uint i = 0; i < kLoopCount; i++)
-		_loopID[i] = addLoop(kLoop[i][0], kLoop[i][1], kLoop[i][2]);
+		Assets::loadSample(_vm, _sounds[i], kSound[i]);
 }
 
-Parents::~Parents() {
-	delete _gct;
-}
-
-void Parents::play() {
-	begin();
-	while (stepPlay()) {}
+Parents::Movie::~Movie() {
 	endPlay();
-
-	// After playback, fade out
-	if (!_vm->shouldQuit())
-		_vm->_palAnim->fade(nullptr, 0, 0);
+	_game.endReadingPage();
+	// The mixer borrows these samples until playback is stopped.
+	for (uint i = 0; i < kSoundCount; ++i)
+		_vm->_sound->blasterStop(0, &_sounds[i]);
 }
 
-void Parents::begin() {
-	_currentLoop = 0;
-	beginPlay(true, 496, 15);
+void Parents::Movie::changeFrameRate(int16 rate) {
+	_clock.setFrameRate(rate);
 }
 
-void Parents::handleFrameEvent() {
-	switch (getFrame()) {
+void Parents::Movie::waitFrame() {
+	_game.publishReadingPage();
+	if (_vm->shouldQuit())
+		return;
+	_clock.waitFrame();
+}
+
+void Parents::Movie::begin() {
+	_frameCounter = 0;
+	_textFramePending = false;
+	_finished = false;
+	_waitingText = false;
+	_game.endReadingPage();
+	// The native parents movie sets 12 fps after reading the SEQ header.
+	beginPlay(12);
+}
+
+bool Parents::Movie::stepPlay() {
+	if (_finished)
+		return false;
+	if (!_waitingText) {
+		const bool playing = SEQFile::stepPlay();
+		return playing && !_finished;
+	}
+	if (_vm->shouldQuit() || isAborted())
+		return false;
+
+	// Native showTextItem finishes intermediate pages before the next SEQ frame.
+	_vm->_util->processInput();
+	int16 x, y;
+	MouseButtons buttons;
+	_vm->_util->getMouseState(&x, &y, &buttons);
+	const int16 key = _vm->_util->checkKey();
+	handleInput(key, x, y, buttons);
+	if (isAborted())
+		return false;
+	const bool accepted = _game.takeReadingAdvance();
+	if (accepted || (_clock.now() - _textStart > OnceUpon::kGCTDelay
+		))
+		drawGCT(_textItem);
+	_vm->_draw->blitInvalidated();
+	_textFramePending = true;
+	waitFrame();
+	_textFramePending = false;
+	return true;
+}
+
+void Parents::Movie::resumePlay() {
+	SEQFile::resumePlay();
+	_game.expireReadingInput();
+}
+
+void Parents::Movie::activate(MouseButtons buttons) {
+	if (buttons == kMouseButtonsRight)
+		_game._readingMenu = -1;
+}
+
+void Parents::Movie::requireFreshInput() {
+	_game.expireReadingInput();
+}
+
+void Parents::Movie::handleFrameEvent() {
+	++_frameCounter;
+	const uint16 frame = getFrame();
+	const uint layout = (_house == 1 || _house == 2) ? 0 : 1;
+	for (uint i = 0; i < ARRAYSIZE(kLightningFrames[0]); ++i) {
+		const uint16 lightningFrame = kLightningFrames[layout][i];
+		if (lightningFrame == 0xFFFF)
+			break;
+		if (frame == lightningFrame)
+			lightningEffect();
+		if (frame == lightningFrame + 15)
+			playSound(kSoundThunder);
+	}
+	if (frame == (layout ? 332 : 340))
+		playSound(kSoundCackle);
+	switch (frame) {
 	case 0:
-		// On fame 0, fade in
+		// On frame 0, fade in
 		_vm->_draw->forceBlit();
-		_vm->_palAnim->fade(_vm->_global->_pPaletteDesc, 0, 0);
+		_palette.fadeToTarget();
 		break;
 
 	case 4:
@@ -122,19 +182,21 @@ void Parents::handleFrameEvent() {
 		break;
 
 	case 55:
-		drawGCT(3, 0);
+		drawGCT(3, true);
 		break;
 
 	case 79:
-		drawGCT(_house + 5, 1);
+		_gct->selectLine(_house + 5, _vm->_rnd.getRandomNumber(2));
+		drawGCT(_house + 5, true);
 		break;
 
 	case 110:
-		drawGCT(_house + 9, 2);
+		_gct->selectLine(_house + 9, _vm->_rnd.getRandomNumber(1));
+		drawGCT(_house + 9, true);
 		break;
 
 	case 146:
-		drawGCT(17);
+		drawGCT(17, true);
 		break;
 
 	case 198:
@@ -142,41 +204,19 @@ void Parents::handleFrameEvent() {
 		break;
 
 	case 445:
-		drawGCT(14, 3);
+		drawGCT(14, true);
 		break;
 
 	case 455:
-		drawGCT(18, 4);
+		drawGCT(18, true);
 		break;
 
 	case 465:
-		drawGCT(19, 5);
+		drawGCT(19, true);
 		break;
 
 	case 475:
-		drawGCT(20, 6);
-		break;
-
-	case 188:
-	case 228:
-	case 237:
-	case 257:
-	case 275:
-	case 426:
-		lightningEffect();
-		break;
-
-	case 203:
-	case 243:
-	case 252:
-	case 272:
-	case 290:
-	case 441:
-		playSound(kSoundThunder);
-		break;
-
-	case 340:
-		playSound(kSoundCackle);
+		drawGCT(20, true);
 		break;
 
 	default:
@@ -184,46 +224,158 @@ void Parents::handleFrameEvent() {
 	}
 }
 
-void Parents::handleInput(int16 key, int16 mouseX, int16 mouseY, MouseButtons mouseButtons) {
-	if ((key == kKeyEscape) || (mouseButtons == kMouseButtonsRight))
+void Parents::Movie::handleInput(int16 key, int16 mouseX, int16 mouseY, MouseButtons mouseButtons) {
+	// SEQ forces its mouse sample up; reading uses down edges, never that level.
+	_vm->_util->forceMouseButtonsSync();
+	_game.collectReadingInput(key);
+	if (_game._readingMenu) {
+		_game._readingMenu = 0;
 		abortPlay();
+		return;
+	}
 
-	if (((key == kKeySpace) || (mouseButtons == kMouseButtonsLeft)) && (_currentLoop < kLoopCount))
-		skipLoop(_loopID[_currentLoop]);
+	if (_waitingText)
+		return;
+	for (uint i = 0; i < kHoldCount; ++i) {
+		if (getFrame() != kHoldFrames[i][0])
+			continue;
+		if (!_game.takeReadingAdvance() && (_frameCounter < 100
+			))
+			seekFrame(kHoldFrames[i][1]);
+		return;
+	}
+	if (getFrame() > 496) {
+		if (_game.takeReadingAdvance() || (_frameCounter > 100
+			))
+			_finished = true;
+	}
 }
 
-void Parents::playSound(Sound sound) {
+void Parents::Movie::playSound(Sound sound) {
 	_vm->_sound->blasterStop(0);
 	_vm->_sound->blasterPlay(&_sounds[sound], 0, 0);
 }
 
-void Parents::lightningEffect() {
+void Parents::Movie::lightningEffect() {
+	const uint16 delay = _vm->getPlatform() == Common::kPlatformDOS ? 5 : 25;
 	for (int i = 0; (i < 5) && !_vm->shouldQuit(); i++) {
 
 		setPalette(_brightPalette, _paletteSize);
-		_vm->_util->delay(5);
+		_vm->_util->delay(delay);
 
 		setPalette(_normalPalette, _paletteSize);
-		_vm->_util->delay(5);
+		_vm->_util->delay(delay);
 	}
 }
 
-void Parents::setPalette(const byte *palette, uint size) {
-	memcpy(_vm->_draw->_vgaPalette, palette, 3 * size);
-
-	_vm->_video->setFullPalette(_vm->_global->_pPaletteDesc);
+void Parents::Movie::setPalette(const byte *palette, uint size) {
+	_palette.showTemporary(palette, size);
 	_vm->_video->retrace();
 }
 
-void Parents::drawGCT(uint item, uint loop) {
+void Parents::Movie::drawGCT(uint item, bool resetCounter) {
 	int16 left, top, right, bottom;
 	if (_gct->clear(*_vm->_draw->_backSurface, left, top, right, bottom))
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
-	if (_gct->draw(*_vm->_draw->_backSurface, item, *_font, 10, left, top, right, bottom))
+	const bool drawn = _gct->draw(*_vm->_draw->_backSurface, item, *_font, 10, left, top, right, bottom);
+	if (drawn) {
+		_game.beginReadingPage(_gct->finished() ? OnceUpon::kReadingAny : OnceUpon::kReadingSpace);
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
+	}
 
-	_currentLoop = loop;
+	if (resetCounter)
+		_frameCounter = 0;
+	_textItem = item;
+	_textStart = _clock.now();
+	_waitingText = !_gct->finished();
 }
+
+Parents::Parents(OnceUpon &game) : _game(game), _phase(kMovie), _cabin(false) {
+}
+
+Parents::~Parents() {
+	_movie.reset();
+	_dwelling.reset();
+	if (_phase == kSearch)
+		_game._clock.setFrameRate(15);
+}
+
+void OnceUpon::beginParents() {
+	beginScene(kSceneParents);
+	Parents *parents = new Parents(*this);
+	_scene.reset(parents);
+	parents->enter();
+}
+
+void Parents::enter() {
+	_game.fadeOut();
+	_game.hideCursor();
+	_cabin = _game._progress.house == 1 || _game._progress.house == 2;
+	_game._dwellingHotspots.enter(_cabin, _game._vm->getGameType() == kGameTypeAbracadabra);
+	const uint palette = _cabin ? 14 : 15;
+	_game.setGamePalette(palette);
+	_game.clearScreen();
+	_text.reset(_game.loadStoryGCT(_game.getLocFile("mefait.gc")));
+	_text->setText(1, _game._progress.name);
+	_text->selectLine(2, _game._progress.house);
+	_text->selectLine(4, _game._progress.house);
+	_movie.reset(new Movie(_game, _cabin ? "parents.seq" : "parents2.seq", *_text));
+	_movie->begin();
+}
+
+Section::Outcome Parents::step() {
+	if (_phase == kSearch)
+		return _dwelling->step();
+	const Outcome outcome = _movie->step();
+	if (outcome != kSectionComplete)
+		return outcome;
+
+	// The SEQ update has unwound. Release its captures, art and borrowed
+	// samples before constructing the dwelling presentation.
+	_movie.reset();
+	// GCTFile::reset() preserves the old background capture. Discard it
+	// before the search caption captures its own background.
+	_text->setArea(17, 18, 303, 41);
+	_text->reset();
+	_dwelling.reset(new DwellingSearch(_game, _cabin, *_text));
+	_phase = kSearch;
+	_dwelling->begin();
+	return kSectionContinue;
+}
+
+bool Parents::activateMovie(MouseButtons buttons) {
+	if (!_movie)
+		return false;
+	_movie->activate(buttons);
+	return true;
+}
+
+void Parents::resumeAfterPause() {
+	if (_movie)
+		_movie->requireFreshInput();
+}
+
+Section::Outcome Parents::Movie::step() {
+
+	const bool playing = stepPlay();
+
+	if (playing)
+		return kSectionContinue;
+	if (_vm->shouldQuit())
+		return kSectionQuit;
+	if (isAborted()) {
+		const Outcome outcome = _game.sceneMenu();
+		if (outcome != kSectionContinue)
+			return outcome;
+		resumePlay();
+		return kSectionContinue;
+	}
+	endPlay();
+	// The chapter switches to its dwelling after this update returns.
+	_game.fadeOut();
+	return kSectionComplete;
+}
+
 
 } // End of namespace OnceUpon
 

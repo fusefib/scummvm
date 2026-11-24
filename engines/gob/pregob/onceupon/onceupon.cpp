@@ -146,6 +146,7 @@ OnceUpon::~OnceUpon() {
 
 void OnceUpon::init() {
 	deinit();
+	_dwellingHotspots = DwellingHotspots();
 
 	// Open data files
 
