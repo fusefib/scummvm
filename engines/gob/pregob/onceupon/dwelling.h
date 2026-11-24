@@ -96,7 +96,7 @@ private:
 	Common::SharedPtr<const ANIFile> _ani;
 	Surface *_background;
 	GCTFile *_text; // Borrowed from Parents for this visit.
-	enum Phase { kPhaseNone, kPhaseSearch, kPhaseResult, kPhaseComplete };
+	enum Phase { kPhaseNone, kPhaseSearch, kPhaseResult, kPhaseRewardRead, kPhaseComplete };
 	Phase _phase;
 	uint16 _textItem;
 	uint32 _captionStart;

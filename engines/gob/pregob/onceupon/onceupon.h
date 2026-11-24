@@ -173,6 +173,7 @@ private:
 
 	/** The number of game sections. */
 	static const int kSectionCount = 15;
+	// Host reading timeout; active narration can keep a published page visible.
 	static const uint32 kGCTDelay = 12000;
 
 	static const MenuButton kMainMenuDifficultyButton[]; ///< Difficulty buttons.

@@ -247,7 +247,7 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 			}
 			if ((_animation == 22 || _animation == 23) && animationEnded()) {
 				_stage = kVictoryResume;
-				return Event(kWait, 700);
+				return Event(kWaitForCaption);
 			}
 			if (_animation == 24 && animationEnded())
 				_stage = kVictoryHold;
@@ -397,10 +397,10 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 			return Event(kFrame);
 		case kFailureWait:
 			_stage = kDone;
-			return Event(kWait, 700);
+			return Event(kWaitForCaption);
 		case kSearchWait:
 			_stage = kFinalDelay;
-			return Event(kWait, 700);
+			return Event(kWaitForCaption);
 		case kFinalDelay:
 			_stage = kFinalScore;
 			return Event(kDelay, 4000);
@@ -567,7 +567,7 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 			_animation = -1;
 			_spellActive = _toggled = false;
 			_stage = kEnterSearch;
-			return Event(kWait, 700);
+			return Event(kWaitForCaption);
 		case kEnterSearch:
 			_game._clock.setFrameRate(20);
 			_stage = kSearchInput;
@@ -717,10 +717,10 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 			return Event(kFrame);
 		case kFailureWait:
 			_stage = kDone;
-			return Event(kWait, 700);
+			return Event(kWaitForCaption);
 		case kSearchWait:
 			_stage = kFinalScore;
-			return Event(kWait, 700);
+			return Event(kWaitForCaption);
 		case kFinalScore:
 			_success = true;
 			_stage = kDone;
@@ -991,10 +991,10 @@ Section::Outcome Encounter::step() {
 			_game.holdActionCursor();
 			shake(event.value, event.selection);
 			break;
-		case Encounter::kWait:
+		case Encounter::kWaitForCaption:
 			_game.holdActionCursor();
-			_waitStart = _game._clock.now();
-			_waitDuration = event.value * 20;
+			_waitStart = _captionStart;
+			_waitDuration = 5000;
 			_phase = kTimedWait;
 			_game.endFrame();
 			return kSectionContinue;

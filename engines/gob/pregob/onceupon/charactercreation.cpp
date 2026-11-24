@@ -394,7 +394,7 @@ Section::Outcome CharacterCreation::step() {
 
 	if (_phase == kPhaseWait) {
 		const bool acknowledged = input.activation;
-		if (acknowledged || (_game._clock.now() - _waitStart >= 14000
+		if (acknowledged || (_game._clock.now() - _waitStart >= 3000
 #ifdef USE_TTS
 			&& !_game._narration.update(g_system->getMillis())
 #endif

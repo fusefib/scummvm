@@ -657,8 +657,6 @@ Section::Outcome Forest::step() {
 		return kSectionContinue;
 	}
 	if (_phase == kPhaseWait) {
-		// Use the ST PAL cadence for the native 700-retrace hold on every port.
-		const uint32 terminalWait = 700 * 20;
 		const bool acknowledged = input.activation;
 		if (acknowledged)
 			_game.takeReadingAdvance();
@@ -666,7 +664,7 @@ Section::Outcome Forest::step() {
 		if (acknowledged)
 			_game.cancelNarration();
 #endif
-		if (acknowledged || (_game._clock.now() - _waitStart >= terminalWait
+		if (acknowledged || (_game._clock.now() - _waitStart >= 5000
 #ifdef USE_TTS
 			&& !_game._narration.update(g_system->getMillis())
 #endif
@@ -828,6 +826,10 @@ Section::Outcome Forest::step() {
 				_finished = true;
 				_resume = kDamage;
 				_waitStart = _game._clock.now();
+#ifdef USE_TTS
+				if (Narration::isEnabled())
+					_waitStart = _captionStart;
+#endif
 				_phase = kPhaseWait;
 				_game.endFrame();
 				return kSectionContinue;

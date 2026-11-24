@@ -376,7 +376,8 @@ void OnceUpon::drawLineByLine(const Surface &src, int16 left, int16 top, int16 r
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y + i, x + width - 1, y + i);
 		_vm->_draw->blitInvalidated();
 
-		_vm->_util->longDelay(1);
+		_vm->_video->waitRetrace();
+		_vm->_util->processInput();
 	}
 
 	// Draw the odd lines upwards
@@ -389,7 +390,8 @@ void OnceUpon::drawLineByLine(const Surface &src, int16 left, int16 top, int16 r
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y + i, x + width - 1, y + i);
 		_vm->_draw->blitInvalidated();
 
-		_vm->_util->longDelay(1);
+		_vm->_video->waitRetrace();
+		_vm->_util->processInput();
 	}
 }
 

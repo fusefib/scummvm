@@ -232,28 +232,23 @@ SectionOutcome DwellingSearch::step() {
 	if (_phase == kPhaseComplete)
 		return kSectionComplete;
 	OnceUpon::SceneInput input = _game.readSceneInput(
-		_phase == kPhaseResult ? OnceUpon::kReadingInput : OnceUpon::kSceneInput);
+		_phase == kPhaseResult || _phase == kPhaseRewardRead ? OnceUpon::kReadingInput : OnceUpon::kSceneInput);
 
 	if (input.key == kKeyEscape || input.buttons == kMouseButtonsRight) {
 		return _game.sceneMenu();
 	}
 	bool down = (input.buttons & kMouseButtonsLeft) || (input.keys & 0x0010);
-	if (_phase == kPhaseResult) {
-		if (_game.captionReady(input.activation, _captionStart))
-			drawPage();
-		if (_text->finished()) {
-			_vm->_draw->blitInvalidated();
-			_game.publishReadingPage();
-#ifdef USE_TTS
-			_game.publishCaptionNarration();
-			if (_game._narration.update(g_system->getMillis())) {
-				_game.endFrame();
-				return kSectionContinue;
+	if (_phase == kPhaseResult || _phase == kPhaseRewardRead) {
+		if (_game.captionReady(input.activation, _captionStart)) {
+			if (_phase == kPhaseRewardRead) {
+				_phase = kPhaseComplete;
+				return kSectionComplete;
 			}
-#endif
-			_phase = kPhaseComplete;
-			return kSectionComplete;
+			drawPage();
 		}
+		// Exhausting the text publishes the last page; it still needs reading time.
+		if (_text->finished())
+			_phase = kPhaseRewardRead;
 		_game.endFrame();
 		return kSectionContinue;
 	}
@@ -284,6 +279,8 @@ SectionOutcome DwellingSearch::step() {
 		drawCaption(15);
 		if (_game._pendingRestore)
 			return kSectionRestore;
+		if (_text->finished())
+			_phase = kPhaseRewardRead;
 		_vm->_draw->blitInvalidated();
 		_game.publishReadingPage();
 		return kSectionContinue;
