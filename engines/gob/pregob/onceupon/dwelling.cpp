@@ -91,7 +91,7 @@ void OnceUpon::DwellingHotspots::enter(bool inCabin, bool mirror) {
 DwellingSearch::DwellingSearch(OnceUpon &game, bool cabin, GCTFile &text) : _vm(game._vm),
 	_assets(*game._assets), _game(game), _hotspots(cabin ? kCabin : kCastle),
 	_frames(cabin ? game._dwellingHotspots.cabin : game._dwellingHotspots.castle),
-	_mirrored(cabin ? game._dwellingHotspots.cabinMirrored : game._dwellingHotspots.castleMirrored),
+	_mirrored(cabin ? game._dwellingHotspots.cabinMirrored : game._dwellingHotspots.castleMirrored), _fireTick(false),
 	_ani(nullptr), _background(nullptr), _text(&text),
 	_phase(kPhaseNone), _textItem(0), _captionStart(0) {
 	_state.inCabin = cabin;
@@ -157,7 +157,11 @@ DwellingSearch::Event DwellingSearch::advance(bool down, bool activation) {
 	if (_state.rewardFrame >= 0 && ++_state.rewardFrame >= _ani->getAnimationInfo(28).frameCount)
 		return kComplete;
 
+	_fireTick = !_fireTick;
 	for (uint i = 0; i < hotspotCount(); ++i) {
+		// Only the looping FEU decoration runs at 10 fps in the 20 fps search.
+		if (_hotspots[i].animation == 7 && _fireTick)
+			continue;
 		if (_frames[i] >= 0 && ++_frames[i] >= _ani->getAnimationInfo(_hotspots[i].animation).frameCount)
 			_frames[i] = _hotspots[i].repeat ? 0 : -1;
 	}

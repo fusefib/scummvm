@@ -93,6 +93,7 @@ private:
 	const Hotspot *_hotspots;
 	int16 *_frames;
 	bool _mirrored;
+	bool _fireTick;
 	Common::SharedPtr<const ANIFile> _ani;
 	Surface *_background;
 	GCTFile *_text; // Borrowed from Parents for this visit.
