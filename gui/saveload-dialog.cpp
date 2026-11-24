@@ -174,7 +174,7 @@ enum {
 SaveLoadChooserDialog::SaveLoadChooserDialog(const Common::String &dialogName, const bool saveMode)
 	: Dialog(dialogName), _metaEngine(nullptr), _delSupport(false), _metaInfoSupport(false),
 	_thumbnailSupport(false), _saveDateSupport(false), _playTimeSupport(false), _saveMode(saveMode),
-	_dialogWasShown(false)
+	_dialogWasShown(false), _listPrefilled(false)
 #ifndef DISABLE_SAVELOADCHOOSER_GRID
 	, _listButton(nullptr), _gridButton(nullptr)
 #endif // !DISABLE_SAVELOADCHOOSER_GRID
@@ -190,7 +190,7 @@ SaveLoadChooserDialog::SaveLoadChooserDialog(const Common::String &dialogName, c
 SaveLoadChooserDialog::SaveLoadChooserDialog(int x, int y, int w, int h, const bool saveMode)
 	: Dialog(x, y, w, h), _metaEngine(nullptr), _delSupport(false), _metaInfoSupport(false),
 	_thumbnailSupport(false), _saveDateSupport(false), _playTimeSupport(false), _saveMode(saveMode),
-	_dialogWasShown(false)
+	_dialogWasShown(false), _listPrefilled(false)
 #ifndef DISABLE_SAVELOADCHOOSER_GRID
 	, _listButton(nullptr), _gridButton(nullptr)
 #endif // !DISABLE_SAVELOADCHOOSER_GRID
@@ -220,16 +220,22 @@ void SaveLoadChooserDialog::close() {
 	Dialog::close();
 }
 
-int SaveLoadChooserDialog::run(const Common::String &target, const MetaEngine *metaEngine) {
+int SaveLoadChooserDialog::run(const Common::String &target, const MetaEngine *metaEngine,
+		const Common::U32String &suggestedDescription, bool *listPrefilled) {
 	_metaEngine = metaEngine;
 	_target = target;
+	_suggestedDescription = _saveMode ? suggestedDescription : Common::U32String();
+	_listPrefilled = listPrefilled && *listPrefilled;
 	_delSupport = _metaEngine->hasFeature(MetaEngine::kSupportsDeleteSave);
 	_metaInfoSupport = _metaEngine->hasFeature(MetaEngine::kSavesSupportMetaInfo);
 	_thumbnailSupport = _metaInfoSupport && _metaEngine->hasFeature(MetaEngine::kSavesSupportThumbnail);
 	_saveDateSupport = _metaInfoSupport && _metaEngine->hasFeature(MetaEngine::kSavesSupportCreationDate);
 	_playTimeSupport = _metaInfoSupport && _metaEngine->hasFeature(MetaEngine::kSavesSupportPlayTime);
 
-	return runIntern();
+	const int result = runIntern();
+	if (listPrefilled)
+		*listPrefilled = _listPrefilled;
+	return result;
 }
 
 void SaveLoadChooserDialog::handleCommand(CommandSender *sender, uint32 cmd, uint32 data) {
@@ -504,7 +510,16 @@ void SaveLoadChooserSimple::handleCommand(CommandSender *sender, uint32 cmd, uin
 		}
 		break;
 	case kListItemEditModeStartedCmd:
-		if (_list->getSelectedString() == _("Untitled saved game")) {
+		if (!_suggestedDescription.empty() && selItem >= 0 && selItem < (int)_saveList.size()) {
+			// Occupied rows always have a label, even for an unnamed save.
+			if (!_listPrefilled && _list->getSelectedString().empty()) {
+				_list->setEditString(_suggestedDescription);
+				_listPrefilled = true;
+			} else {
+				_list->setEditString(_saveList[selItem].getDescription().decode());
+			}
+			_list->setEditColor(ThemeEngine::kFontColorNormal);
+		} else if (_list->getSelectedString() == _("Untitled saved game")) {
 			_list->setEditString(Common::U32String());
 			_list->setEditColor(ThemeEngine::kFontColorNormal);
 		}
@@ -1129,7 +1144,8 @@ int SaveLoadChooserGrid::runIntern() {
 }
 
 bool SaveLoadChooserGrid::selectDescription() {
-	_savenameDialog.setDescription(_resultString);
+	_savenameDialog.setDescription(getResult() == _nextFreeSaveSlot && !_suggestedDescription.empty() ?
+		_suggestedDescription.encode() : _resultString);
 	_savenameDialog.setTargetSlot(getResult());
 	if (_savenameDialog.runModal() == 0) {
 		_resultString = _savenameDialog.getDescription();

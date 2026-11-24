@@ -47,10 +47,16 @@ public:
 	 * Runs the save/load chooser with the currently active config manager
 	 * domain as target.
 	 *
-	 * @return The selcted save slot. -1 in case none is selected.
+	 * @return The selected save slot. -1 in case none is selected.
 	 */
 	int runModalWithCurrentTarget();
-	int runModalWithMetaEngineAndTarget(const MetaEngine *engine, const Common::String &target);
+	/**
+	 * The optional suggestion pre-fills the editor for new saves. Existing
+	 * descriptions, including empty descriptions, are preserved. Load choosers
+	 * ignore the suggestion; an empty value retains the usual behavior.
+	 */
+	int runModalWithMetaEngineAndTarget(const MetaEngine *engine, const Common::String &target,
+		const Common::U32String &suggestedDescription = Common::U32String());
 
 	const Common::String getResultString() const;
 

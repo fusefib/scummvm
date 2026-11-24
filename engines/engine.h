@@ -527,6 +527,13 @@ public:
 	virtual bool canSaveGameStateCurrently(Common::U32String *msg = nullptr);
 
 	/**
+	 * Suggest editable text for a new save slot in the ScummVM chooser.
+	 * An empty string keeps the chooser's ordinary behavior. Existing slots
+	 * keep their own descriptions; this does not change the save location.
+	 */
+	virtual Common::U32String getSaveGameDescription() const { return Common::U32String(); }
+
+	/**
 	 * Show the ScummVM save dialog, allowing users to save their game.
 	 */
 	bool saveGameDialog();

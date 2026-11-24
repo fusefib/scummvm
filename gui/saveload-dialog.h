@@ -93,7 +93,8 @@ public:
 	virtual SaveLoadChooserType getType() const = 0;
 #endif // !DISABLE_SAVELOADCHOOSER_GRID
 
-	int run(const Common::String &target, const MetaEngine *metaEngine);
+	int run(const Common::String &target, const MetaEngine *metaEngine,
+		const Common::U32String &suggestedDescription = Common::U32String(), bool *listPrefilled = nullptr);
 	virtual const Common::String getResultString() const = 0;
 
 protected:
@@ -125,6 +126,8 @@ protected:
 	bool _dialogWasShown;
 	SaveStateList				_saveList;
 	Common::String			_resultString;
+	Common::U32String _suggestedDescription;
+	bool _listPrefilled;
 
 #ifndef DISABLE_SAVELOADCHOOSER_GRID
 	ButtonWidget *_listButton;

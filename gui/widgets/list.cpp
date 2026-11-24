@@ -402,9 +402,6 @@ void ListWidget::handleMouseDown(int x, int y, int button, int clickCount) {
 		_dragStartY = y;
 		_dragLastY = y;
 	}
-
-	if (_editMode)
-		abortEditMode();
 }
 
 void ListWidget::handleMouseUp(int x, int y, int button, int clickCount) {
@@ -417,6 +414,8 @@ void ListWidget::handleMouseUp(int x, int y, int button, int clickCount) {
 		if (_isMouseDown && !_isDragging && !_wasAnimating) {
 			// Perform selection
 			int newSelectedItem = findItem(x, y);
+			if (_editMode && newSelectedItem != _selectedItem)
+				abortEditMode();
 			if (newSelectedItem != -1) {
 				// Get modifier keys
 				int modifiers = g_system->getEventManager()->getModifierState();

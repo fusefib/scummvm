@@ -87,10 +87,14 @@ int SaveLoadChooser::runModalWithCurrentTarget() {
 	if (!g_engine)
 		error("No engine is currently active");
 
-	return runModalWithMetaEngineAndTarget(g_engine->getMetaEngine(), ConfMan.getActiveDomainName());
+	return runModalWithMetaEngineAndTarget(g_engine->getMetaEngine(), ConfMan.getActiveDomainName(),
+		_saveMode ? g_engine->getSaveGameDescription() : Common::U32String());
 }
 
-int SaveLoadChooser::runModalWithMetaEngineAndTarget(const MetaEngine *engine, const Common::String &target) {
+int SaveLoadChooser::runModalWithMetaEngineAndTarget(const MetaEngine *engine, const Common::String &target,
+		const Common::U32String &suggestedDescription) {
+	// Keep one suggestion if the user switches between list and grid views.
+	const Common::U32String suggestion = _saveMode ? suggestedDescription : Common::U32String();
 	selectChooser(engine);
 	if (!_impl)
 		return -1;
@@ -105,8 +109,9 @@ int SaveLoadChooser::runModalWithMetaEngineAndTarget(const MetaEngine *engine, c
 	ConfMan.setActiveDomain(target);
 
 	int ret;
+	bool listPrefilled = false;
 	do {
-		ret = _impl->run(target, engine);
+		ret = _impl->run(target, engine, suggestion, &listPrefilled);
 #ifndef DISABLE_SAVELOADCHOOSER_GRID
 		if (ret == kSwitchSaveLoadDialog) {
 			selectChooser(engine);
