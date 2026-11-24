@@ -245,7 +245,7 @@ private:
 	};
 	SceneInput readSceneInput(uint policy = kSceneInput);
 	// Pending input belongs to the visible page until its successor is published.
-	enum ReadingKeys { kPageUnchanged, kNoReading, kReadingSpace, kReadingControls, kReadingAny };
+	enum ReadingKeys { kPageUnchanged, kNoReading, kReadingSpace, kReadingControls, kReadingAny, kActionCaption };
 	enum PagePress { kNoPress, kAdvancePage, kRightPress, kPageMenu };
 	struct PageInput {
 		ReadingKeys visible, prepared;
@@ -253,6 +253,9 @@ private:
 		PageInput() : visible(kNoReading), prepared(kPageUnchanged), press(kNoPress) {}
 		void mouseDown(MouseButtons button, MouseButtons held);
 		void keyDown(int16 key);
+		static bool blocksControls(ReadingKeys keys) {
+			return keys == kReadingSpace || keys == kReadingControls || keys == kReadingAny;
+		}
 		bool menuRequested() const { return press == kRightPress || press == kPageMenu; }
 		bool takeAdvance();
 	};
@@ -442,7 +445,9 @@ private:
 	void beginForestRoom(uint room, uint energy);
 	SectionOutcome skipForestRoom();
 	Surface *captureSceneTextBackground(const Surface &source) const;
-	bool drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart, bool terminal = false);
+	void clearSceneCaption(const Surface &background);
+	bool keepActionCaption(const Surface &background, uint32 start);
+	bool drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart, ReadingKeys lastPage = kNoReading);
 	struct EncounterSpec {
 		SceneKind kind;
 		int16 exteriorPalette, fightPalette, frameRate, retrySection;

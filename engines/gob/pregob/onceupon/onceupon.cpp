@@ -298,7 +298,7 @@ void OnceUpon::fadeIn() {
 	if (newPage) {
 		openPreparedPage();
 		_vm->_util->processInput();
-		if (_page.visible != kNoReading)
+		if (PageInput::blocksControls(_page.visible))
 			readPagePresses();
 	}
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0, 319, 199);
@@ -1332,7 +1332,7 @@ OnceUpon::SceneInput OnceUpon::readSceneInput(uint policy) {
 	input.confirmation = policy & kNameConfirmation ? _keyboard.confirmationKeys() : 0;
 	input.awaitingRelease = (policy & kWaitNameMouseRelease) && (input.buttons & kMouseButtonsLeft);
 	input.key = input.awaitingRelease ? 0 : _vm->_util->checkKey();
-	if (_page.visible != kNoReading || _page.menuRequested()) {
+	if (PageInput::blocksControls(_page.visible) || _page.menuRequested()) {
 		if (input.buttons == kMouseButtonsNone && input.keys == 0)
 			_freshInput = false;
 		readPagePresses(input.key);
@@ -1411,7 +1411,10 @@ void OnceUpon::readPagePresses(int16 key) {
 }
 
 void OnceUpon::openPreparedPage() {
-	readPagePresses();
+	if (PageInput::blocksControls(_page.visible) || PageInput::blocksControls(_page.prepared))
+		readPagePresses();
+	else
+		_keyboard.takeFocusLost();
 #ifdef USE_TTS
 	_narration.cancel();
 #endif
@@ -1472,6 +1475,16 @@ bool OnceUpon::handleKeyEvent(const Common::Event &event) {
 		if (event.type == Common::EVENT_KEYDOWN && event.kbdRepeat) {
 			return _menuInputActive || !_scene || !_scene->acceptsKeyRepeat(event.kbd);
 		}
+		if (event.type == Common::EVENT_KEYDOWN && _page.visible == kActionCaption && !_paused && !_menuInputActive) {
+			const Common::KeyCode key = event.kbd.keycode;
+			const bool skip = _sceneKind == kSceneForest ?
+				(key == Common::KEYCODE_RETURN || key == Common::KEYCODE_KP_ENTER) : key == Common::KEYCODE_SPACE;
+			if (skip) {
+				if (_page.press == kNoPress)
+					_page.press = kAdvancePage;
+				return true;
+			}
+		}
 		return false;
 	}
 	if (event.type == Common::EVENT_KEYUP) {
@@ -1496,7 +1509,8 @@ void OnceUpon::handleMouseDown(int16 x, int16 y, MouseButtons buttons) {
 		_menuIgnoredButtons = (MouseButtons)((uint32)_menuIgnoredButtons & (uint32)held);
 		if (_menuIgnoredButtons & buttons)
 			return;
-	} else if (_page.visible != kNoReading) {
+	} else if (PageInput::blocksControls(_page.visible) ||
+			(_page.visible == kActionCaption && _sceneKind == kSceneForest && buttons == kMouseButtonsLeft)) {
 		if (!_paused)
 			_page.mouseDown(buttons, held);
 		return;
@@ -1551,9 +1565,26 @@ Surface *OnceUpon::captureSceneTextBackground(const Surface &source) const {
 	return background;
 }
 
-bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart, bool terminal) {
+void OnceUpon::clearSceneCaption(const Surface &background) {
 	_vm->_draw->_backSurface->blit(background, 0, 0, 286, 23, 17, 18);
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 17, 18, 303, 41);
+}
+
+bool OnceUpon::keepActionCaption(const Surface &background, uint32 start) {
+	if (_page.visible != kActionCaption)
+		return false;
+	if (_keyboard.takeFocusLost())
+		_page.press = kNoPress;
+	if (_page.press == kAdvancePage) {
+		clearSceneCaption(background);
+		_page.visible = kNoReading;
+	}
+	// On timeout the words stay up until the next combat or forest comment.
+	return !finishPage(_clock.now() - start >= 7000);
+}
+
+bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart, ReadingKeys lastPage) {
+	clearSceneCaption(background);
 	int16 left, top, right, bottom;
 #ifdef USE_TTS
 	const bool drawn = text.draw(*_vm->_draw->_backSurface, item, *_plettre, 10, left, top, right, bottom, &_captionWords);
@@ -1565,8 +1596,8 @@ bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 it
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
 		if (!text.finished())
 			_page.prepared = kReadingControls;
-		else if (terminal || _page.visible != kNoReading)
-			_page.prepared = terminal ? kReadingAny : kNoReading;
+		else if (lastPage != kNoReading || _page.visible != kNoReading)
+			_page.prepared = lastPage;
 	}
 	_vm->_draw->blitInvalidated();
 	if (_page.prepared != kPageUnchanged && !_palette.holdingBlack())

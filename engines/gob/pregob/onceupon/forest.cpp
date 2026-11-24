@@ -555,6 +555,8 @@ void Forest::loadText(bool firstForest) {
 }
 
 void Forest::drawCaption(uint item, int selection) {
+	if (item >= 2 && item <= 4 && _game.keepActionCaption(*_captionBackground, _captionStart))
+		return;
 	_textItem = item;
 	_text->reset();
 	if (selection >= 0)
@@ -563,9 +565,14 @@ void Forest::drawCaption(uint item, int selection) {
 }
 
 void Forest::drawPage() {
-	// The return-leg handoff shares item 7 but continues without a result hold.
-	const bool terminal = _resume == kCrossing && _transition == kEnd;
-	_phase = _game.drawScenePage(*_text, *_captionBackground, _textItem, _captionStart, terminal) ?
+	OnceUpon::ReadingKeys lastPage = OnceUpon::kNoReading;
+	if (_resume == kCrossing) {
+		if (_transition == kFirstForest)
+			lastPage = OnceUpon::kActionCaption;
+		else if (_transition == kEnd)
+			lastPage = OnceUpon::kReadingAny;
+	}
+	_phase = _game.drawScenePage(*_text, *_captionBackground, _textItem, _captionStart, lastPage) ?
 		kPhasePlaying : kPhaseText;
 }
 
@@ -648,6 +655,8 @@ Section::Outcome Forest::step() {
 		return _game.sceneMenu();
 	if (_game._keyboard.takeSkipLevel())
 		return kSectionSkipRoom;
+	if (_game._page.press == OnceUpon::kAdvancePage)
+		_game.keepActionCaption(*_captionBackground, _captionStart);
 	if (_phase == kPhaseText) {
 		if (_game.captionReady(_captionStart))
 			drawPage();

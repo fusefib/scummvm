@@ -826,8 +826,9 @@ void Encounter::drawCaption(const Event &caption) {
 }
 
 void Encounter::drawPage() {
-	const bool finished = _game.drawScenePage(*_text, *_captionBackground, _caption.value, _captionStart,
-		_caption.type == kResultText);
+	const OnceUpon::ReadingKeys lastPage = _caption.type == kResultText ? OnceUpon::kReadingAny :
+		_caption.value == 0 ? OnceUpon::kActionCaption : OnceUpon::kNoReading;
+	const bool finished = _game.drawScenePage(*_text, *_captionBackground, _caption.value, _captionStart, lastPage);
 	_phase = finished ? kPlaying : kCaption;
 	if (!finished)
 		_game.holdActionCursor();
@@ -889,6 +890,8 @@ Section::Outcome Encounter::step() {
 			beginFight();
 		return kSectionContinue;
 	}
+	const bool keepIntroduction = _game._page.visible == OnceUpon::kActionCaption &&
+		_game.keepActionCaption(*_captionBackground, _captionStart);
 	if (_phase == kPostVictoryHold) {
 		if (_game._clock.now() - _waitStart < _waitDuration) {
 			_game.endFrame();
@@ -906,8 +909,8 @@ Section::Outcome Encounter::step() {
 #ifdef USE_TTS
 	const bool caption = _phase == kCaption;
 	const bool playing = _phase == kPlaying;
-	if ((playing && input.key == kKeySpace) || (caption && _queuedCaption.value >= 0 &&
-			(input.activation || input.key == kKeySpace || input.key == kKeyReturn)))
+	if (!keepIntroduction && ((playing && input.key == kKeySpace) || (caption && _queuedCaption.value >= 0 &&
+			(input.activation || input.key == kKeySpace || input.key == kKeyReturn))))
 		_game.cancelNarration();
 	if ((playing || caption) && _queuedCaption.value >= 0 &&
 		!_game._narration.speakingOrStarting(g_system->getMillis())) {
@@ -950,6 +953,8 @@ Section::Outcome Encounter::step() {
 		switch (event.type) {
 		case Encounter::kText:
 		case Encounter::kResultText:
+			if (keepIntroduction && event.value >= 2 && event.value <= 4)
+				break;
 #ifdef USE_TTS
 			if (_game._narration.speakingOrStarting(g_system->getMillis())) {
 				_queuedCaption = event;
@@ -1011,6 +1016,7 @@ Section::Outcome Encounter::step() {
 			if (_needsFadeIn) {
 				_vm->_draw->forceBlit();
 				_game.fadeIn();
+				_captionStart = _game._clock.now();
 				_needsFadeIn = false;
 			}
 			_game.endFrame();
