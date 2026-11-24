@@ -773,6 +773,14 @@ OnceUpon::MenuAction OnceUpon::handleMainMenu() {
 	return action;
 }
 
+static const char *const kSkipLevelLabels[OnceUpon::kLanguageCount] = {
+	"Passer le niveau", "\232berspringen", "Skip level", "Saltar nivel", "Salta livello"
+};
+
+static Common::Rect skipLevelButtonRect() {
+	return Common::Rect(108, 118, 212, 136);
+}
+
 OnceUpon::MenuAction OnceUpon::handleIngameMenu() {
 	beginMenuInput();
 	if (_pendingRestore)
@@ -810,6 +818,8 @@ OnceUpon::MenuAction OnceUpon::handleIngameMenu() {
 			action = kMenuActionMainMenu;
 		else if (button == 2)
 			action = kMenuActionPlay;
+		else if (_sceneKind == kSceneForest && skipLevelButtonRect().contains(mouseX, mouseY))
+			action = kMenuActionSkipRoom;
 		if (mouseY >= 50 && mouseY <= 81) {
 			if (mouseX >= 126 && mouseX <= 157)
 				action = kMenuActionSave;
@@ -1000,6 +1010,16 @@ void OnceUpon::drawIngameMenu() {
 	drawSaveLoadTile(tiles, 0, true, labels[0][0]);
 	drawSaveLoadTile(tiles, 36, false, labels[1][0]);
 	drawLineByLine(tiles, 0, 0, 67, 31, 126, 50);
+	if (_sceneKind == kSceneForest && !_pendingRestore && !_vm->shouldQuit()) {
+		const Common::Rect rect = skipLevelButtonRect();
+		Surface button(rect.width(), rect.height(), 1);
+		drawMenuTileBackground(button, 0, rect.width());
+		const Common::String label(kSkipLevelLabels[_vm->_global->_language]);
+		const int16 x = (rect.width() - (int)label.size() * _plettre->getCharWidth()) / 2;
+		const int16 y = (rect.height() - _plettre->getCharHeight()) / 2 + 2;
+		_plettre->drawString(label, x, y, Palette::kMenuFirstColor + 3, 0, true, button);
+		drawLineByLine(button, 0, 0, rect.width() - 1, rect.height() - 1, rect.left, rect.top);
+	}
 }
 
 void OnceUpon::drawMenuDifficulty() {
@@ -1031,6 +1051,10 @@ void OnceUpon::drawMenuDifficulty() {
 void OnceUpon::clearIngameMenu(const ScreenBackup &backup) {
 	if (_vm->shouldQuit())
 		return;
+	if (_sceneKind == kSceneForest) {
+		const Common::Rect rect = skipLevelButtonRect();
+		drawLineByLine(*backup.screen, rect.left, rect.top, rect.right - 1, rect.bottom - 1, rect.left, rect.top);
+	}
 	drawLineByLine(*backup.screen, 126, 50, 193, 81, 126, 50);
 	_palette.restoreMenuColors(backup.palette);
 
@@ -1117,6 +1141,8 @@ SectionOutcome OnceUpon::sceneMenu(bool *resumePage) {
 	_acceptActivations = true;
 	if (action == kMenuActionQuit)
 		return kSectionQuit;
+	if (action == kMenuActionSkipRoom)
+		return kSectionSkipRoom;
 	return action == kMenuActionRestart ? kSectionRestart : kSectionContinue;
 }
 

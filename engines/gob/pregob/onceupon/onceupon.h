@@ -135,6 +135,7 @@ private:
 		kMenuActionPlay    , ///< Play the game.
 		kMenuActionSave    , ///< Open ScummVM's save chooser.
 		kMenuActionLoad    , ///< Open ScummVM's load chooser.
+		kMenuActionSkipRoom, ///< Skip the current forest room.
 		kMenuActionRestart , ///< Restart the section.
 		kMenuActionMainMenu, ///< Go to the main menu.
 		kMenuActionQuit      ///< Quit the game.
