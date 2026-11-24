@@ -533,6 +533,9 @@ void Forest::enter(uint route) {
 	_game.drawScore();
 	_vm->_draw->forceBlit();
 	_game.fadeIn();
+#ifdef USE_TTS
+	_game.publishCaptionNarration();
+#endif
 	_game._acceptActivations = true;
 }
 
@@ -547,10 +550,16 @@ void Forest::showBabaDosWipe() {
 			drawBabaDosWipePass(slot - 1);
 		_vm->_draw->blitInvalidated();
 		_vm->_video->retrace();
+#ifdef USE_TTS
+		_game.publishCaptionNarration();
+#endif
 		for (;;) {
 			_vm->_util->processInput();
 			if (_vm->shouldQuit() || _game._quit)
 				break;
+#ifdef USE_TTS
+			_game._narration.update(g_system->getMillis());
+#endif
 
 			const uint32 elapsed = _game._clock.now() - started;
 			if (elapsed >= 50)
@@ -586,7 +595,14 @@ Section::Outcome Forest::step() {
 		const bool acknowledged = input.activation;
 		if (acknowledged)
 			_game.takeReadingAdvance();
+#ifdef USE_TTS
+		if (acknowledged)
+			_game.cancelNarration();
+#endif
 		if (acknowledged || (_game._clock.now() - _waitStart >= terminalWait
+#ifdef USE_TTS
+			&& !_game._narration.update(g_system->getMillis())
+#endif
 			)) {
 			_phase = kPhasePlaying;
 			_game.endReadingPage();

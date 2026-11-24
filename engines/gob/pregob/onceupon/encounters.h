@@ -104,6 +104,9 @@ private:
 	Common::ScopedPtr<Surface> _captionBackground;
 	uint32 _captionStart, _waitStart, _waitDuration;
 	uint16 _textItem;
+#ifdef USE_TTS
+	int16 _queuedText, _queuedSelection;
+#endif
 	bool _captionPressed, _needsFadeIn;
 };
 

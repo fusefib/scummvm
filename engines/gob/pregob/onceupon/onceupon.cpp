@@ -28,6 +28,9 @@
 #include "gob/pregob/onceupon/onceupon.h"
 #include "gob/pregob/onceupon/assets.h"
 
+#ifdef USE_TTS
+#include "common/config-manager.h"
+#endif
 
 #include "gob/gob.h"
 #include "gob/global.h"
@@ -87,6 +90,9 @@ void OnceUpon::finishScene() {
 		return;
 	endReadingPage();
 	removeSelectionCursor();
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	_acceptActivations = false;
 	_activations.clear();
 	const SceneKind kind = _sceneKind;
@@ -117,6 +123,9 @@ OnceUpon::OnceUpon(GobEngine *vm) : PreGob(vm), _openedArchives(false),
 	_acceptActivations(false), _freshInput(true),
 	_menuInputActive(false), _menuIgnoreEscape(false), _menuEscapePending(0),
 	_menuHeld(kMouseButtonsNone), _menuIgnoredButtons(kMouseButtonsNone)
+#ifdef USE_TTS
+	, _captionNarrationPending(false), _menuNarrationPending(false)
+#endif
 {
 }
 
@@ -206,6 +215,9 @@ void OnceUpon::resetProgress() {
 
 void OnceUpon::deinit() {
 
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	_menuInputActive = false;
 	_activations.clear();
 	if (_vm->_sound)
@@ -400,6 +412,9 @@ void OnceUpon::restoreScreen(ScreenBackup &backup, bool keepBlack) {
 }
 
 void OnceUpon::finishMenu(ScreenBackup &backup, bool fade) {
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	if (fade)
 		fadeOut();
 	else
@@ -421,6 +436,31 @@ void OnceUpon::waitInputDelay(uint16 milliseconds) {
 	} while (!_vm->shouldQuit() && _vm->_util->getTimeKey() < deadline);
 }
 
+#ifdef USE_TTS
+void OnceUpon::narrateText(const Common::String &text) {
+	_narration.publishNew(text, _vm->_global->_language, g_system->getMillis());
+}
+
+void OnceUpon::cancelNarration() {
+	_captionWords.clear();
+	_captionNarrationPending = false;
+	_menuWords.clear();
+	_menuNarrationPending = false;
+	_narration.cancel();
+}
+
+void OnceUpon::publishCaptionNarration() {
+	if (!_captionNarrationPending)
+		return;
+	if (_palette.holdingBlack())
+		return;
+	if (!_readingAdvance)
+		_narration.publishPage(_captionWords, _vm->_global->_language, g_system->getMillis());
+	_captionWords.clear();
+	_captionNarrationPending = false;
+}
+
+#endif
 void OnceUpon::endFrame() {
 	_vm->_draw->blitInvalidated();
 	publishReadingPage();
@@ -431,14 +471,51 @@ void OnceUpon::endFrame() {
 
 	if (!waited)
 		return;
+#ifdef USE_TTS
+	publishCaptionNarration();
+	publishMenuNarration();
+	_narration.update(g_system->getMillis());
+#endif
 }
 
+#ifdef USE_TTS
+void OnceUpon::publishMenuNarration() {
+	if (!_menuInputActive || !_menuNarrationPending)
+		return;
+	if (Narration::isEnabled())
+		_vm->_video->retrace();
+	narrateText(_menuWords);
+	_menuWords.clear();
+	_menuNarrationPending = false;
+}
+
+void OnceUpon::waitMenuNarration() {
+	while (!_vm->shouldQuit() && _narration.update(g_system->getMillis())) {
+		endFrame();
+		int16 x, y;
+		MouseButtons buttons;
+		const int16 key = checkMenuInput(x, y, buttons);
+		if (key == kKeyEscape || key == kKeySpace || key == kKeyReturn || buttons == kMouseButtonsLeft)
+			cancelNarration();
+	}
+}
+
+#endif
 bool OnceUpon::captionReady(bool accepted, uint32 captionStart) {
+#ifdef USE_TTS
+	const bool active = _narration.update(g_system->getMillis());
+#endif
 	if (accepted) {
 		takeReadingAdvance();
+#ifdef USE_TTS
+		cancelNarration();
+#endif
 		return true;
 	}
 	return _clock.now() - captionStart > kGCTDelay
+#ifdef USE_TTS
+		&& !active
+#endif
 		;
 }
 
@@ -534,6 +611,9 @@ OnceUpon::MenuAction OnceUpon::handleStartMenu(const MenuButton *animalsButton) 
 	drawStartMenu(animalsButton);
 	showCursor();
 	fadeIn();
+#ifdef USE_TTS
+	publishMenuNarration();
+#endif
 
 	MenuAction action = kMenuActionNone;
 	while (!_vm->shouldQuit() && (action == kMenuActionNone)) {
@@ -546,6 +626,9 @@ OnceUpon::MenuAction OnceUpon::handleStartMenu(const MenuButton *animalsButton) 
 
 		int16 key = checkMenuInput(mouseX, mouseY, mouseButtons);
 		if (key == kKeyEscape) {
+#ifdef USE_TTS
+			cancelNarration();
+#endif
 			action = kMenuActionQuit;
 			break;
 		}
@@ -553,6 +636,9 @@ OnceUpon::MenuAction OnceUpon::handleStartMenu(const MenuButton *animalsButton) 
 		if (mouseButtons != kMouseButtonsLeft)
 			continue;
 
+#ifdef USE_TTS
+		cancelNarration();
+#endif
 		playSound(kSoundClick);
 
 		// If we clicked on a difficulty button, show the selected difficulty and start the game
@@ -562,7 +648,13 @@ OnceUpon::MenuAction OnceUpon::handleStartMenu(const MenuButton *animalsButton) 
 			action      = kMenuActionPlay;
 
 			drawStartMenu(animalsButton);
+#ifdef USE_TTS
+			publishMenuNarration();
+#endif
 			waitInputDelay(1000);
+#ifdef USE_TTS
+			waitMenuNarration();
+#endif
 		}
 
 		if (animalsButton && (checkButton(animalsButton, 1, mouseX, mouseY) != -1))
@@ -586,6 +678,9 @@ OnceUpon::MenuAction OnceUpon::handleMainMenu() {
 	drawMainMenu();
 	showCursor();
 	fadeIn();
+#ifdef USE_TTS
+	publishMenuNarration();
+#endif
 
 	MenuAction action = kMenuActionNone;
 	while (!_vm->shouldQuit() && (action == kMenuActionNone)) {
@@ -598,6 +693,9 @@ OnceUpon::MenuAction OnceUpon::handleMainMenu() {
 
 		int16 key = checkMenuInput(mouseX, mouseY, mouseButtons);
 		if (key == kKeyEscape) {
+#ifdef USE_TTS
+			cancelNarration();
+#endif
 			action = kMenuActionQuit;
 			break;
 		}
@@ -605,6 +703,9 @@ OnceUpon::MenuAction OnceUpon::handleMainMenu() {
 		if (mouseButtons != kMouseButtonsLeft)
 			continue;
 
+#ifdef USE_TTS
+		cancelNarration();
+#endif
 		playSound(kSoundClick);
 
 		// If we clicked on a difficulty button, change the current difficulty level
@@ -613,6 +714,9 @@ OnceUpon::MenuAction OnceUpon::handleMainMenu() {
 			_progress.difficulty = (Difficulty)diff;
 
 			drawMainMenu();
+#ifdef USE_TTS
+			publishMenuNarration();
+#endif
 		}
 
 		// If we clicked on a section button, restart the game from this section
@@ -672,6 +776,9 @@ OnceUpon::MenuAction OnceUpon::handleIngameMenu() {
 
 void OnceUpon::beginMenuInput() {
 	expireReadingInput();
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	_vm->_util->clearKeyBuf();
 	_activations.clear();
 	_vm->_util->forceMouseButtonsSync();
@@ -684,6 +791,9 @@ void OnceUpon::beginMenuInput() {
 }
 
 void OnceUpon::endMenuInput() {
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	_menuInputActive = false;
 	_menuEscapePending = 0;
 	discardActivationInput();
@@ -773,6 +883,10 @@ void OnceUpon::drawIngameMenu() {
 }
 
 void OnceUpon::drawMenuDifficulty() {
+#ifdef USE_TTS
+	_menuWords.clear();
+	_menuNarrationPending = false;
+#endif
 	if (_progress.difficulty == kDifficultyCount)
 		return;
 
@@ -782,7 +896,11 @@ void OnceUpon::drawMenuDifficulty() {
 	TXTFile::Line &line = difficulties->getLines()[_progress.difficulty];
 	line.text.trim();
 	line.x = 157 - (line.text.size() * _plettre->getCharWidth()) / 2;
+#ifdef USE_TTS
+	_menuNarrationPending = difficulties->draw((uint) _progress.difficulty, *_vm->_draw->_backSurface, &_plettre, 1, -1, &_menuWords);
+#else
 	difficulties->draw((uint) _progress.difficulty, *_vm->_draw->_backSurface, &_plettre, 1, -1);
+#endif
 
 	// Draw a border around the current difficulty
 	drawButtonBorder(kMainMenuDifficultyButton[_progress.difficulty], difficulties->getLines()[_progress.difficulty].color);
@@ -822,6 +940,9 @@ void OnceUpon::clearIngameMenu(const Surface &background) {
 
 OnceUpon::MenuAction OnceUpon::doIngameMenu() {
 	_clock.pause();
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	// Show the ingame menu
 	MenuAction action = handleIngameMenu();
 
@@ -1065,6 +1186,9 @@ void OnceUpon::queueReadingAdvance() {
 	if (!_readingVisible || _readingAdvance || _paused || _menuInputActive)
 		return;
 	_readingAdvance = true;
+#ifdef USE_TTS
+	_narration.cancel();
+#endif
 }
 
 void OnceUpon::collectReadingInput(int16 key) {
@@ -1088,6 +1212,9 @@ void OnceUpon::beginReadingPage(ReadingKeys keys) {
 	// Poll before replacing the visible page; old taps cannot pay for new text.
 	_vm->_util->processInput();
 	collectReadingInput();
+#ifdef USE_TTS
+	_narration.cancel();
+#endif
 	_readingKeys = keys;
 	_readingVisible = false;
 	_readingOpening = keys != kNoReading;
@@ -1150,6 +1277,9 @@ void OnceUpon::pauseChanged(bool paused, uint32 duration) {
 	expireReadingInput();
 	if (paused) {
 		_clock.pause();
+#ifdef USE_TTS
+		cancelNarration();
+#endif
 	} else {
 		_clock.resume();
 		if (_scene)
@@ -1267,7 +1397,12 @@ bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 it
 	_vm->_draw->_backSurface->blit(background, 0, 0, 286, 23, 17, 18);
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 17, 18, 303, 41);
 	int16 left, top, right, bottom;
+#ifdef USE_TTS
+	const bool drawn = text.draw(*_vm->_draw->_backSurface, item, *_plettre, 10, left, top, right, bottom, &_captionWords);
+	_captionNarrationPending = drawn;
+#else
 	const bool drawn = text.draw(*_vm->_draw->_backSurface, item, *_plettre, 10, left, top, right, bottom);
+#endif
 	if (drawn)
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
 	if (drawn && (!text.finished() || terminal || _readingKeys != kNoReading))

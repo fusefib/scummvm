@@ -26,9 +26,15 @@
  */
 
 #include "common/memstream.h"
+#ifdef USE_TTS
+#include "common/str-array.h"
+#endif
 #include "common/stream.h"
 #include "common/system.h"
 #include "common/textconsole.h"
+#ifdef USE_TTS
+#include "common/tokenizer.h"
+#endif
 #include "common/util.h"
 
 #include "gob/dataio.h"
@@ -155,6 +161,59 @@ bool StoryText::load(Common::SeekableReadStream &source, bool repairAbracadabraC
 	return !source.err();
 }
 
+#ifdef USE_TTS
+// Group the drawn GENE cards into TTS utterances for headings, prose and
+// credits. Use the drawn wording so localization corrections and clipping
+// carry into speech.
+static Common::StringArray storySpeechParts(const Common::String &drawnText, const TXTFile::LineArray &layout, int chapter) {
+	Common::StringArray rows = Common::StringTokenizer(drawnText, "\n").split();
+	Common::StringArray parts;
+	if (rows.size() < 2 || rows.size() != layout.size() ||
+		(chapter < 0 && rows.size() != 7) || (chapter >= 0 && layout.front().font != 1))
+		return parts;
+	for (uint i = 0; i < rows.size(); ++i)
+		rows[i].trim();
+
+	if (chapter == 0) {
+		if (rows.size() != 6 && rows.size() != 7)
+			return parts;
+		// GENE0 splits the illustrators across rows 3 and 4. German already
+		// has the comma after Kaki. The optional copyright is its own row.
+		if (rows[2].lastChar() != ',')
+			rows[2] += ',';
+		rows[2] += ' ';
+		rows[2] += rows[3];
+		rows.remove_at(3);
+		return rows;
+	}
+
+	// The quote ends with its author's name. Chapter cards start with a
+	// heading, and blank body rows on the Abracadabra Chapter 4 cards
+	// in English and Italian mark a new paragraph.
+	const uint firstBodyRow = chapter < 0 ? 0 : 1;
+	const uint endBody = chapter < 0 ? rows.size() - 1 : rows.size();
+	if (firstBodyRow)
+		parts.push_back(rows.front());
+	Common::String paragraph;
+	for (uint i = firstBodyRow; i < endBody; ++i) {
+		if (rows[i].empty()) {
+			if (!paragraph.empty())
+				parts.push_back(paragraph);
+			paragraph.clear();
+		} else {
+			if (!paragraph.empty())
+				paragraph += ' ';
+			paragraph += rows[i];
+		}
+	}
+	if (!paragraph.empty())
+		parts.push_back(paragraph);
+	if (chapter < 0)
+		parts.push_back(rows.back());
+	return parts;
+}
+
+#endif
 void OnceUpon::beginStoryText(int chapter) {
 	beginScene(kSceneStory);
 	StoryText *story = new StoryText(*this);
@@ -196,17 +255,37 @@ void StoryText::begin(int chapter) {
 
 void StoryText::drawPage() {
 	GobEngine *const vm = _game._vm;
+#ifdef USE_TTS
+	_game.cancelNarration();
+#endif
 	_game.fadeOut();
 	_game.setGamePalette(11);
 	vm->_draw->_backSurface->blit(*_canvas);
 	const Font *fonts[2] = {_game._plettre, _game._glettre};
+#ifdef USE_TTS
+	Common::String drawnText;
+#endif
 	TXTFile &page = this->page(_page);
-	page.draw(*vm->_draw->_backSurface, fonts, ARRAYSIZE(fonts), -1);
+	page.draw(*vm->_draw->_backSurface, fonts, ARRAYSIZE(fonts), -1
+#ifdef USE_TTS
+		, &drawnText
+#endif
+	);
 	_game.beginReadingPage(OnceUpon::kReadingAny);
 	vm->_draw->forceBlit();
 	_game.publishReadingPage();
 	_game.fadeIn();
 	_waitStart = _game._clock.now();
+#ifdef USE_TTS
+	if (Narration::isEnabled() && !_game._readingAdvance) {
+		const Common::StringArray parts = storySpeechParts(drawnText, page.getLines(), _chapter);
+		const uint32 now = g_system->getMillis();
+		if (parts.empty())
+			_game._narration.publishPage(drawnText, vm->_global->_language, now);
+		else
+			_game._narration.publishStoryPage(parts, vm->_global->_language, now);
+	}
+#endif
 	_phase = kPhaseDelay;
 	_game._acceptActivations = false;
 	_game._activations.clear();
@@ -220,6 +299,9 @@ Section::Outcome StoryText::step() {
 		if (_game._clock.now() - _waitStart >= 500) {
 			_phase = kPhaseWait;
 		} else {
+#ifdef USE_TTS
+			_game._narration.updateStoryPage(g_system->getMillis());
+#endif
 			_game.endFrame();
 			return kSectionContinue;
 		}
@@ -232,10 +314,16 @@ Section::Outcome StoryText::step() {
 	// A skip or menu request can arrive as one part finishes, before the
 	// next part has been submitted.
 	if (!accepted && (
+#ifdef USE_TTS
+		_game._narration.updateStoryPage(g_system->getMillis()) ||
+#endif
 		_game._clock.now() - _waitStart < 14000)) {
 		_game.endFrame();
 		return kSectionContinue;
 	}
+#ifdef USE_TTS
+	_game.cancelNarration();
+#endif
 	if (menu && _chapter > 0) {
 		// Resume acknowledges this page; chooser and GMM returns do not.
 		bool resumePage = false;

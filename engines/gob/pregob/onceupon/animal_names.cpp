@@ -152,6 +152,9 @@ void OnceUpon::handleAnimalNames() {
 	while (!_vm->shouldQuit() && (state != kANStateFinish)) {
 		showCursor();
 		fadeIn();
+#ifdef USE_TTS
+		publishMenuNarration();
+#endif
 
 		endFrame();
 
@@ -162,6 +165,9 @@ void OnceUpon::handleAnimalNames() {
 
 		int16 key = checkMenuInput(mouseX, mouseY, mouseButtons);
 		if (key == kKeyEscape) {
+#ifdef USE_TTS
+			cancelNarration();
+#endif
 			if (state == kANStateNames) {
 				anSetupChooser();
 				state = kANStateChoose;
@@ -188,6 +194,9 @@ void OnceUpon::handleAnimalNames() {
 		if (mouseButtons != kMouseButtonsLeft)
 			continue;
 
+#ifdef USE_TTS
+		cancelNarration();
+#endif
 		playSound(kSoundClick);
 
 		// We clicked on a language button, play the animal name
@@ -213,6 +222,9 @@ void OnceUpon::handleAnimalNames() {
 		}
 	}
 
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	fadeOut();
 
 	// Restore the cursor
@@ -223,6 +235,9 @@ void OnceUpon::handleAnimalNames() {
 }
 
 void OnceUpon::anSetupChooser() {
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	fadeOut();
 	setGamePalette(18);
 
@@ -235,13 +250,20 @@ void OnceUpon::anSetupChooser() {
 
 	// "Choose an animal"
 	TXTFile *choose = loadTXT(getLocFile("choisi.tx"), TXTFile::kFormatStringPosition);
+#ifdef USE_TTS
+	_menuNarrationPending = choose->draw(*_vm->_draw->_backSurface, &_plettre, 1, 14, &_menuWords);
+#else
 	choose->draw(*_vm->_draw->_backSurface, &_plettre, 1, 14);
+#endif
 	delete choose;
 
 	_vm->_draw->forceBlit();
 }
 
 void OnceUpon::anSetupNames(const MenuButton &animal) {
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	fadeOut();
 	setGamePalette(19);
 
@@ -276,13 +298,29 @@ void OnceUpon::anSetupNames(const MenuButton &animal) {
 		{"Italiano", 43, 128}, {"Espa\244ol", 136, 128}, {"English", 238, 128}
 	};
 	for (uint i = 0; i < ARRAYSIZE(labels); ++i) {
+#ifdef USE_TTS
+		Common::String visible;
+		_plettre->drawString(labels[i].text, labels[i].x, labels[i].y, 10, 15, true, *_vm->_draw->_backSurface, &visible);
+		if (!visible.empty()) {
+			if (!_menuWords.empty())
+				_menuWords += '\n';
+			_menuWords += visible;
+		}
+#else
 		_plettre->drawString(labels[i].text, labels[i].x, labels[i].y, 10, 15, true, *_vm->_draw->_backSurface);
+#endif
 	}
+#ifdef USE_TTS
+	_menuNarrationPending = !_menuWords.empty();
+#endif
 
 	_vm->_draw->forceBlit();
 }
 
 void OnceUpon::anPlayAnimalName(const Common::String &animal, uint language) {
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	// Sound file to play
 	Common::String soundFile = animal + "_" + kLanguageSuffixLong[language] + ".snd";
 

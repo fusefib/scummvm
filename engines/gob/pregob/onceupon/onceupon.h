@@ -37,6 +37,9 @@
 #include "gob/sound/sounddesc.h"
 #include "gob/pregob/pregob.h"
 #include "gob/pregob/onceupon/input.h"
+#ifdef USE_TTS
+#include "gob/pregob/onceupon/tts.h"
+#endif
 #include "gob/pregob/onceupon/scene.h"
 #include "gob/pregob/onceupon/runtime_clock.h"
 #include "gob/pregob/onceupon/palette.h"
@@ -263,10 +266,21 @@ private:
 	bool _menuInputActive, _menuIgnoreEscape;
 	uint _menuEscapePending;
 	MouseButtons _menuHeld, _menuIgnoredButtons;
+#ifdef USE_TTS
+	Narration _narration;
+	// Publication requests are transient, never continuation state.
+	Common::String _captionWords;
+	bool _captionNarrationPending;
+	Common::String _menuWords;
+	bool _menuNarrationPending;
+#endif
 
 
 	// -- General helpers --
 
+#ifdef USE_TTS
+	void narrateText(const Common::String &text);
+#endif
 	void resetProgress();
 	void beginScene(SceneKind kind);
 	void finishScene();
@@ -274,6 +288,12 @@ private:
 	SectionOutcome stepScene();
 	void leaveScene();
 	void completeScene(SectionOutcome outcome);
+#ifdef USE_TTS
+	void cancelNarration();
+	void publishCaptionNarration();
+	void publishMenuNarration();
+	void waitMenuNarration();
+#endif
 	void endFrame();
 	bool captionReady(bool accepted, uint32 captionStart);
 	GCTFile *loadStoryGCT(const Common::String &name) const;

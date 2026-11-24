@@ -66,13 +66,14 @@ public:
 
 	LineArray &getLines();
 
-	bool draw(           Surface &surface, const Font * const *fonts, uint fontCount, int color = -1);
-	bool draw(uint line, Surface &surface, const Font * const *fonts, uint fontCount, int color = -1);
+	/** Optional output contains the visible text from this draw, in line order. */
+	bool draw(           Surface &surface, const Font * const *fonts, uint fontCount, int color = -1, Common::String *drawnText = nullptr);
+	bool draw(uint line, Surface &surface, const Font * const *fonts, uint fontCount, int color = -1, Common::String *drawnText = nullptr);
 
 	bool draw(           Surface &surface, int16 &left, int16 &top, int16 &right, int16 &bottom,
-	          const Font * const *fonts, uint fontCount, int color = -1);
+	          const Font * const *fonts, uint fontCount, int color = -1, Common::String *drawnText = nullptr);
 	bool draw(uint line, Surface &surface, int16 &left, int16 &top, int16 &right, int16 &bottom,
-	          const Font * const *fonts, uint fontCount, int color = -1);
+	          const Font * const *fonts, uint fontCount, int color = -1, Common::String *drawnText = nullptr);
 
 	bool clear(Surface &surface, int16 &left, int16 &top, int16 &right, int16 &bottom);
 

@@ -73,6 +73,9 @@ private:
 		void resumePlay();
 		void activate(MouseButtons buttons);
 		void requireFreshInput();
+#ifdef USE_TTS
+		void discardNarration();
+#endif
 
 	protected:
 		void changeFrameRate(int16 rate) override;
@@ -123,6 +126,9 @@ private:
 		void setPalette(const byte *palette, uint size);
 
 		void drawGCT(uint item, bool resetCounter = false);
+#ifdef USE_TTS
+		void publishNarration();
+#endif
 	};
 
 	OnceUpon &_game;

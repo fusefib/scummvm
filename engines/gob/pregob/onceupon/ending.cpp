@@ -122,6 +122,9 @@ void Ending::begin() {
 	drawPage();
 	_vm->_draw->forceBlit();
 	_game.fadeIn();
+#ifdef USE_TTS
+	_game.publishCaptionNarration();
+#endif
 	_game._acceptActivations = true;
 }
 
@@ -138,6 +141,9 @@ Section::Outcome Ending::step() {
 	if (_phase == kPhaseText) {
 		if (_game.captionReady(input.activation, _captionStart))
 			drawPage();
+#ifdef USE_TTS
+		_game.publishCaptionNarration();
+#endif
 		if (_phase == kPhaseText)
 			_game.endFrame();
 		return kSectionContinue;

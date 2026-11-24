@@ -343,7 +343,9 @@ bool GCTFile::finished() const {
 }
 
 bool GCTFile::draw(Surface &dest, uint16 item, const Font &font, uint8 color,
-				   int16 &left, int16 &top, int16 &right, int16 &bottom) {
+				   int16 &left, int16 &top, int16 &right, int16 &bottom, Common::String *drawnText) {
+	if (drawnText)
+		drawnText->clear();
 
 	if ((item >= _items.size()) || !_hasArea)
 		return false;
@@ -415,7 +417,13 @@ bool GCTFile::draw(Surface &dest, uint16 item, const Font &font, uint8 color,
 		}
 		const int16 x = left + (width - centeredLength * font.getCharWidth()) / 2;
 
-		font.drawString(line, x, y, color, 0, true, dest);
+		Common::String visible;
+		font.drawString(line, x, y, color, 0, true, dest, drawnText ? &visible : nullptr);
+		if (drawnText && !visible.empty()) {
+			if (!drawnText->empty())
+				*drawnText += '\n';
+			*drawnText += visible;
+		}
 	}
 
 	return true;

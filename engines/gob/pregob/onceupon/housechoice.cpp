@@ -227,9 +227,16 @@ void HouseChoice::enter() {
 	drawInterface();
 	_prompt.reset(_game.loadTXT(_game.getLocFile("ouva.tx"), TXTFile::kFormatStringPositionColor));
 	int16 left = 0, top = 0, right = 0, bottom = 0;
+#ifdef USE_TTS
+	const bool drawn = _prompt->draw(captionBackground(), left, top, right, bottom, &_game._plettre, 1, -1, &_game._captionWords);
+#else
 	const bool drawn = _prompt->draw(captionBackground(), left, top, right, bottom, &_game._plettre, 1, -1);
+#endif
 	if (drawn)
 		syncCaption(left, top, right, bottom);
+#ifdef USE_TTS
+	_game._captionNarrationPending = true;
+#endif
 	_text.reset(_game.loadStoryGCT(_game.getLocFile("choix.gc")));
 	render();
 	Surface cursor(16, 16, 1);
@@ -251,7 +258,11 @@ void HouseChoice::drawSelectionCaption() {
 	const int sky = _vm->getGameType() == kGameTypeBabaYaga ? 2 : 0;
 	const bool erased = _prompt->draw(background,
 		promptLeft, promptTop, promptRight, promptBottom, &_game._plettre, 1, sky);
+#ifdef USE_TTS
+	_game._captionNarrationPending = _text->draw(background, 2, *_game._plettre, 10, left, top, right, bottom, &_game._captionWords);
+#else
 	_text->draw(background, 2, *_game._plettre, 10, left, top, right, bottom);
+#endif
 	// Baba Yaga's French and German prompts extend below the GCT caption.
 	if (erased) {
 		left = MIN(left, promptLeft);
@@ -291,6 +302,9 @@ Section::Outcome HouseChoice::step() {
 	const bool click = input.activation || (pressed && !_previousPress);
 	_previousPress = pressed;
 	if (click) {
+#ifdef USE_TTS
+		_game._narration.cancel();
+#endif
 		_game.playSound(OnceUpon::kSoundClick);
 	}
 

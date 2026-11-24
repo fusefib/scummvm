@@ -192,7 +192,12 @@ void DwellingSearch::drawPage() {
 	int16 left, top, right, bottom;
 	if (_text->clear(*_vm->_draw->_backSurface, left, top, right, bottom))
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
+#ifdef USE_TTS
+	const bool drawn = _text->draw(*_vm->_draw->_backSurface, _textItem, *_game._plettre, 10, left, top, right, bottom, &_game._captionWords);
+	_game._captionNarrationPending = drawn;
+#else
 	const bool drawn = _text->draw(*_vm->_draw->_backSurface, _textItem, *_game._plettre, 10, left, top, right, bottom);
+#endif
 	if (drawn) {
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
 		if (_textItem == 15)
@@ -202,6 +207,9 @@ void DwellingSearch::drawPage() {
 }
 
 void DwellingSearch::begin() {
+#ifdef USE_TTS
+	_game.cancelNarration();
+#endif
 	_game.fadeOut();
 	_game.setGamePalette((_game._progress.house == 1 || _game._progress.house == 2) ? 14 : 15);
 	prepare(*_vm->_draw->_backSurface);
@@ -209,6 +217,9 @@ void DwellingSearch::begin() {
 	_game.drawScore();
 	_vm->_draw->forceBlit();
 	_game.fadeIn();
+#ifdef USE_TTS
+	_game.publishCaptionNarration();
+#endif
 	_game._clock.setFrameRate(20);
 	_vm->_util->setMousePos(160, 100);
 	_vm->_util->processInput();
@@ -233,6 +244,13 @@ SectionOutcome DwellingSearch::step() {
 		if (_text->finished()) {
 			_vm->_draw->blitInvalidated();
 			_game.publishReadingPage();
+#ifdef USE_TTS
+			_game.publishCaptionNarration();
+			if (_game._narration.update(g_system->getMillis())) {
+				_game.endFrame();
+				return kSectionContinue;
+			}
+#endif
 			_phase = kPhaseComplete;
 			return kSectionComplete;
 		}

@@ -165,6 +165,9 @@ bool OnceUpon::doCopyProtection() {
 	const uint8 *colors = kCopyProtectionColors;
 	const uint8 *shapes = abra ? kAbracadabraCopyProtectionShapes : kBabaYagaCopyProtectionShapes;
 	const uint8 *obfuscate = abra ? kAbracadabraCopyProtectionObfuscate : kBabaYagaCopyProtectionObfuscate;
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	fadeOut();
 	setPalette(kCopyProtectionPalette, kPaletteSize);
 
@@ -223,6 +226,9 @@ bool OnceUpon::doCopyProtection() {
 				guessedShape = findProtectionShape(mouseX, mouseY);
 
 			if (guessedShape >= 0) {
+#ifdef USE_TTS
+				cancelNarration();
+#endif
 				hasCorrect  = guessedShape == animalShape;
 				animalShape = -1;
 
@@ -232,6 +238,9 @@ bool OnceUpon::doCopyProtection() {
 		}
 	}
 
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	freeAnims(anims);
 
 	fadeOut();
@@ -287,8 +296,21 @@ int8 OnceUpon::cpSetup(const uint8 colors[7], const uint8 shapes[7 * 20], const 
 		const int x = 160 - (strlen(helpString) * _plettre->getCharWidth()) / 2;
 		const int y = i * 10 + 5;
 
+#ifdef USE_TTS
+		Common::String row;
+		_plettre->drawString(helpString, x, y, 8, 0, true, *_vm->_draw->_backSurface, &row);
+		if (!row.empty()) {
+			if (!_captionWords.empty())
+				_captionWords += '\n';
+			_captionWords += row;
+		}
+#else
 		_plettre->drawString(helpString, x, y, 8, 0, true, *_vm->_draw->_backSurface);
+#endif
 	}
+#ifdef USE_TTS
+	_captionNarrationPending = !_captionWords.empty();
+#endif
 
 	// White rectangle with black border
 	_vm->_draw->_backSurface->fillRect( 93, 43, 226, 134, 15);
@@ -319,7 +341,12 @@ void OnceUpon::cpWrong() {
 	const int          wrongX      = 160 - (strlen(wrongString) * _plettre->getCharWidth()) / 2;
 
 	_vm->_draw->_backSurface->clear();
+#ifdef USE_TTS
+	_plettre->drawString(wrongString, wrongX, 100, 15, 0, true, *_vm->_draw->_backSurface, &_captionWords);
+	_captionNarrationPending = !_captionWords.empty();
+#else
 	_plettre->drawString(wrongString, wrongX, 100, 15, 0, true, *_vm->_draw->_backSurface);
+#endif
 
 	_vm->_draw->forceBlit();
 
@@ -329,6 +356,9 @@ void OnceUpon::cpWrong() {
 		endFrame();
 	} while (!_vm->shouldQuit() && !hasInput());
 
+#ifdef USE_TTS
+	cancelNarration();
+#endif
 	if (_vm->shouldQuit())
 		return;
 

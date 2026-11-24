@@ -158,7 +158,9 @@ void Font::drawLetter(Surface &surf, uint8 c, uint16 x, uint16 y,
 }
 
 void Font::drawString(const Common::String &str, int16 x, int16 y, uint8 colorIndex1, uint8 colorIndex2,
-					  bool transp, Surface &dest) const {
+					  bool transp, Surface &dest, Common::String *drawnText) const {
+	if (drawnText)
+		drawnText->clear();
 
 	uint32 color1 = dest.getColorFromIndex(colorIndex1);
 	uint32 color2 = dest.getColorFromIndex(colorIndex2);
@@ -169,8 +171,11 @@ void Font::drawString(const Common::String &str, int16 x, int16 y, uint8 colorIn
 		const int16 charRight  = x + getCharWidth(*s);
 		const int16 charBottom = y + getCharHeight();
 
-		if ((x >= 0) && (y >= 0) && (charRight <= dest.getWidth()) && (charBottom <= dest.getHeight()))
+		if ((x >= 0) && (y >= 0) && (charRight <= dest.getWidth()) && (charBottom <= dest.getHeight())) {
 			drawLetterRaw(dest, *s, x, y, color1, color2, transp);
+			if (drawnText && *s != '\r' && *s != '\n' && hasChar(*s))
+				*drawnText += *s;
+		}
 
 		x += getCharWidth(*s);
 		s++;

@@ -49,6 +49,9 @@ Encounter::Encounter(OnceUpon &game, int16 animation, bool boss) :
 	_vm(game._vm), _game(game), _ani(nullptr), _background(nullptr), _frame(nullptr), _animation(animation),
 	_animationFrame(0), _x(160), _y(100), _pressed(false), _assets(*game._assets), _boss(boss),
 	_phase(kExteriorDelay), _captionStart(0), _waitStart(0), _waitDuration(0), _textItem(0),
+#ifdef USE_TTS
+	_queuedText(-1), _queuedSelection(-1),
+#endif
 	_captionPressed(false), _needsFadeIn(false) {
 }
 
@@ -862,8 +865,27 @@ Section::Outcome Encounter::step() {
 		input = _game.readSceneInput();
 	}
 	const bool accepted = reading ? input.activation : _game.acceptCaption(input, _captionPressed);
+#ifdef USE_TTS
+	const bool caption = _phase == kCaption;
+	const bool playing = _phase == kPlaying;
+	if (accepted && ((playing && input.key == kKeySpace) || (caption && _queuedText >= 0)))
+		_game.cancelNarration();
+	if ((playing || caption) && _queuedText >= 0 &&
+		!_game._narration.speakingOrStarting(g_system->getMillis())) {
+		const int16 item = _queuedText;
+		_queuedText = -1;
+		drawCaption(item, _queuedSelection);
+		if (caption || _phase == kCaption) {
+			_game.endFrame();
+			return kSectionContinue;
+		}
+	}
+#endif
 	if (_phase == kCaption) {
 		if (
+#ifdef USE_TTS
+			_queuedText < 0 &&
+#endif
 			_game.captionReady(accepted, _captionStart))
 			drawPage();
 		_game.endFrame();
@@ -873,7 +895,14 @@ Section::Outcome Encounter::step() {
 		const bool acknowledged = input.activation;
 		if (acknowledged)
 			_game.takeReadingAdvance();
+#ifdef USE_TTS
+		if (acknowledged)
+			_game.cancelNarration();
+#endif
 		if (acknowledged || (_game._clock.now() - _waitStart >= _waitDuration
+#ifdef USE_TTS
+			&& !_game._narration.update(g_system->getMillis())
+#endif
 			)) {
 			if (_phase == kExteriorHold)
 				beginFight();
@@ -890,6 +919,20 @@ Section::Outcome Encounter::step() {
 		const Event event = next(input.x, input.y, pressed, keys);
 		switch (event.type) {
 		case Encounter::kText:
+#ifdef USE_TTS
+			if (_game._narration.speakingOrStarting(g_system->getMillis())) {
+				_queuedText = event.value;
+				_queuedSelection = event.selection;
+				// Combat and search comments can be replaced during gameplay.
+				if ((event.value >= 2 && event.value <= 4) || event.value == (_boss ? 7 : 8))
+					break;
+				_game.holdActionCursor();
+				_phase = kCaption;
+				_game.endFrame();
+				return kSectionContinue;
+			}
+			_queuedText = -1;
+#endif
 			drawCaption(event.value, event.selection);
 			if (_phase == kCaption) {
 				_game.endFrame();

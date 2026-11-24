@@ -68,7 +68,9 @@ void TXTFile::load(Common::SeekableReadStream &txt, Format format) {
 }
 
 bool TXTFile::draw(Surface &surface, int16 &left, int16 &top, int16 &right, int16 &bottom,
-				   const Font * const *fonts, uint fontCount, int color) {
+				   const Font * const *fonts, uint fontCount, int color, Common::String *drawnText) {
+	if (drawnText)
+		drawnText->clear();
 
 	trashBuffer();
 
@@ -78,18 +80,27 @@ bool TXTFile::draw(Surface &surface, int16 &left, int16 &top, int16 &right, int1
 	resizeBuffer(right - left + 1, bottom - top + 1);
 	saveScreen(surface, left, top, right, bottom);
 
-	for (const auto &line : _lines) {
+	for (uint i = 0; i < _lines.size(); ++i) {
+		const Line &line = _lines[i];
 		if (line.font >= fontCount)
 			continue;
 
-		fonts[line.font]->drawString(line.text, line.x, line.y, (color < 0) ? line.color : color, 0, true, surface);
+		Common::String visible;
+		fonts[line.font]->drawString(line.text, line.x, line.y, (color < 0) ? line.color : color, 0, true, surface, drawnText ? &visible : nullptr);
+		if (drawnText && !visible.empty()) {
+			if (!drawnText->empty())
+				*drawnText += '\n';
+			*drawnText += visible;
+		}
 	}
 
 	return true;
 }
 
 bool TXTFile::draw(uint line, Surface &surface, int16 &left, int16 &top, int16 &right, int16 &bottom,
-				   const Font * const *fonts, uint fontCount, int color) {
+				   const Font * const *fonts, uint fontCount, int color, Common::String *drawnText) {
+	if (drawnText)
+		drawnText->clear();
 
 	trashBuffer();
 
@@ -101,21 +112,21 @@ bool TXTFile::draw(uint line, Surface &surface, int16 &left, int16 &top, int16 &
 
 	const Line &l = _lines[line];
 
-	fonts[l.font]->drawString(l.text, l.x, l.y, (color < 0) ? l.color : color, 0, true, surface);
+	fonts[l.font]->drawString(l.text, l.x, l.y, (color < 0) ? l.color : color, 0, true, surface, drawnText);
 
 	return true;
 }
 
-bool TXTFile::draw(Surface &surface, const Font * const *fonts, uint fontCount, int color) {
+bool TXTFile::draw(Surface &surface, const Font * const *fonts, uint fontCount, int color, Common::String *drawnText) {
 	int16 left, top, right, bottom;
 
-	return draw(surface, left, top, right, bottom, fonts, fontCount, color);
+	return draw(surface, left, top, right, bottom, fonts, fontCount, color, drawnText);
 }
 
-bool TXTFile::draw(uint line, Surface &surface, const Font * const *fonts, uint fontCount, int color) {
+bool TXTFile::draw(uint line, Surface &surface, const Font * const *fonts, uint fontCount, int color, Common::String *drawnText) {
 	int16 left, top, right, bottom;
 
-	return draw(line, surface, left, top, right, bottom, fonts, fontCount, color);
+	return draw(line, surface, left, top, right, bottom, fonts, fontCount, color, drawnText);
 }
 
 bool TXTFile::clear(Surface &surface, int16 &left, int16 &top, int16 &right, int16 &bottom) {

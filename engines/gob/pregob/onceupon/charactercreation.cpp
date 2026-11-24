@@ -310,6 +310,9 @@ void CharacterCreation::enter() {
 	_game.showSelectionCursor(cursor);
 	_vm->_draw->forceBlit();
 	_game.fadeIn();
+#ifdef USE_TTS
+	_game.publishCaptionNarration();
+#endif
 	_game._clock.setFrameRate(12);
 	_vm->_util->processInput();
 	_game.discardActivationInput();
@@ -325,7 +328,11 @@ void CharacterCreation::drawCaption(uint item) {
 	Surface &background = captionBackground();
 	int16 left, top, right, bottom;
 	_text->clear(background, left, top, right, bottom);
+#ifdef USE_TTS
+	_game._captionNarrationPending = _text->draw(background, item, *_game._plettre, 10, left, top, right, bottom, &_game._captionWords);
+#else
 	_text->draw(background, item, *_game._plettre, 10, left, top, right, bottom);
+#endif
 	syncCaption();
 	if (item == 11)
 		_game.beginReadingPage(OnceUpon::kReadingAny);
@@ -384,7 +391,13 @@ Section::Outcome CharacterCreation::step() {
 	if (_phase == kPhaseWait) {
 		const bool acknowledged = input.activation;
 		if (acknowledged || (_game._clock.now() - _waitStart >= 14000
+#ifdef USE_TTS
+			&& !_game._narration.update(g_system->getMillis())
+#endif
 			)) {
+#ifdef USE_TTS
+			_game.cancelNarration();
+#endif
 			return kSectionComplete;
 		}
 		_game.endFrame();
@@ -429,6 +442,9 @@ Section::Outcome CharacterCreation::step() {
 		const bool click = input.activation || (pressed && !_previousPress);
 		_previousPress = pressed;
 		if (click) {
+#ifdef USE_TTS
+			_game._narration.cancel();
+#endif
 			_game.stopSound();
 			_game.playSound(OnceUpon::kSoundClick);
 		}
@@ -438,6 +454,9 @@ Section::Outcome CharacterCreation::step() {
 			chooseAppearance(input.x, input.y, pressed, timedOut)) {
 		if (progress() == CharacterCreation::kNameReveal) {
 			_game.removeSelectionCursor();
+#ifdef USE_TTS
+			_game.cancelNarration();
+#endif
 			int16 left, top, right, bottom;
 			_text->clear(captionBackground(), left, top, right, bottom);
 			syncCaption();
@@ -454,11 +473,22 @@ Section::Outcome CharacterCreation::step() {
 			_game._progress.name = name();
 			Surface &background = captionBackground();
 			background.fillRect(17, 18, 303, 43, 9);
+#ifdef USE_TTS
+			_prompt->draw(background, &_game._plettre, 1, -1, &_game._captionWords);
+			_game._captionNarrationPending = true;
+#else
 			_prompt->draw(background, &_game._plettre, 1, -1);
+#endif
 			syncCaption();
 			_vm->_draw->blitInvalidated();
 			_vm->_video->retrace();
+#ifdef USE_TTS
+			_game.publishCaptionNarration();
+#endif
 		} else if (editName(input.key)) {
+#ifdef USE_TTS
+			_game._narration.cancel();
+#endif
 			_activityStart = _game._clock.now();
 		}
 	}
@@ -472,6 +502,9 @@ Section::Outcome CharacterCreation::step() {
 			drawCaption(11);
 			_waitStart = _game._clock.now();
 			_phase = kPhaseWait;
+#ifdef USE_TTS
+			_game.publishCaptionNarration();
+#endif
 			return kSectionContinue;
 		}
 		if ((input.confirmation & 16) || input.key == 'n' || input.key == 'N')

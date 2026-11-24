@@ -55,8 +55,9 @@ public:
 	void drawLetter(Surface &surf, uint8 c, uint16 x, uint16 y,
 					uint8 colorIndex1, uint8 colorIndex2, bool transp) const;
 
+	/** Optional output receives glyphs that fit the destination and font. */
 	void drawString(const Common::String &str, int16 x, int16 y, uint8 colorIndex1, uint8 colorIndex2,
-					bool transp, Surface &dest) const;
+					bool transp, Surface &dest, Common::String *drawnText = nullptr) const;
 
 private:
 	const byte *_dataPtr;

@@ -142,6 +142,10 @@ MODULE_OBJS := \
 	sound/cdrom.o \
 	sound/bgatmosphere.o
 
+ifdef USE_TTS
+MODULE_OBJS += pregob/onceupon/tts.o
+endif
+
 # This module can be built as a plugin
 ifeq ($(ENABLE_GOB), DYNAMIC_PLUGIN)
 PLUGIN := 1

@@ -87,7 +87,7 @@ public:
 	 * Optional output reports this page without expanding or selecting again.
 	 */
 	bool draw(Surface &dest, uint16 item, const Font &font, uint8 color,
-	          int16 &left, int16 &top, int16 &right, int16 &bottom);
+	          int16 &left, int16 &top, int16 &right, int16 &bottom, Common::String *drawnText = nullptr);
 
 	/** Did we draw all text? */
 	bool finished() const;

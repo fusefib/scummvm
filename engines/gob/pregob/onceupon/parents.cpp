@@ -102,6 +102,9 @@ void Parents::Movie::waitFrame() {
 }
 
 void Parents::Movie::begin() {
+#ifdef USE_TTS
+	discardNarration();
+#endif
 	_frameCounter = 0;
 	_textFramePending = false;
 	_finished = false;
@@ -116,6 +119,13 @@ bool Parents::Movie::stepPlay() {
 		return false;
 	if (!_waitingText) {
 		const bool playing = SEQFile::stepPlay();
+#ifdef USE_TTS
+		if (isAborted() || _vm->shouldQuit())
+			discardNarration();
+		else
+			publishNarration();
+		_game._narration.update(g_system->getMillis());
+#endif
 		return playing && !_finished;
 	}
 	if (_vm->shouldQuit() || isAborted())
@@ -131,13 +141,24 @@ bool Parents::Movie::stepPlay() {
 	if (isAborted())
 		return false;
 	const bool accepted = _game.takeReadingAdvance();
+#ifdef USE_TTS
+	const bool active = _game._narration.update(g_system->getMillis());
+	if (accepted)
+		_game._narration.cancel();
+#endif
 	if (accepted || (_clock.now() - _textStart > OnceUpon::kGCTDelay
+#ifdef USE_TTS
+		&& !active
+#endif
 		))
 		drawGCT(_textItem);
 	_vm->_draw->blitInvalidated();
 	_textFramePending = true;
 	waitFrame();
 	_textFramePending = false;
+#ifdef USE_TTS
+	publishNarration();
+#endif
 	return true;
 }
 
@@ -152,9 +173,25 @@ void Parents::Movie::activate(MouseButtons buttons) {
 }
 
 void Parents::Movie::requireFreshInput() {
+#ifdef USE_TTS
+	discardNarration();
+#endif
 	_game.expireReadingInput();
 }
 
+#ifdef USE_TTS
+void Parents::Movie::discardNarration() {
+	_game._captionWords.clear();
+	_game._captionNarrationPending = false;
+}
+
+void Parents::Movie::publishNarration() {
+	if (_game._captionNarrationPending && !_game._readingAdvance)
+		_game._narration.publishPage(_game._captionWords, _vm->_global->_language, g_system->getMillis());
+	discardNarration();
+}
+
+#endif
 void Parents::Movie::handleFrameEvent() {
 	++_frameCounter;
 	const uint16 frame = getFrame();
@@ -239,13 +276,25 @@ void Parents::Movie::handleInput(int16 key, int16 mouseX, int16 mouseY, MouseBut
 	for (uint i = 0; i < kHoldCount; ++i) {
 		if (getFrame() != kHoldFrames[i][0])
 			continue;
+#ifdef USE_TTS
+		const bool active = _game._narration.update(g_system->getMillis());
+#endif
 		if (!_game.takeReadingAdvance() && (_frameCounter < 100
+#ifdef USE_TTS
+			|| active
+#endif
 			))
 			seekFrame(kHoldFrames[i][1]);
 		return;
 	}
 	if (getFrame() > 496) {
+#ifdef USE_TTS
+		const bool active = _game._narration.update(g_system->getMillis());
+#endif
 		if (_game.takeReadingAdvance() || (_frameCounter > 100
+#ifdef USE_TTS
+			&& !active
+#endif
 			))
 			_finished = true;
 	}
@@ -277,7 +326,12 @@ void Parents::Movie::drawGCT(uint item, bool resetCounter) {
 	int16 left, top, right, bottom;
 	if (_gct->clear(*_vm->_draw->_backSurface, left, top, right, bottom))
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
+#ifdef USE_TTS
+	const bool drawn = _gct->draw(*_vm->_draw->_backSurface, item, *_font, 10, left, top, right, bottom, &_game._captionWords);
+	_game._captionNarrationPending = drawn;
+#else
 	const bool drawn = _gct->draw(*_vm->_draw->_backSurface, item, *_font, 10, left, top, right, bottom);
+#endif
 	if (drawn) {
 		_game.beginReadingPage(_gct->finished() ? OnceUpon::kReadingAny : OnceUpon::kReadingSpace);
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
