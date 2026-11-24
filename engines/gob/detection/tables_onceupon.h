@@ -30,6 +30,84 @@
 #ifndef GOB_DETECTION_TABLES_ONCEUPON_H
 #define GOB_DETECTION_TABLES_ONCEUPON_H
 
+// -- Once Upon A Time: Abracadabra, DOS EGA Floppy --
+
+{
+	{
+		"abracadabra",
+		"",
+		AD_ENTRY3s("stk1.stk", "0e0213ad561fb9aed90222696285198b", 209521,
+		           "stk2.stk", "143906bfa6474da159afa1dd1065bb37", 361529,
+		           "stk3.stk", "5af3c1202ba6fcf8dad2b2125e1c1383", 353257),
+		FR_FRA,
+		kPlatformDOS,
+		ADGF_NO_FLAGS,
+		GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+	},
+	kFeaturesAdLib | kFeaturesEGA,
+	0, 0, 0
+},
+{
+	{
+		"abracadabra",
+		"",
+		AD_ENTRY3s("stk1.stk", "0e0213ad561fb9aed90222696285198b", 209521,
+		           "stk2.stk", "143906bfa6474da159afa1dd1065bb37", 361529,
+		           "stk3.stk", "5af3c1202ba6fcf8dad2b2125e1c1383", 353257),
+		DE_DEU,
+		kPlatformDOS,
+		ADGF_NO_FLAGS,
+		GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+	},
+	kFeaturesAdLib | kFeaturesEGA,
+	0, 0, 0
+},
+{
+	{
+		"abracadabra",
+		"",
+		AD_ENTRY3s("stk1.stk", "0e0213ad561fb9aed90222696285198b", 209521,
+		           "stk2.stk", "143906bfa6474da159afa1dd1065bb37", 361529,
+		           "stk3.stk", "5af3c1202ba6fcf8dad2b2125e1c1383", 353257),
+		EN_ANY,
+		kPlatformDOS,
+		ADGF_NO_FLAGS,
+		GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+	},
+	kFeaturesAdLib | kFeaturesEGA,
+	0, 0, 0
+},
+{
+	{
+		"abracadabra",
+		"",
+		AD_ENTRY3s("stk1.stk", "0e0213ad561fb9aed90222696285198b", 209521,
+		           "stk2.stk", "143906bfa6474da159afa1dd1065bb37", 361529,
+		           "stk3.stk", "5af3c1202ba6fcf8dad2b2125e1c1383", 353257),
+		IT_ITA,
+		kPlatformDOS,
+		ADGF_NO_FLAGS,
+		GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+	},
+	kFeaturesAdLib | kFeaturesEGA,
+	0, 0, 0
+},
+{
+	{
+		"abracadabra",
+		"",
+		AD_ENTRY3s("stk1.stk", "0e0213ad561fb9aed90222696285198b", 209521,
+		           "stk2.stk", "143906bfa6474da159afa1dd1065bb37", 361529,
+		           "stk3.stk", "5af3c1202ba6fcf8dad2b2125e1c1383", 353257),
+		ES_ESP,
+		kPlatformDOS,
+		ADGF_NO_FLAGS,
+		GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+	},
+	kFeaturesAdLib | kFeaturesEGA,
+	0, 0, 0
+},
+
 // -- Once Upon A Time: Abracadabra, Amiga --
 
 {
