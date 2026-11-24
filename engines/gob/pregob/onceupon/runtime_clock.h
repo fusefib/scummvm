@@ -34,6 +34,8 @@ namespace Gob {
 class GobEngine;
 namespace OnceUpon {
 
+class Forest;
+
 /** Once Upon's gameplay epoch; menus and nested engine pauses stop it once. */
 class RuntimeClock {
 public:
@@ -42,7 +44,7 @@ public:
 	void pause();
 	void resume();
 	void setFrameRate(int16 rate);
-	bool waitFrame();
+	bool waitFrame(Forest *forest = nullptr);
 	void limitActionCursor(bool limited) { _limitActionCursor = limited; }
 	void interruptWait() { _waitInterrupted = true; }
 	void cancelWaitInterrupt() { _waitInterrupted = false; }

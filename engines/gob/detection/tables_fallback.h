@@ -457,7 +457,7 @@ static const GOBGameDescription fallbackOnceUpon[kOnceUponATimeMAX][kOnceUponATi
 				UNK_LANG,
 				kPlatformDOS,
 				ADGF_NO_FLAGS,
-				GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+				GUIO3(GUIO_NOSUBTITLES, GUIO_NOSPEECH, GAMEOPTION_QUICK_FOREST_CONTROLS)
 			},
 			kFeaturesAdLib | kFeaturesEGA,
 			0, 0, 0
@@ -470,7 +470,7 @@ static const GOBGameDescription fallbackOnceUpon[kOnceUponATimeMAX][kOnceUponATi
 				UNK_LANG,
 				kPlatformAmiga,
 				ADGF_NO_FLAGS,
-				GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+				GUIO3(GUIO_NOSUBTITLES, GUIO_NOSPEECH, GAMEOPTION_QUICK_FOREST_CONTROLS)
 			},
 			kFeaturesEGA,
 			0, 0, 0
@@ -483,7 +483,7 @@ static const GOBGameDescription fallbackOnceUpon[kOnceUponATimeMAX][kOnceUponATi
 				UNK_LANG,
 				kPlatformAtariST,
 				ADGF_NO_FLAGS,
-				GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+				GUIO3(GUIO_NOSUBTITLES, GUIO_NOSPEECH, GAMEOPTION_QUICK_FOREST_CONTROLS)
 			},
 			kFeaturesEGA,
 			0, 0, 0
@@ -498,7 +498,7 @@ static const GOBGameDescription fallbackOnceUpon[kOnceUponATimeMAX][kOnceUponATi
 				UNK_LANG,
 				kPlatformDOS,
 				ADGF_NO_FLAGS,
-				GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+				GUIO3(GUIO_NOSUBTITLES, GUIO_NOSPEECH, GAMEOPTION_QUICK_FOREST_CONTROLS)
 			},
 			kFeaturesAdLib | kFeaturesEGA,
 			0, 0, 0
@@ -511,7 +511,7 @@ static const GOBGameDescription fallbackOnceUpon[kOnceUponATimeMAX][kOnceUponATi
 				UNK_LANG,
 				kPlatformAmiga,
 				ADGF_NO_FLAGS,
-				GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+				GUIO3(GUIO_NOSUBTITLES, GUIO_NOSPEECH, GAMEOPTION_QUICK_FOREST_CONTROLS)
 			},
 			kFeaturesEGA,
 			0, 0, 0
@@ -524,7 +524,7 @@ static const GOBGameDescription fallbackOnceUpon[kOnceUponATimeMAX][kOnceUponATi
 				UNK_LANG,
 				kPlatformAtariST,
 				ADGF_NO_FLAGS,
-				GUIO2(GUIO_NOSUBTITLES, GUIO_NOSPEECH)
+				GUIO3(GUIO_NOSUBTITLES, GUIO_NOSPEECH, GAMEOPTION_QUICK_FOREST_CONTROLS)
 			},
 			kFeaturesEGA,
 			0, 0, 0

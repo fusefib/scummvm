@@ -117,7 +117,7 @@ OnceUpon::OnceUpon(GobEngine *vm) : PreGob(vm), _openedArchives(false),
 	_readingKeys(kNoReading), _readingVisible(false), _readingOpening(false), _readingAdvance(false), _readingMenu(0),
 	_yield(kNotYielded),
 	_introStage(kIntroLoading), _pendingRestore(nullptr), _initialized(false),
-	_paused(false),
+	_paused(false), _quickForestControls(false),
 	_selectionCursor(false), _actionCursorANI(nullptr),
 	_actionCursorAnimation(0), _actionCursorFrame(0), _actionCursorX(0), _actionCursorY(0),
 	_acceptActivations(false), _freshInput(true),
@@ -153,8 +153,14 @@ OnceUpon::~OnceUpon() {
 	deinit();
 }
 
+void OnceUpon::readSettings() {
+	_quickForestControls = ConfMan.hasKey("onceupon_quick_forest_controls") &&
+		ConfMan.getBool("onceupon_quick_forest_controls");
+}
+
 void OnceUpon::init() {
 	deinit();
+	readSettings();
 	_dwellingHotspots = DwellingHotspots();
 
 	// Open data files
@@ -476,15 +482,19 @@ void OnceUpon::publishCaptionNarration() {
 }
 
 #endif
-void OnceUpon::endFrame() {
+void OnceUpon::endFrame(Forest *forest) {
 	if (_pendingRestore)
 		return;
 	_vm->_draw->blitInvalidated();
 	_yield = kFrameYield;
 	publishReadingPage();
-	const bool waited = _clock.waitFrame();
+	if (forest)
+		_keyboard.trackForestPress(true);
+	const bool waited = _clock.waitFrame(forest);
 	if (waited && !_pendingRestore)
 		_vm->_util->processInput();
+	if (forest)
+		_keyboard.trackForestPress(false);
 	_yield = kNotYielded;
 	if (!waited || _pendingRestore)
 		return;
@@ -1413,6 +1423,7 @@ bool OnceUpon::acceptCaption(const SceneInput &input, bool &pressed) {
 void OnceUpon::discardActivationInput() {
 	expireReadingInput();
 	_activations.clear();
+	_keyboard.clearForestPress();
 	_freshInput = true;
 	if (!_pendingRestore)
 		_vm->_util->clearKeyBuf();
@@ -1432,6 +1443,7 @@ void OnceUpon::pauseChanged(bool paused, uint32 duration) {
 #endif
 	} else {
 		_clock.resume();
+		readSettings();
 		if (_scene)
 			_scene->resumeAfterPause();
 		discardActivationInput();

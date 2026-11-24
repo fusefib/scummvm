@@ -301,6 +301,7 @@ void Forest::drawBabaDosWipePass(uint pass) {
 }
 
 void Forest::enterScene(bool resetPlayer, bool decorations, bool publish) {
+	_game._keyboard.clearForestPress();
 	ForestActor::State &player = _actors[kPlayer]._state;
 	if (resetPlayer) {
 		_comment = 0;
@@ -390,6 +391,47 @@ void Forest::crossScene() {
 	}
 }
 
+void Forest::drawActor(Surface &surface, const ForestActor &actor, const Common::Rect &area) const {
+	actor._ani->draw(surface, actor.mappedAnimation(), actor._state.frame, actor._state.x, actor._state.y);
+	_dec->drawForeground(surface, _sceneIndex, area, area.bottom - 1);
+}
+
+void Forest::pollControls() {
+	const uint32 press = _game._keyboard.forestPress();
+	if (!_game._quickForestControls || !press || _game._freshInput || _game._paused || _game._pendingRestore || _vm->shouldQuit())
+		return;
+	ForestActor &player = _actors[kPlayer];
+	if (!player.startQuickAction(player.quickAnimation(press)))
+		return;
+
+	Common::Rect dirty = player._state.lastDrawnArea;
+	Common::Rect &pose = player._state.lastDrawnArea;
+	pose = player.frameArea();
+	alignActorArea(pose);
+	dirty.extend(pose);
+	dirty.clip(Common::Rect(16, 49, 305, 149));
+	if (dirty.isEmpty())
+		return;
+
+	// Redraw the changed area in native depth order without retiring enemies
+	// or advancing the room between ticks.
+	if (!_preview)
+		_preview.reset(new Surface(_frame->getWidth(), _frame->getHeight(), 1));
+	Surface &preview = *_preview;
+	const int16 l = dirty.left, t = dirty.top, r = dirty.right - 1, b = dirty.bottom - 1;
+	preview.blit(*_background, l, t, r, b, l, t);
+	for (uint i = 0; i < kActorCount; ++i) {
+		const ForestActor &actor = _actors[i];
+		const Common::Rect &area = actor._state.lastDrawnArea;
+		if (actor._state.status != ForestActor::kHidden && dirty.intersects(area))
+			drawActor(preview, actor, area);
+	}
+	_frame->blit(preview, l, t, r, b, l, t);
+	_vm->_draw->_backSurface->blit(preview, l, t, r, b, l, t);
+	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, l, t, r, b);
+	_vm->_draw->blitInvalidated();
+}
+
 void Forest::render() {
 	Common::Rect restoreAreas[kActorCount], drawnAreas[kActorCount];
 	bool redraw[kActorCount];
@@ -436,9 +478,7 @@ void Forest::render() {
 		const ForestActor::State &state = actor._state;
 		if (state.status != ForestActor::kActive || !redraw[i])
 			continue;
-		actor._ani->draw(*_frame, actor.mappedAnimation(), state.frame, state.x, state.y);
-		const Common::Rect &drawn = drawnAreas[i];
-		_dec->drawForeground(*_frame, _sceneIndex, drawn, drawn.bottom - 1);
+		drawActor(*_frame, actor, drawnAreas[i]);
 	}
 
 	for (uint i = 0; i < kActorCount; ++i) {
@@ -738,16 +778,34 @@ Section::Outcome Forest::step() {
 			}
 		}
 			// fall through
-		case kAdvance:
-			actor.stepPlayer(input.keys);
+		case kAdvance: {
+			uint32 keys = input.keys;
+			const bool quick = _game._quickForestControls;
+			if (!quick)
+				_preview.reset();
+			if (quick) {
+				const uint32 press = _game._keyboard.forestPress();
+				const uint32 wanted = press && !(keys & 0x20) ? press : keys;
+				const int16 action = actor.quickAnimation(wanted);
+				// A short turn in the air takes effect at the first grounded pose.
+				if (!actor.airborne() || (action != 0 && action != 4)) {
+					if (action >= 0 && !_game._freshInput) {
+						keys = wanted;
+						actor.startQuickAction(action);
+					}
+					_game._keyboard.clearForestPress();
+				}
+			}
+			actor.stepPlayer(keys);
 			for (uint i = 0; i < kActorCount; ++i)
 				_actors[i].advance();
 			render();
 			_resume = kFrameStart;
 			if (_finished)
 				_phase = kPhaseComplete;
-			_game.endFrame();
+			_game.endFrame(quick && !_finished ? this : nullptr);
 			return _finished ? kSectionComplete : kSectionContinue;
+		}
 
 		case kCrossing:
 			if (_transition == kEnd) {

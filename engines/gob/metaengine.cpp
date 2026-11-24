@@ -63,6 +63,17 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 		}
 	},
 #endif
+	{
+		GAMEOPTION_QUICK_FOREST_CONTROLS,
+		{
+			_s("Quick forest controls"),
+			_s("Make the child react sooner when turning, jumping or ducking in the forest."),
+			"onceupon_quick_forest_controls",
+			false,
+			0,
+			0
+		}
+	},
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 

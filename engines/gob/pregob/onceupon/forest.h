@@ -58,6 +58,7 @@ public:
 	~Forest() override;
 	void enter(uint variant, uint room, uint energy);
 	Outcome step() override;
+	void pollControls();
 	uint room() const;
 	uint energy() const { return _energy; }
 
@@ -68,6 +69,7 @@ private:
 	void drawInterface(const Surface &portrait);
 	void begin();
 	void render();
+	void drawActor(Surface &surface, const ForestActor &actor, const Common::Rect &area) const;
 	bool usesBabaDosWipe() const;
 	void drawBabaDosWipePass(uint pass);
 	enum Route { kFirstOutward, kSecondOutward, kReturnSecond, kReturnFirst };
@@ -101,6 +103,7 @@ private:
 	Common::SharedPtr<const DECFile> _dec;
 	Common::SharedPtr<const Surface> _weaponsArtwork, _energyIcons;
 	Surface *_background, *_frame;
+	Common::ScopedPtr<Surface> _preview;
 	ForestActor _actors[kActorCount];
 	Enemy _enemies[6][4];
 	bool _activated[4];

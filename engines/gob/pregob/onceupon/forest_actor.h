@@ -81,6 +81,9 @@ private:
 	uint16 mappedAnimation() const;
 	int16 groundedY(int16 animation, int16 frame, int16 bottom) const;
 	void requestAction(int16 animation);
+	int16 quickAnimation(uint32 keys) const;
+	bool airborne() const;
+	bool startQuickAction(int16 animation);
 	enum Action {
 		kStop, kWalkLeft, kWalkRight, kJumpLeft, kJumpRight, kJumpFacing,
 		kQueueJump, kCrouchLeft, kCrouchRight, kCrouchFacing,

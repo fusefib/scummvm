@@ -51,6 +51,9 @@ public:
 	bool notifyEvent(const Common::Event &event) override;
 	bool takeFocusLost();
 	uint32 heldKeys() const;
+	uint32 forestPress() const { return _forestPress; }
+	void trackForestPress(bool track) { _trackForestPress = track; }
+	void clearForestPress() { _forestPress = 0; }
 	uint8 confirmationKeys() const;
 
 private:
@@ -58,6 +61,8 @@ private:
 	uint _mapped[Common::KEYCODE_LAST];
 	bool _registered;
 	InputContext _context;
+	uint32 _forestPress;
+	bool _trackForestPress;
 	bool _focusLost;
 	void applyContext();
 	bool mappedControlsActive() const;

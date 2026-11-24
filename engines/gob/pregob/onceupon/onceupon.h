@@ -105,6 +105,7 @@ private:
 		uint id; ///< The button's ID.
 	};
 
+	void readSettings();
 	void init();
 	void deinit();
 
@@ -278,7 +279,7 @@ private:
 	void playSample(SoundDesc &sample, int16 repeats, int16 frequency = 0);
 	void replaceSample(SoundDesc &sample, int16 repeats, int16 frequency = 0);
 	void playSound(uint sound, int16 frequency = 0, int16 repeats = 0);
-	bool _paused;
+	bool _paused, _quickForestControls;
 	bool _selectionCursor;
 	const ANIFile *_actionCursorANI;
 	uint16 _actionCursorAnimation, _actionCursorFrame;
@@ -324,7 +325,7 @@ private:
 	void publishMenuNarration();
 	void waitMenuNarration();
 #endif
-	void endFrame();
+	void endFrame(Forest *forest = nullptr);
 	bool captionReady(bool accepted, uint32 captionStart);
 	GCTFile *loadStoryGCT(const Common::String &name) const;
 	void setGamePalette(uint palette); ///< Select the next game palette.

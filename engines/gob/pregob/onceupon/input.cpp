@@ -100,7 +100,7 @@ Common::KeymapArray createKeymaps() {
 	return maps;
 }
 
-KeyboardInput::KeyboardInput() : _registered(false), _context(kPointerInput), _focusLost(false) {
+KeyboardInput::KeyboardInput() : _registered(false), _context(kPointerInput), _trackForestPress(false), _focusLost(false) {
 	memset(_pressed, 0, sizeof(_pressed));
 	releaseActions();
 }
@@ -128,6 +128,7 @@ void KeyboardInput::end() {
 
 void KeyboardInput::releaseActions() {
 	memset(_mapped, 0, sizeof(_mapped));
+	clearForestPress();
 }
 
 void KeyboardInput::setContext(InputContext context) {
@@ -204,6 +205,9 @@ bool KeyboardInput::notifyEvent(const Common::Event &event) {
 		} else if (!event.kbdRepeat) {
 			_pressed[event.kbd.keycode] = true;
 		}
+		if (_trackForestPress && _context == kForestInput && event.type == Common::EVENT_KEYDOWN &&
+				!event.kbdRepeat && isControlKey(event.kbd.keycode))
+			_forestPress = heldKeys();
 	} else if (mappedControlsActive() && event.customType != kMappedInput &&
 			(event.type == Common::EVENT_LBUTTONDOWN || event.type == Common::EVENT_LBUTTONUP ||
 			event.type == Common::EVENT_RBUTTONDOWN || event.type == Common::EVENT_RBUTTONUP)) {

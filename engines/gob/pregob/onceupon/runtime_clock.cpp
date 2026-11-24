@@ -32,6 +32,7 @@
 #include "gob/util.h"
 #include "gob/video.h"
 #include "gob/pregob/onceupon/runtime_clock.h"
+#include "gob/pregob/onceupon/forest.h"
 #include "gob/pregob/onceupon/input.h"
 
 namespace Gob {
@@ -81,7 +82,7 @@ void RuntimeClock::restart() {
 	_menuFrameStart = _lastWall;
 }
 
-bool RuntimeClock::waitFrame() {
+bool RuntimeClock::waitFrame(Forest *forest) {
 	if (_waitInterrupted)
 		return false;
 	// Menus share the pacing order but use wall milliseconds while gameplay is
@@ -119,6 +120,8 @@ bool RuntimeClock::waitFrame() {
 					return false;
 			}
 		}
+		if (forest && !menu)
+			forest->pollControls();
 		_vm->_video->retrace();
 		if (_waitInterrupted)
 			return false;

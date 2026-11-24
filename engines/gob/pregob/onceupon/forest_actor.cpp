@@ -124,6 +124,43 @@ ForestActor::Action ForestActor::decodeInput(uint32 heldKeys) {
 	}
 }
 
+int16 ForestActor::quickAnimation(uint32 keys) const {
+	switch (decodeInput(keys)) {
+	case kWalkLeft:    return 0;
+	case kWalkRight:   return 4;
+	case kJumpLeft:    return 1;
+	case kJumpRight:   return 3;
+	case kJumpFacing:  return _state.direction == 0 ? 1 : 3;
+	case kCrouchLeft:  return 18;
+	case kCrouchRight: return 19;
+	case kCrouchFacing: return _state.direction == 0 ? 18 : 19;
+	default:           return -1;
+	}
+}
+
+bool ForestActor::airborne() const {
+	return (_state.animation == 1 || _state.animation == 3) &&
+		(!_state.frame || frameArea().bottom < 141);
+}
+
+bool ForestActor::startQuickAction(int16 animation) {
+	const int16 old = _state.animation;
+	if (animation < 0 || old == animation || airborne() ||
+			(!canChangeAction() && old != 18 && old != 19 && old != 1 && old != 3))
+		return false;
+	// Walk and jump sprites travel within the ANI before the origin moves
+	// at the end of the cycle. Turn at the child's current foot position.
+	if (old == 0 || old == 4 || old == 1 || old == 3) {
+		int16 x = 0, y = 0;
+		_ani->getFrameOrigin(mappedAnimation(), _state.frame, x, y);
+		_state.x += x;
+	}
+	setAnimation(animation);
+	_state.direction = animation == 0 || animation == 1 || animation == 18 ? 0 : 4;
+	_state.nextAnimation = _state.direction == 0 ? 8 : 9;
+	return true;
+}
+
 void ForestActor::applyAction(Action action) {
 	switch (action) {
 	case kJumpLeft:
