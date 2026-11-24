@@ -29,10 +29,12 @@
 #define GOB_DECFILE_H
 
 #include "common/system.h"
+#include "common/array.h"
 
 namespace Common {
 	class String;
 	class SeekableReadStreamEndian;
+	struct Rect;
 }
 
 namespace Gob {
@@ -55,10 +57,19 @@ public:
 	~DECFile();
 
 	/** Draw the background, including all default layer parts. */
-	void draw(Surface &dest) const;
+	void draw(Surface &dest, uint16 scene = 0) const;
 
 	/** Explicitly draw the backdrop. */
-	void drawBackdrop(Surface &dest) const;
+	void drawBackdrop(Surface &dest, int16 x = 0, int16 y = 0) const;
+
+	/** Draw this scene's parts in their native priority order. */
+	void drawParts(Surface &dest, uint16 scene = 0) const;
+
+	/** Restore the foreground intersecting an actor's area after drawing it. */
+	void drawForeground(Surface &dest, uint16 scene, const Common::Rect &area, int16 depth) const;
+
+	bool getPartPosition(uint16 scene, uint16 part, int16 &x, int16 &y) const;
+	bool setPartPosition(uint16 scene, uint16 part, int16 x, int16 y);
 
 	/** Explicitly draw a layer part. */
 	void drawLayer(Surface &dest, uint16 layer, uint16 part,
@@ -68,6 +79,7 @@ private:
 	struct Part {
 		uint8 layer;
 		uint8 part;
+		uint8 priority;
 
 		uint16 x;
 		uint16 y;
@@ -76,6 +88,7 @@ private:
 
 	typedef Common::Array<CMPFile *> LayerArray;
 	typedef Common::Array<Part>      PartArray;
+	typedef Common::Array<PartArray> SceneArray;
 
 	GobEngine *_vm;
 
@@ -88,7 +101,7 @@ private:
 	CMPFile *_backdrop;
 
 	LayerArray _layers;
-	PartArray  _parts;
+	SceneArray _scenes;
 
 
 	void load(Common::SeekableReadStreamEndian &dec, const Common::String &fileName);
@@ -97,7 +110,7 @@ private:
 
 	CMPFile *loadLayer(Common::SeekableReadStreamEndian &dec);
 
-	void loadParts(Common::SeekableReadStreamEndian &dec);
+	void loadParts(PartArray &parts, Common::SeekableReadStreamEndian &dec);
 	void loadPart(Part &part, Common::SeekableReadStreamEndian &dec);
 };
 

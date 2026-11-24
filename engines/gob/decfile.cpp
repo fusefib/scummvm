@@ -25,6 +25,7 @@
  *
  */
 
+#include "common/rect.h"
 #include "common/str.h"
 #include "common/stream.h"
 #include "common/substream.h"
@@ -87,33 +88,28 @@ DECFile::~DECFile() {
 void DECFile::load(Common::SeekableReadStreamEndian &dec, const Common::String &fileName) {
 	dec.skip(2); // Unused
 
-	int16 backdropCount = dec.readUint16();
+	uint16 sceneCount   = dec.readUint16();
 	int16 layerCount    = dec.readUint16();
 
 	// Sanity checks
-	if (backdropCount > 1)
-		warning("DECFile::load(): More than one backdrop (%d) in file \"%s\"",
-		        backdropCount, fileName.c_str());
-	if (layerCount < 1)
+	if (layerCount < 1) {
 		warning("DECFile::load(): Less than one layer (%d) in file \"%s\"",
 		        layerCount, fileName.c_str());
+		return;
+	}
 
 	// Load the backdrop
-	if (backdropCount > 0) {
-		loadBackdrop(dec);
-
-		// We only support one backdrop, skip the rest
-		dec.skip((backdropCount - 1) * (13 + (_hasPadding ? 1 : 0)));
-	}
+	loadBackdrop(dec);
 
 	// Load the layers
 	_layers.reserve(MAX(0, layerCount - 1));
 	for (int i = 0; i < layerCount - 1; i++)
 		_layers.push_back(loadLayer(dec));
 
-	// Load the backdrop parts
-	if (backdropCount > 0)
-		loadParts(dec);
+	// Each scene has its own parts, sharing the backdrop and layer files.
+	_scenes.resize(sceneCount);
+	for (uint i = 0; i < sceneCount; ++i)
+		loadParts(_scenes[i], dec);
 }
 
 void DECFile::loadBackdrop(Common::SeekableReadStreamEndian &dec) {
@@ -122,7 +118,8 @@ void DECFile::loadBackdrop(Common::SeekableReadStreamEndian &dec) {
 	if (_hasPadding)
 		dec.skip(1);
 
-	_backdrop = new CMPFile(_vm, file, _width, _height, _bpp);
+	if (!file.empty())
+		_backdrop = new CMPFile(_vm, file, _width, _height, _bpp);
 }
 
 CMPFile *DECFile::loadLayer(Common::SeekableReadStreamEndian &dec) {
@@ -130,10 +127,10 @@ CMPFile *DECFile::loadLayer(Common::SeekableReadStreamEndian &dec) {
 	if (_hasPadding)
 		dec.skip(1);
 
-	return new CMPFile(_vm, file, _width, _height, _bpp);
+	return file.empty() ? nullptr : new CMPFile(_vm, file, _width, _height, _bpp);
 }
 
-void DECFile::loadParts(Common::SeekableReadStreamEndian &dec) {
+void DECFile::loadParts(PartArray &parts, Common::SeekableReadStreamEndian &dec) {
 	dec.skip(13); // Name
 	if (_hasPadding)
 		dec.skip(1);
@@ -144,41 +141,106 @@ void DECFile::loadParts(Common::SeekableReadStreamEndian &dec) {
 
 	uint16 partCount = dec.readUint16();
 
-	_parts.resize(partCount);
-	for (PartArray::iterator p = _parts.begin(); p != _parts.end(); ++p)
+	parts.resize(partCount);
+	for (PartArray::iterator p = parts.begin(); p != parts.end(); ++p)
 		loadPart(*p, dec);
 }
 
 void DECFile::loadPart(Part &part, Common::SeekableReadStreamEndian &dec) {
-	part.layer = dec.readByte() - 1;
-	part.part  = dec.readByte();
-
-	dec.skip(1); // Unknown
-
-	part.x = dec.readUint16();
-	part.y = dec.readUint16();
+	// The 68000 layout places the word coordinates before the byte fields.
+	if (_hasPadding) {
+		part.x = dec.readUint16();
+		part.y = dec.readUint16();
+	}
+	part.layer    = dec.readByte() - 1;
+	part.part     = dec.readByte();
+	part.priority = dec.readByte();
+	if (!_hasPadding) {
+		part.x = dec.readUint16();
+		part.y = dec.readUint16();
+	}
 
 	part.transp = dec.readByte() != 0;
 }
 
-void DECFile::draw(Surface &dest) const {
+void DECFile::draw(Surface &dest, uint16 scene) const {
 	drawBackdrop(dest);
+	if (scene >= _scenes.size())
+		return;
 
-	for (PartArray::const_iterator p = _parts.begin(); p != _parts.end(); ++p)
+	const PartArray &parts = _scenes[scene];
+	for (PartArray::const_iterator p = parts.begin(); p != parts.end(); ++p)
 		drawLayer(dest, p->layer, p->part, p->x, p->y, p->transp ? 0 : -1);
 }
 
-void DECFile::drawBackdrop(Surface &dest) const {
+void DECFile::drawParts(Surface &dest, uint16 scene) const {
+	if (scene >= _scenes.size())
+		return;
+
+	const PartArray &parts = _scenes[scene];
+	for (uint priority = 0; priority < 10; ++priority)
+		for (PartArray::const_iterator p = parts.begin(); p != parts.end(); ++p)
+			if (p->priority == priority)
+				drawLayer(dest, p->layer, p->part, p->x, p->y, p->transp ? 0 : -1);
+}
+
+void DECFile::drawBackdrop(Surface &dest, int16 x, int16 y) const {
 	if (!_backdrop)
 		return;
 
-	_backdrop->draw(dest, 0, 0, 0);
+	_backdrop->draw(dest, 0, x, y);
+}
+
+bool DECFile::getPartPosition(uint16 scene, uint16 part, int16 &x, int16 &y) const {
+	if (scene >= _scenes.size() || part >= _scenes[scene].size())
+		return false;
+	x = _scenes[scene][part].x;
+	y = _scenes[scene][part].y;
+	return true;
+}
+
+bool DECFile::setPartPosition(uint16 scene, uint16 part, int16 x, int16 y) {
+	if (scene >= _scenes.size() || part >= _scenes[scene].size())
+		return false;
+	_scenes[scene][part].x = x;
+	_scenes[scene][part].y = y;
+	return true;
+}
+
+void DECFile::drawForeground(Surface &dest, uint16 scene, const Common::Rect &area, int16 depth) const {
+	if (scene >= _scenes.size() || area.isEmpty())
+		return;
+	int16 priority = 10;
+	const PartArray &parts = _scenes[scene];
+	for (PartArray::const_iterator p = parts.begin(); p != parts.end(); ++p) {
+		if (p->layer >= _layers.size() || !_layers[p->layer] || !p->priority)
+			continue;
+		uint16 left, top, right, bottom;
+		const CMPFile &layer = *_layers[p->layer];
+		if (!layer.getCoordinates(p->part, left, top, right, bottom))
+			continue;
+		int16 x = p->x, y = p->y;
+		int16 partRight = x + right - left;
+		int16 partBottom = y + bottom - top;
+		if (depth >= partBottom && priority > p->priority)
+			continue;
+		// Native occlusion carries this priority across non-intersecting parts.
+		priority = MIN<int16>(priority, p->priority);
+		int16 l = MAX<int16>(area.left, x);
+		int16 t = MAX<int16>(area.top, y);
+		int16 r = MIN<int16>(area.right - 1, partRight);
+		int16 b = MIN<int16>(area.bottom - 1, partBottom);
+		if (l > r || t > b)
+			continue;
+		layer.draw(dest, left + l - x, top + t - y, right + r - partRight, bottom + b - partBottom,
+			l, t, p->transp ? 0 : -1);
+	}
 }
 
 void DECFile::drawLayer(Surface &dest, uint16 layer, uint16 part,
 						uint16 x, uint16 y, int32 transp) const {
 
-	if (layer >= _layers.size())
+	if (layer >= _layers.size() || !_layers[layer])
 		return;
 
 	_layers[layer]->draw(dest, part, x, y, transp);
