@@ -833,7 +833,10 @@ Section::Outcome Encounter::step() {
 			_game._acceptActivations = true;
 			_phase = kExteriorHold;
 			_waitStart = _game._clock.now();
-			_waitDuration = 14000;
+			// The four-second reveal already showed the art. Keep the
+			// following skippable hold short on this text-free screen.
+			_waitDuration = 2000;
+			_game.beginReadingPage(OnceUpon::kReadingAny);
 		}
 		_game.endFrame();
 		return kSectionContinue;

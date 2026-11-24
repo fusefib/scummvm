@@ -53,7 +53,7 @@ namespace Gob {
 namespace OnceUpon {
 
 StoryText::StoryText(OnceUpon &game) : _game(game),
-	_phase(kPhaseNone), _chapter(-1), _page(0), _waitStart(0) {
+	_phase(kPhaseNone), _chapter(-1), _page(0), _waitStart(0), _waitDuration(0) {
 }
 
 StoryText::~StoryText() {
@@ -161,6 +161,20 @@ bool StoryText::load(Common::SeekableReadStream &source, bool repairAbracadabraC
 	return !source.err();
 }
 
+static uint32 storyPageDuration(const Common::String &text) {
+	uint32 words = 0;
+	bool inWord = false;
+	for (uint i = 0; i < text.size(); ++i) {
+		const bool word = (byte)text[i] > ' ';
+		if (word && !inWord)
+			++words;
+		inWord = word;
+	}
+	// Allow two seconds to take in the art, then half a second per word.
+	// Short cards still get six seconds. Blank displays only need the art hold.
+	return words ? MAX(6000U, 2000U + words * 500U) : 2000U;
+}
+
 #ifdef USE_TTS
 // Group the drawn GENE cards into TTS utterances for headings, prose and
 // credits. Use the drawn wording so localization corrections and clipping
@@ -262,20 +276,15 @@ void StoryText::drawPage() {
 	_game.setGamePalette(11);
 	vm->_draw->_backSurface->blit(*_canvas);
 	const Font *fonts[2] = {_game._plettre, _game._glettre};
-#ifdef USE_TTS
 	Common::String drawnText;
-#endif
 	TXTFile &page = this->page(_page);
-	page.draw(*vm->_draw->_backSurface, fonts, ARRAYSIZE(fonts), -1
-#ifdef USE_TTS
-		, &drawnText
-#endif
-	);
+	page.draw(*vm->_draw->_backSurface, fonts, ARRAYSIZE(fonts), -1, &drawnText);
 	_game.beginReadingPage(OnceUpon::kReadingAny);
 	vm->_draw->forceBlit();
 	_game.publishReadingPage();
 	_game.fadeIn();
 	_waitStart = _game._clock.now();
+	_waitDuration = storyPageDuration(drawnText);
 #ifdef USE_TTS
 	if (Narration::isEnabled() && !_game._readingAdvance) {
 		const Common::StringArray parts = storySpeechParts(drawnText, page.getLines(), _chapter);
@@ -317,7 +326,7 @@ Section::Outcome StoryText::step() {
 #ifdef USE_TTS
 		_game._narration.updateStoryPage(g_system->getMillis()) ||
 #endif
-		_game._clock.now() - _waitStart < 14000)) {
+		_game._clock.now() - _waitStart < _waitDuration)) {
 		_game.endFrame();
 		return kSectionContinue;
 	}

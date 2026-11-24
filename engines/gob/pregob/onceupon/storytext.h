@@ -64,7 +64,7 @@ private:
 	Phase _phase;
 	int16 _chapter;
 	uint16 _page;
-	uint32 _waitStart;
+	uint32 _waitStart, _waitDuration;
 	void drawPage();
 	void addPage();
 	static bool readToken(Common::SeekableReadStream &source, Common::String &value);
