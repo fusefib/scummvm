@@ -172,6 +172,29 @@ void Palette::adopt(const State &state) {
 	g_system->getPaletteManager()->setPalette(_state.visible, 0, 256);
 }
 
+void Palette::showMenuColors() {
+	// Native art and cursors use 0..15. Keep the new tiles' six colors in an
+	// unused bank so their blue, highlight and lettering stay constant by room.
+	static const byte colors[kMenuColorCount * 3] = {
+		0, 0, 0, 0, 0, 144, 144, 144, 240,
+		240, 240, 240, 240, 176, 0, 240, 96, 0
+	};
+	State menu = snapshot();
+	for (uint i = 0; i < sizeof(colors); ++i) {
+		menu.visible[kMenuFirstColor * 3 + i] = colors[i];
+		menu.target[kMenuFirstColor * 3 + i] = colors[i] >> 2;
+	}
+	restoreMenuColors(menu);
+}
+
+void Palette::restoreMenuColors(const State &state) {
+	memcpy(_state.target + kMenuFirstColor * 3, state.target + kMenuFirstColor * 3, kMenuColorCount * 3);
+	memcpy(_state.visible + kMenuFirstColor * 3, state.visible + kMenuFirstColor * 3, kMenuColorCount * 3);
+	projectTarget();
+	projectVisible();
+	g_system->getPaletteManager()->setPalette(_state.visible + kMenuFirstColor * 3, kMenuFirstColor, kMenuColorCount);
+}
+
 const byte kCopyProtectionPalette[3 * kPaletteSize] = {
 	0x00, 0x00, 0x00,
 	0x19, 0x00, 0x19,

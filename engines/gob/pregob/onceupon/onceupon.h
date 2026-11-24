@@ -132,6 +132,8 @@ private:
 		kMenuActionNone = 0, ///< No action.
 		kMenuActionAnimals , ///< Do the animal names.
 		kMenuActionPlay    , ///< Play the game.
+		kMenuActionSave    , ///< Open ScummVM's save chooser.
+		kMenuActionLoad    , ///< Open ScummVM's load chooser.
 		kMenuActionRestart , ///< Restart the section.
 		kMenuActionMainMenu, ///< Go to the main menu.
 		kMenuActionQuit      ///< Quit the game.
@@ -388,7 +390,7 @@ private:
 	void drawMenuDifficulty();
 
 	/** Clear the ingame menu in an animated way. */
-	void clearIngameMenu(const Surface &background);
+	void clearIngameMenu(const ScreenBackup &backup);
 
 	/** Handle the whole ingame menu. */
 	MenuAction doIngameMenu();

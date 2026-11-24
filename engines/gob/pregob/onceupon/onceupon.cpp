@@ -431,7 +431,7 @@ void OnceUpon::finishMenu(ScreenBackup &backup, bool fade) {
 		if (fade)
 			fadeOut();
 		else
-			clearIngameMenu(*backup.screen);
+			clearIngameMenu(backup);
 	}
 	restoreScreen(backup, fade);
 	endMenuInput();
@@ -800,10 +800,19 @@ OnceUpon::MenuAction OnceUpon::handleIngameMenu() {
 			action = kMenuActionMainMenu;
 		else if (button == 2)
 			action = kMenuActionPlay;
+		if (mouseY >= 50 && mouseY <= 81) {
+			if (mouseX >= 126 && mouseX <= 157)
+				action = kMenuActionSave;
+			else if (mouseX >= 162 && mouseX <= 193)
+				action = kMenuActionLoad;
+		}
 
 	}
 
 	finishMenu(screenBackup, false);
+	// A queued load skips the old screen restoration, but the temporary
+	// color bank must still leave before the replacement scene is adopted.
+	_palette.restoreMenuColors(screenBackup.palette);
 
 	return action;
 }
@@ -908,6 +917,54 @@ void OnceUpon::drawMainMenu() {
 	_vm->_draw->forceBlit();
 }
 
+static void drawMenuTileBackground(Surface &surface, int16 x, int16 width) {
+	const byte black = Palette::kMenuFirstColor;
+	const byte blue = black + 1, highlight = black + 2;
+	const int16 right = x + width - 1, bottom = surface.getHeight() - 1;
+	surface.fillRect(x, 0, right, bottom, black);
+	surface.fillRect(x + 1, 1, right - 1, bottom - 1, blue);
+	surface.fillRect(x + 1, 1, right - 2, 1, highlight);
+	surface.fillRect(x + 1, 1, x + 1, bottom - 2, highlight);
+}
+
+static const char *const kSaveLoadLabels[OnceUpon::kLanguageCount][2] = {
+	{"Sauvegarder", "Charger"},
+	{"Speichern", "Laden"},
+	{"Save", "Load"},
+	{"Guardar", "Cargar"},
+	{"Salva", "Carica"}
+};
+
+static void drawSaveLoadTile(Surface &surface, int16 x, bool save, char initial) {
+	drawMenuTileBackground(surface, x, 32);
+	const byte white = Palette::kMenuFirstColor + 3;
+	const byte gold = Palette::kMenuFirstColor + 4, shadow = Palette::kMenuFirstColor + 5;
+	// Paint the arrow shadow first, then its stem and four narrowing spans.
+	for (int offset = 1; offset >= 0; --offset) {
+		const byte color = offset ? shadow : gold;
+		surface.fillRect(x + 14 + offset, (save ? 5 : 9) + offset,
+			x + 16 + offset, (save ? 12 : 16) + offset, color);
+		for (int row = 0; row < 4; ++row) {
+			const int y = (save ? 13 + row : 8 - row) + offset;
+			surface.fillRect(x + 12 + row + offset, y, x + 18 - row + offset, y, color);
+		}
+	}
+	// Keep the original small lettering below the arrow; localize only its initial.
+	static const char letters[] = "SLCG";
+	static const byte glyphs[4][7] = {
+		{15, 24, 16, 14, 1, 3, 30},  // S
+		{16, 16, 16, 16, 16, 16, 31}, // L
+		{14, 17, 16, 16, 16, 17, 14}, // C
+		{14, 17, 16, 23, 17, 17, 14}  // G
+	};
+	for (uint letter = 0; letter < ARRAYSIZE(glyphs); ++letter)
+		if (letters[letter] == initial)
+			for (uint row = 0; row < 7; ++row)
+				for (uint col = 0; col < 5; ++col)
+					if (glyphs[letter][row] & (1 << (4 - col)))
+						surface.putPixel(x + 13 + col, 19 + row, white);
+}
+
 void OnceUpon::drawIngameMenu() {
 	Surface menu(320, 34, 1);
 	_vm->_video->drawPackedSprite("icon.cmp", menu);
@@ -920,10 +977,19 @@ void OnceUpon::drawIngameMenu() {
 		               button.dstX, button.dstY);
 	}
 
-	if (!_pendingRestore) {
+	if (!_pendingRestore && !_vm->shouldQuit()) {
 		_vm->_draw->forceBlit();
 		_vm->_video->retrace();
 	}
+	if (_pendingRestore || _vm->shouldQuit())
+		return;
+	_palette.showMenuColors();
+	Surface tiles(68, 32, 1);
+	tiles.blit(*_vm->_draw->_backSurface, 126, 50, 193, 81, 0, 0);
+	const char *const *labels = kSaveLoadLabels[_vm->_global->_language];
+	drawSaveLoadTile(tiles, 0, true, labels[0][0]);
+	drawSaveLoadTile(tiles, 36, false, labels[1][0]);
+	drawLineByLine(tiles, 0, 0, 67, 31, 126, 50);
 }
 
 void OnceUpon::drawMenuDifficulty() {
@@ -952,9 +1018,11 @@ void OnceUpon::drawMenuDifficulty() {
 	delete difficulties;
 }
 
-void OnceUpon::clearIngameMenu(const Surface &background) {
+void OnceUpon::clearIngameMenu(const ScreenBackup &backup) {
 	if (_vm->shouldQuit())
 		return;
+	drawLineByLine(*backup.screen, 126, 50, 193, 81, 126, 50);
+	_palette.restoreMenuColors(backup.palette);
 
 	// Find the area encompassing the whole ingame menu
 
@@ -979,7 +1047,7 @@ void OnceUpon::clearIngameMenu(const Surface &background) {
 		return;
 
 	// Clear it line by line
-	drawLineByLine(background, left, top, right, bottom, left, top);
+	drawLineByLine(*backup.screen, left, top, right, bottom, left, top);
 }
 
 OnceUpon::MenuAction OnceUpon::doIngameMenu() {
@@ -1022,6 +1090,17 @@ SectionOutcome OnceUpon::sceneMenu(bool *resumePage) {
 	const MenuAction action = doIngameMenu();
 	if (resumePage)
 		*resumePage = action == kMenuActionPlay;
+	if (!_pendingRestore && !_vm->shouldQuit() && (action == kMenuActionSave || action == kMenuActionLoad)) {
+		// The local menu has closed at an input boundary. Direct choosers save
+		// the committed entry; accepted loads still wait for the scene to unwind.
+		const YieldPoint previous = _yield;
+		_yield = kInputYield;
+		if (action == kMenuActionSave)
+			_vm->saveGameDialog();
+		else
+			_vm->loadGameDialog();
+		_yield = previous;
+	}
 	if (_pendingRestore)
 		return kSectionRestore;
 	discardActivationInput();

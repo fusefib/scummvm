@@ -43,6 +43,7 @@ extern const byte kGamePalettes[kPaletteCount][3 * kPaletteSize];
 /** The selected native palette and the visible backend colors have distinct roles. */
 class Palette {
 public:
+	enum { kMenuFirstColor = 240, kMenuColorCount = 6 };
 	struct State {
 		bool holdingBlack;
 		byte target[768]; // Six-bit native components, projected into Draw.
@@ -60,6 +61,8 @@ public:
 	State snapshot() const;
 	// Adoption updates colors and fade caches only; it never publishes pixels.
 	void adopt(const State &state);
+	void showMenuColors();
+	void restoreMenuColors(const State &state);
 
 private:
 	GobEngine *_vm;
