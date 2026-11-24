@@ -68,6 +68,12 @@ public:
 	 *                   the speed the SEQ itself wants to.
 	 */
 	void play(bool abortable = true, uint16 endFrame = 0xFFFF, uint16 frameRate = 0);
+	/** The same playback, with control returned at each completed frame. */
+	void beginPlay(bool abortable = true, uint16 endFrame = 0xFFFF, uint16 frameRate = 0);
+	bool stepPlay();
+	void endPlay();
+	bool isAborted() const { return _abortPlay; }
+	void resumePlay() { _abortPlay = false; }
 
 
 protected:
@@ -158,6 +164,9 @@ private:
 	bool   _abortPlay; ///< Was the end of the playback requested?
 
 	uint16 _frameRate;
+	uint16 _endFrame;
+	int16 _savedFrameRate;
+	bool _playing;
 
 	Backgrounds _backgrounds; ///< All backgrounds in this SEQ.
 	Animations  _animations;  ///< All animations in this SEQ.

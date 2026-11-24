@@ -39,7 +39,9 @@
 
 namespace Gob {
 
-SEQFile::SEQFile(GobEngine *vm, const Common::String &fileName) : _vm(vm) {
+SEQFile::SEQFile(GobEngine *vm, const Common::String &fileName) : _vm(vm),
+	_frame(0), _abortPlay(false), _frameRate(0), _endFrame(0xFFFF), _savedFrameRate(0),
+	_playing(false), _abortable(true) {
 	for (uint i = 0; i < kObjectCount; i++)
 		_objects[i].object = nullptr;
 
@@ -55,6 +57,7 @@ SEQFile::SEQFile(GobEngine *vm, const Common::String &fileName) : _vm(vm) {
 }
 
 SEQFile::~SEQFile() {
+	endPlay();
 	for (uint i = 0; i < kObjectCount; i++)
 		delete _objects[i].object;
 
@@ -157,6 +160,13 @@ const ANIFile *SEQFile::findANI(uint16 index, uint16 &animation) {
 }
 
 void SEQFile::play(bool abortable, uint16 endFrame, uint16 frameRate) {
+	beginPlay(abortable, endFrame, frameRate);
+	while (stepPlay()) {}
+	endPlay();
+}
+
+void SEQFile::beginPlay(bool abortable, uint16 endFrame, uint16 frameRate) {
+	endPlay();
 	if (_bgKeys.empty() && _animKeys.empty())
 		// Nothing to do
 		return;
@@ -178,7 +188,7 @@ void SEQFile::play(bool abortable, uint16 endFrame, uint16 frameRate) {
 
 	// Set the frame rate
 
-	int16 frameRateBack = _vm->_util->getFrameRate();
+	_savedFrameRate = _vm->_util->getFrameRate();
 
 	if (frameRate == 0)
 		frameRate = _frameRate;
@@ -186,54 +196,58 @@ void SEQFile::play(bool abortable, uint16 endFrame, uint16 frameRate) {
 	_vm->_util->setFrameRate(frameRate);
 
 	_abortable = abortable;
+	_endFrame = endFrame ? endFrame : 1;
+	_playing = true;
+}
 
-	while (!_vm->shouldQuit() && !_abortPlay) {
-		// Handle the frame contents
-		playFrame();
+bool SEQFile::stepPlay() {
+	if (!_playing || _vm->shouldQuit() || _abortPlay || _frame >= _endFrame)
+		return false;
 
-		// Handle extra frame events
-		handleFrameEvent();
+	// Handle the frame contents
+	playFrame();
 
-		// Wait for the frame to end
-		_vm->_draw->blitInvalidated();
-		_vm->_util->waitEndFrame();
+	// Handle extra frame events
+	handleFrameEvent();
 
-		// Handle input
+	// Wait for the frame to end
+	_vm->_draw->blitInvalidated();
+	_vm->_util->waitEndFrame();
 
-		_vm->_util->processInput();
+	// Handle input
 
-		int16 key = _vm->_util->checkKey();
+	_vm->_util->processInput();
 
-		int16 mouseX, mouseY;
-		MouseButtons mouseButtons;
-		_vm->_util->getMouseState(&mouseX, &mouseY, &mouseButtons);
-		_vm->_util->forceMouseUp();
+	int16 key = _vm->_util->checkKey();
 
-		handleInput(key, mouseX, mouseY, mouseButtons);
+	int16 mouseX, mouseY;
+	MouseButtons mouseButtons;
+	_vm->_util->getMouseState(&mouseX, &mouseY, &mouseButtons);
+	_vm->_util->forceMouseUp();
 
-		// Loop
+	handleInput(key, mouseX, mouseY, mouseButtons);
 
-		bool looped = false;
-		for (auto &loop : _loops) {
-			if ((loop.endFrame == _frame) && (loop.currentLoop < loop.loopCount)) {
-				_frame = loop.startFrame;
+	// Loop
 
-				loop.currentLoop++;
-				looped = true;
-			}
-		}
-
-		// If we didn't loop, advance the frame and look if we should end here
-
-		if (!looped) {
-			_frame++;
-			if (_frame >= endFrame)
-				break;
+	bool looped = false;
+	for (Loops::iterator loop = _loops.begin(); loop != _loops.end(); ++loop) {
+		if (loop->endFrame == _frame && loop->currentLoop < loop->loopCount) {
+			_frame = loop->startFrame;
+			++loop->currentLoop;
+			looped = true;
 		}
 	}
 
-	// Restore the frame rate
-	_vm->_util->setFrameRate(frameRateBack);
+	// If we didn't loop, advance the frame and look if we should end here.
+	if (!looped)
+		++_frame;
+	return !_vm->shouldQuit() && !_abortPlay && _frame < _endFrame;
+}
+
+void SEQFile::endPlay() {
+	if (_playing)
+		_vm->_util->setFrameRate(_savedFrameRate);
+	_playing = false;
 }
 
 void SEQFile::playFrame() {

@@ -49,6 +49,7 @@ public:
 	~Parents() override;
 
 	void play();
+	void begin();
 
 protected:
 	void handleFrameEvent() override;

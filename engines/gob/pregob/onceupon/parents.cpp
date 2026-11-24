@@ -95,13 +95,18 @@ Parents::~Parents() {
 }
 
 void Parents::play() {
-	_currentLoop = 0;
-
-	SEQFile::play(true, 496, 15);
+	begin();
+	while (stepPlay()) {}
+	endPlay();
 
 	// After playback, fade out
 	if (!_vm->shouldQuit())
 		_vm->_palAnim->fade(nullptr, 0, 0);
+}
+
+void Parents::begin() {
+	_currentLoop = 0;
+	beginPlay(true, 496, 15);
 }
 
 void Parents::handleFrameEvent() {
