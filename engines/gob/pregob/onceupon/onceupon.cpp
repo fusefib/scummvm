@@ -1064,12 +1064,21 @@ void OnceUpon::drawButtonBorder(const MenuButton &button, uint8 color) {
 
 void OnceUpon::run() {
 	init();
-	{
+	if (!prepareStartupLoad()) {
 		const bool correct = doCopyProtection();
 		if (_vm->shouldQuit() || !correct)
 			return;
 	}
 	runStory();
+}
+
+bool OnceUpon::prepareStartupLoad() {
+	if (!ConfMan.hasKey("save_slot") || ConfMan.getInt("save_slot") < 0)
+		return false;
+	const Common::Error result = _vm->loadGameState(ConfMan.getInt("save_slot"));
+	if (result.getCode() != Common::kNoError)
+		warning("Once Upon a Time: startup load failed: %s", result.getDesc().c_str());
+	return _pendingRestore != nullptr;
 }
 
 void OnceUpon::runStory() {

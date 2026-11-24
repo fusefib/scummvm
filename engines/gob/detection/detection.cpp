@@ -51,6 +51,19 @@ static const DebugChannelDef debugFlagList[] = {
 	DEBUG_CHANNEL_END
 };
 
+static bool supportsPreGobSaves(const char *gameId) {
+	static const char *const supportedGames[] = {
+		"abracadabra",
+		"babayaga"
+	};
+
+	for (uint i = 0; i < ARRAYSIZE(supportedGames); ++i) {
+		if (!strcmp(gameId, supportedGames[i]))
+			return true;
+	}
+	return false;
+}
+
 class GobMetaEngineDetection : public AdvancedMetaEngineDetection<Gob::GOBGameDescription> {
 public:
 	GobMetaEngineDetection();
@@ -76,6 +89,7 @@ public:
 	}
 
 	ADDetectedGame fallbackDetect(const FileMap &allFiles, const Common::FSList &fslist, ADDetectedGameExtraInfo **extra) const override;
+	DetectedGame toDetectedGame(const ADDetectedGame &adGame, ADDetectedGameExtraInfo *extraInfo) const override;
 
 private:
 	/**
@@ -87,7 +101,15 @@ private:
 GobMetaEngineDetection::GobMetaEngineDetection() :
 	AdvancedMetaEngineDetection(Gob::gameDescriptions, gobGames) {
 
-	_guiOptions = GUIO2(GUIO_NOLAUNCHLOAD, GAMEOPTION_TTS);
+	_guiOptions = GUIO1(GAMEOPTION_TTS);
+}
+
+DetectedGame GobMetaEngineDetection::toDetectedGame(const ADDetectedGame &adGame,
+		ADDetectedGameExtraInfo *extraInfo) const {
+	DetectedGame game = AdvancedMetaEngineDetection::toDetectedGame(adGame, extraInfo);
+	if (!supportsPreGobSaves(adGame.desc->gameId))
+		game.appendGUIOptions(Common::getGameGUIOptionsDescription(GUIO_NOLAUNCHLOAD));
+	return game;
 }
 
 ADDetectedGame GobMetaEngineDetection::fallbackDetect(const FileMap &allFiles, const Common::FSList &fslist, ADDetectedGameExtraInfo **extra) const {

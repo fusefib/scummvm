@@ -71,7 +71,6 @@ public:
 		return "gob";
 	}
 
-	bool hasFeature(MetaEngineFeature f) const override;
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const Gob::GOBGameDescription *desc) const override;
 	SaveStateList listSaves(const char *target) const override;
@@ -83,17 +82,6 @@ public:
 		return optionsList;
 	}
 };
-
-bool GobMetaEngine::hasFeature(MetaEngineFeature f) const {
-	return f == kSupportsListSaves ||
-		f == kSupportsDeleteSave ||
-		f == kSavesSupportMetaInfo ||
-		f == kSavesSupportThumbnail ||
-		f == kSavesSupportCreationDate ||
-		f == kSavesSupportPlayTime ||
-		f == kSimpleSavesNames ||
-		f == kSavesUseExtendedFormat;
-}
 
 static bool supportsPreGobSaves(const Common::String &gameId) {
 	static const char *const supportedGames[] = {

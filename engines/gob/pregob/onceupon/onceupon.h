@@ -112,6 +112,7 @@ private:
 	void doStartMenu();
 	const MenuButton &animalNamesButton() const;
 
+	bool prepareStartupLoad();
 	void runStory();
 
 
