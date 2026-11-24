@@ -35,6 +35,7 @@
 #include "common/file.h"
 
 namespace Common {
+class Archive;
 class SeekableReadStream;
 }
 
@@ -48,7 +49,7 @@ struct ArchiveInfo {
 
 class DataIO {
 public:
-	DataIO();
+	explicit DataIO(Common::Archive *search = nullptr);
 	~DataIO();
 
 	void getArchiveInfo(Common::Array<ArchiveInfo> &info) const;
@@ -94,6 +95,7 @@ private:
 		bool base;
 	};
 
+	Common::Archive *_search; // Borrowed; defaults to SearchMan.
 	Common::Array<Archive *> _archives;
 
 	Archive *openArchive(const Common::Path &name);

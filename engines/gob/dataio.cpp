@@ -25,6 +25,7 @@
  *
  */
 
+#include "common/archive.h"
 #include "common/endian.h"
 #include "common/types.h"
 #include "common/bufferedstream.h"
@@ -43,7 +44,7 @@ DataIO::File::File(const Common::String &n, uint32 s, uint32 o, uint8 c, Archive
 }
 
 
-DataIO::DataIO() {
+DataIO::DataIO(Common::Archive *search) : _search(search ? search : &SearchMan) {
 	// Reserve memory for the standard max amount of archives
 	_archives.reserve(kMaxArchives);
 	for (int i = 0; i < kMaxArchives; i++)
@@ -274,7 +275,7 @@ static void replaceChar(char *str, char c1, char c2) {
 
 DataIO::Archive *DataIO::openArchive(const Common::Path &name) {
 	Archive *archive = new Archive;
-	if (!archive->file.open(name)) {
+	if (!archive->file.open(name, *_search)) {
 		delete archive;
 		return nullptr;
 	}
@@ -343,7 +344,8 @@ bool DataIO::hasFile(const Common::String &name){
 		return true;
 
 	// Else, look if a plain file that matches exists
-	return Common::File::exists(Common::Path(name));
+	const Common::Path path(name);
+	return _search->hasFile(path) || _search->hasFile(path.append("."));
 }
 
 int32 DataIO::fileSize(const Common::String &name) {
@@ -369,7 +371,7 @@ int32 DataIO::fileSize(const Common::String &name) {
 
 	// Else, try to find a matching plain file
 	Common::File f;
-	if (!f.open(Common::Path(name)))
+	if (!f.open(Common::Path(name), *_search))
 		return -1;
 
 	return f.size();
@@ -386,7 +388,7 @@ Common::SeekableReadStream *DataIO::getFile(const Common::String &name) {
 
 	// Else, try to open a matching plain file
 	Common::File f;
-	if (!f.open(Common::Path(name)))
+	if (!f.open(Common::Path(name), *_search))
 		return nullptr;
 
 	return f.readStream(f.size());
@@ -403,7 +405,7 @@ byte *DataIO::getFile(const Common::String &name, int32 &size) {
 
 	// Else, try to open a matching plain file
 	Common::File f;
-	if (!f.open(Common::Path(name)))
+	if (!f.open(Common::Path(name), *_search))
 		return nullptr;
 
 	size = f.size();

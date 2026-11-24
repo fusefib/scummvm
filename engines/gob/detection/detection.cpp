@@ -26,6 +26,7 @@
  */
 
 #include "base/plugins.h"
+#include "common/fs.h"
 #include "engines/advancedDetector.h"
 #include "engines/obsolete.h"
 
@@ -131,17 +132,14 @@ ADDetectedGame GobMetaEngineDetection::fallbackDetect(const FileMap &allFiles, c
 }
 
 const Gob::GOBGameDescription *GobMetaEngineDetection::detectOnceUponATime(const Common::FSList &fslist) {
-	// Add the game path to the search manager
-	SearchMan.clear();
-	SearchMan.addDirectory(fslist.begin()->getParent());
+	// Keep archive and loose-file lookup within the candidate directory.
+	Common::FSDirectory directory(fslist.begin()->getParent());
 
 	// Open the archives
-	Gob::DataIO dataIO;
+	Gob::DataIO dataIO(&directory);
 	if (!dataIO.openArchive("stk1.stk", true) ||
 	    !dataIO.openArchive("stk2.stk", true) ||
 	    !dataIO.openArchive("stk3.stk", true)) {
-
-		SearchMan.clear();
 		return nullptr;
 	}
 
@@ -175,8 +173,10 @@ const Gob::GOBGameDescription *GobMetaEngineDetection::detectOnceUponATime(const
 		gameType = Gob::kOnceUponATimeBabaYaga;
 
 	// Detect the platform by endianness and existence of a MOD file
-	Common::SeekableReadStream *villeDEC = dataIO.getFile("ville.dec");
-	if (villeDEC && (villeDEC->size() > 6)) {
+	Common::SeekableReadStream *villeDEC = nullptr;
+	if (dataIO.fileSize("ville.dec") > 6)
+		villeDEC = dataIO.getFile("ville.dec");
+	if (villeDEC) {
 		byte data[6];
 
 		if (villeDEC->read(data, 6) == 6) {
@@ -194,8 +194,6 @@ const Gob::GOBGameDescription *GobMetaEngineDetection::detectOnceUponATime(const
 		}
 	}
 	delete villeDEC;
-
-	SearchMan.clear();
 
 	if ((gameType == Gob::kOnceUponATimeInvalid) || (platform == Gob::kOnceUponATimePlatformInvalid)) {
 		warning("GobMetaEngineDetection::detectOnceUponATime(): Detection failed (%d, %d)",
