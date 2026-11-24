@@ -42,6 +42,8 @@ ANIFile::ANIFile(GobEngine *vm, const Common::String &fileName,
 				 uint16 width, uint8 bpp, CMPFileProvider *sheets) : _vm(vm),
 	_width(width), _bpp(bpp), _hasPadding(false) {
 
+	Common::SharedPtr<Layout> layout(new Layout);
+	_layout = layout;
 	bool bigEndian = false;
 	Common::String endianFileName = fileName;
 
@@ -69,7 +71,7 @@ ANIFile::ANIFile(GobEngine *vm, const Common::String &fileName,
 		// The big endian version pads a few fields to even size
 		_hasPadding = bigEndian;
 
-		load(sub, fileName, sheets);
+		load(sub, fileName, *layout, sheets);
 		return;
 	}
 
@@ -78,8 +80,7 @@ ANIFile::ANIFile(GobEngine *vm, const Common::String &fileName,
 
 ANIFile::ANIFile(const ANIFile &source, const byte colors[256]) :
 	_vm(source._vm), _width(source._width), _bpp(source._bpp), _hasPadding(source._hasPadding),
-	_animations(source._animations), _frames(source._frames), _chunks(source._chunks),
-	_maxWidth(source._maxWidth), _maxHeight(source._maxHeight) {
+	_layout(source._layout) {
 	assert(_bpp == 1);
 	_layers.reserve(source._layers.size());
 	for (uint i = 0; i < source._layers.size(); ++i)
@@ -90,7 +91,8 @@ ANIFile *ANIFile::cloneRecolored(const byte colors[256]) const {
 	return new ANIFile(*this, colors);
 }
 
-void ANIFile::load(Common::SeekableReadStreamEndian &ani, const Common::String &fileName, CMPFileProvider *sheets) {
+void ANIFile::load(Common::SeekableReadStreamEndian &ani, const Common::String &fileName, Layout &layout,
+					CMPFileProvider *sheets) {
 	ani.skip(2); // Unused
 
 	uint16 animationCount = ani.readUint16();
@@ -111,22 +113,20 @@ void ANIFile::load(Common::SeekableReadStreamEndian &ani, const Common::String &
 			_layers.push_back(loadLayer(ani, sheets));
 	}
 
-	_maxWidth  = 0;
-	_maxHeight = 0;
-
 	// Load the animations
-	_animations.resize(animationCount);
-	_frames.resize(animationCount);
+	layout.animations.resize(animationCount);
+	layout.frames.resize(animationCount);
 
 	for (uint16 animation = 0; animation < animationCount; animation++) {
-		loadAnimation(_animations[animation], _frames[animation], ani);
+		Animation &definition = layout.animations[animation];
+		loadAnimation(definition, layout.frames[animation], layout.chunks, ani);
 
-		_maxWidth  = MAX<uint16>(_maxWidth , _animations[animation].width);
-		_maxHeight = MAX<uint16>(_maxHeight, _animations[animation].height);
+		layout.maxWidth  = MAX<uint16>(layout.maxWidth , definition.width);
+		layout.maxHeight = MAX<uint16>(layout.maxHeight, definition.height);
 	}
 }
 
-void ANIFile::loadAnimation(Animation &animation, FrameArray &frames,
+void ANIFile::loadAnimation(Animation &animation, FrameArray &frames, ChunkArray &chunks,
 							Common::SeekableReadStreamEndian &ani) {
 
 	// Animation properties
@@ -156,7 +156,7 @@ void ANIFile::loadAnimation(Animation &animation, FrameArray &frames,
 	// Load the frames
 
 	frames.resize(MAX<uint16>(1, frameCount));
-	loadFrames(frames, ani);
+	loadFrames(frames, chunks, ani);
 
 	animation.frameCount = frames.size();
 
@@ -174,7 +174,7 @@ void ANIFile::loadAnimation(Animation &animation, FrameArray &frames,
 		area.right = area.bottom = -0x7FFF;
 
 		for (uint piece = 0; piece < frame.count; ++piece) {
-			const AnimationChunk &c = _chunks[frame.first + piece];
+			const AnimationChunk &c = chunks[frame.first + piece];
 			uint16 cL, cT, cR, cB;
 
 			if (!getCoordinates(c.layer, c.part, cL, cT, cR, cB))
@@ -201,14 +201,14 @@ void ANIFile::loadAnimation(Animation &animation, FrameArray &frames,
 	}
 }
 
-void ANIFile::loadFrames(FrameArray &frames, Common::SeekableReadStreamEndian &ani) {
+void ANIFile::loadFrames(FrameArray &frames, ChunkArray &chunks, Common::SeekableReadStreamEndian &ani) {
 	uint32 curFrame = 0;
 
 	bool end = false;
 	while (!end) {
 		FrameRange &frame = frames[curFrame];
 		if (!frame.count)
-			frame.first = _chunks.size();
+			frame.first = chunks.size();
 		++frame.count;
 
 		uint8 layerFlags = ani.readByte();
@@ -233,7 +233,7 @@ void ANIFile::loadFrames(FrameArray &frames, Common::SeekableReadStreamEndian &a
 			chunk.y += yOff;
 		else
 			chunk.y -= yOff;
-		_chunks.push_back(chunk);
+		chunks.push_back(chunk);
 
 		uint8 multiPart = ani.readByte();
 		if      (multiPart == 0xFF) // No more frames in this animation
@@ -262,25 +262,26 @@ ANIFile::Layer ANIFile::loadLayer(Common::SeekableReadStreamEndian &ani, CMPFile
 }
 
 uint16 ANIFile::getAnimationCount() const {
-	return _animations.size();
+	return _layout->animations.size();
 }
 
 void ANIFile::getMaxSize(uint16 &width, uint16 &height) const {
-	width  = _maxWidth;
-	height = _maxHeight;
+	width  = _layout->maxWidth;
+	height = _layout->maxHeight;
 }
 
 const ANIFile::Animation &ANIFile::getAnimationInfo(uint16 animation) const {
-	assert(animation < _animations.size());
+	assert(animation < _layout->animations.size());
 
-	return _animations[animation];
+	return _layout->animations[animation];
 }
 
 bool ANIFile::getFrameOrigin(uint16 animation, uint16 frame, int16 &x, int16 &y) const {
-	if (animation >= _frames.size() || frame >= _frames[animation].size() || !_frames[animation][frame].count)
+	const AnimationFrameArray &frames = _layout->frames;
+	if (animation >= frames.size() || frame >= frames[animation].size() || !frames[animation][frame].count)
 		return false;
 
-	const AnimationChunk &chunk = _chunks[_frames[animation][frame].first];
+	const AnimationChunk &chunk = _layout->chunks[frames[animation][frame].first];
 	x = chunk.x;
 	y = chunk.y;
 	return true;
@@ -296,17 +297,17 @@ bool ANIFile::getCoordinates(uint16 layer, uint16 part,
 }
 
 void ANIFile::draw(Surface &dest, uint16 animation, uint16 frame, int16 x, int16 y) const {
-	if (animation >= _animations.size())
+	if (animation >= _layout->animations.size())
 		return;
 
-	const Animation &anim = _animations[animation];
+	const Animation &anim = _layout->animations[animation];
 	if (frame >= anim.frameCount)
 		return;
 
-	const FrameRange &range = _frames[animation][frame];
+	const FrameRange &range = _layout->frames[animation][frame];
 
 	for (uint i = 0; i < range.count; ++i) {
-		const AnimationChunk &chunk = _chunks[range.first + i];
+		const AnimationChunk &chunk = _layout->chunks[range.first + i];
 		drawLayer(dest, chunk.layer, chunk.part, x + chunk.x, y + chunk.y, anim.transp ? 0 : -1);
 	}
 }

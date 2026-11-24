@@ -124,7 +124,15 @@ private:
 
 	typedef Common::Array<FrameRange> FrameArray;
 	typedef Common::Array<FrameArray> AnimationFrameArray;
+	typedef Common::Array<AnimationChunk> ChunkArray;
 
+	struct Layout {
+		AnimationArray animations;
+		AnimationFrameArray frames;
+		ChunkArray chunks; ///< All pieces in file order.
+		uint16 maxWidth, maxHeight;
+		Layout() : maxWidth(0), maxHeight(0) {}
+	};
 
 	ANIFile(const ANIFile &source, const byte colors[256]);
 
@@ -135,24 +143,19 @@ private:
 
 	byte _hasPadding;
 
-	LayerArray          _layers;     ///< The animation sprite layers.
-	AnimationArray      _animations; ///< The animations.
-	AnimationFrameArray _frames;     ///< The animation frames.
-	Common::Array<AnimationChunk> _chunks; ///< All pieces in file order.
-
-	uint16 _maxWidth;
-	uint16 _maxHeight;
+	LayerArray _layers; ///< The animation sprite layers.
+	Common::SharedPtr<const Layout> _layout;
 
 
 	// Loading helpers
 
-	void load(Common::SeekableReadStreamEndian &ani, const Common::String &fileName, CMPFileProvider *sheets);
+	void load(Common::SeekableReadStreamEndian &ani, const Common::String &fileName, Layout &layout, CMPFileProvider *sheets);
 
 	Layer loadLayer(Common::SeekableReadStreamEndian &ani, CMPFileProvider *sheets);
 
-	void loadAnimation(Animation &animation, FrameArray &frames,
+	void loadAnimation(Animation &animation, FrameArray &frames, ChunkArray &chunks,
 	                   Common::SeekableReadStreamEndian &ani);
-	void loadFrames(FrameArray &frames, Common::SeekableReadStreamEndian &ani);
+	void loadFrames(FrameArray &frames, ChunkArray &chunks, Common::SeekableReadStreamEndian &ani);
 
 	// Drawing helpers
 
