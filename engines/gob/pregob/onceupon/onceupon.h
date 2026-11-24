@@ -241,23 +241,25 @@ private:
 		kNameConfirmation = 1,
 		kWaitNameMouseRelease = 2,
 		kFlushCharacters = 4,
-		kActivationButtons = 8,
-		kReadingInput = 16
+		kActivationButtons = 8
 	};
 	SceneInput readSceneInput(uint policy = kSceneInput);
-	bool acceptCaption(const SceneInput &input, bool &pressed);
-	// An advance belongs to the page visible at its down edge, not its successor.
-	enum ReadingKeys { kNoReading, kReadingSpace, kReadingControls, kReadingAny };
-	ReadingKeys _readingKeys;
-	bool _readingVisible, _readingOpening, _readingAdvance;
-	int16 _readingMenu;
-	void beginReadingPage(ReadingKeys keys);
-	void publishReadingPage();
-	void collectReadingInput(int16 key = 0);
-	void queueReadingAdvance();
-	bool takeReadingAdvance();
-	void expireReadingInput();
-	void endReadingPage();
+	// Pending input belongs to the visible page until its successor is published.
+	enum ReadingKeys { kPageUnchanged, kNoReading, kReadingSpace, kReadingControls, kReadingAny };
+	enum PagePress { kNoPress, kAdvancePage, kRightPress, kPageMenu };
+	struct PageInput {
+		ReadingKeys visible, prepared;
+		PagePress press;
+		PageInput() : visible(kNoReading), prepared(kPageUnchanged), press(kNoPress) {}
+		void mouseDown(MouseButtons button, MouseButtons held);
+		void keyDown(int16 key);
+		bool menuRequested() const { return press == kRightPress || press == kPageMenu; }
+		bool takeAdvance();
+	};
+	PageInput _page;
+	void readPagePresses(int16 key = 0);
+	void openPreparedPage();
+	void publishPreparedPage();
 
 	enum YieldPoint { kNotYielded, kFrameYield, kMovieYield, kInputYield, kNativeEffectYield };
 	YieldPoint _yield;
@@ -329,7 +331,8 @@ private:
 	void waitMenuNarration();
 #endif
 	void endFrame(Forest *forest = nullptr);
-	bool captionReady(bool accepted, uint32 captionStart);
+	bool finishPage(bool timedOut);
+	bool captionReady(uint32 start) { return finishPage(_clock.now() - start > kGCTDelay); }
 	GCTFile *loadStoryGCT(const Common::String &name) const;
 	void setGamePalette(uint palette); ///< Select the next game palette.
 	void showTemporaryPalette(uint palette); ///< Publish a temporary color pulse.

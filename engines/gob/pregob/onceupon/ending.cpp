@@ -133,13 +133,13 @@ void Ending::drawPage() {
 }
 
 Section::Outcome Ending::step() {
-	const OnceUpon::SceneInput input = _game.readSceneInput(_phase == kPhasePlaying ? OnceUpon::kFlushCharacters : OnceUpon::kReadingInput);
+	const OnceUpon::SceneInput input = _game.readSceneInput(_phase == kPhasePlaying ? OnceUpon::kFlushCharacters : OnceUpon::kSceneInput);
 
 	if (input.key == kKeyEscape || (input.keys & 0x0040) || input.buttons == kMouseButtonsRight) {
 		return _game.sceneMenu();
 	}
 	if (_phase == kPhaseText) {
-		if (_game.captionReady(input.activation, _captionStart))
+		if (_game.captionReady(_captionStart))
 			drawPage();
 #ifdef USE_TTS
 		_game.publishCaptionNarration();

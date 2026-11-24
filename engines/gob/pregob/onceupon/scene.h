@@ -55,7 +55,6 @@ public:
 	virtual Outcome step() = 0;
 	virtual bool atSaveBoundary() const { return false; }
 	virtual bool acceptsKeyRepeat(const Common::KeyState &) const { return false; }
-	virtual void resumeAfterPause() {}
 	virtual void suspendMovie() {}
 	virtual bool activateMovie(MouseButtons) { return false; }
 };

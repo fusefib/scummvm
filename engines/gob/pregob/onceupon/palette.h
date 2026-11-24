@@ -55,7 +55,7 @@ public:
 	bool holdingBlack() const { return _state.holdingBlack; }
 	void selectTarget(const byte *colors, uint size);
 	void showTarget();
-	void fadeToTarget();
+	void fadeToTarget(bool pollBeforeReveal = false);
 	void fadeToBlack();
 	void showTemporary(const byte *colors, uint size);
 	State snapshot() const;
@@ -70,7 +70,7 @@ private:
 	void projectTarget();
 	void captureVisible();
 	void projectVisible();
-	void fadeDOS(bool toBlack);
+	void fadeDOS(bool toBlack, bool pollBeforeReveal = false);
 };
 
 } // namespace OnceUpon

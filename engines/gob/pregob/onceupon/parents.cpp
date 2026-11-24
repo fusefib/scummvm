@@ -28,7 +28,6 @@
 #include "common/system.h"
 
 #include "gob/gob.h"
-#include "gob/global.h"
 #include "gob/util.h"
 #include "gob/draw.h"
 #include "gob/surface.h"
@@ -84,7 +83,6 @@ Parents::Movie::Movie(OnceUpon &game, const Common::String &seq, GCTFile &captio
 
 Parents::Movie::~Movie() {
 	endPlay();
-	_game.endReadingPage();
 	// The mixer borrows these samples until playback is stopped.
 	for (uint i = 0; i < kSoundCount; ++i)
 		_vm->_sound->blasterStop(0, &_sounds[i]);
@@ -95,21 +93,18 @@ void Parents::Movie::changeFrameRate(int16 rate) {
 }
 
 void Parents::Movie::waitFrame() {
-	_game.publishReadingPage();
+	_game.publishPreparedPage();
 	if (isSuspended() || _game._pendingRestore || _vm->shouldQuit())
 		return;
 	_clock.waitFrame();
 }
 
 void Parents::Movie::begin() {
-#ifdef USE_TTS
-	discardNarration();
-#endif
 	_frameCounter = 0;
 	_sequenceUpdating = _textFramePending = false;
 	_finished = false;
 	_waitingText = false;
-	_game.endReadingPage();
+	_game._page = OnceUpon::PageInput();
 	// The native parents movie sets 12 fps after reading the SEQ header.
 	beginPlay(12);
 }
@@ -127,9 +122,9 @@ bool Parents::Movie::stepPlay() {
 			return false;
 #ifdef USE_TTS
 		if (isAborted() || _vm->shouldQuit())
-			discardNarration();
+			_game.cancelNarration();
 		else
-			publishNarration();
+			_game.publishCaptionNarration();
 		_game._narration.update(g_system->getMillis());
 #endif
 		return playing && !_finished;
@@ -141,24 +136,10 @@ bool Parents::Movie::stepPlay() {
 	_vm->_util->processInput();
 	if (isSuspended())
 		return false;
-	int16 x, y;
-	MouseButtons buttons;
-	_vm->_util->getMouseState(&x, &y, &buttons);
-	const int16 key = _vm->_util->checkKey();
-	handleInput(key, x, y, buttons);
+	readMovieInput(0);
 	if (isAborted())
 		return false;
-	const bool accepted = _game.takeReadingAdvance();
-#ifdef USE_TTS
-	const bool active = _game._narration.update(g_system->getMillis());
-	if (accepted)
-		_game._narration.cancel();
-#endif
-	if (accepted || (_clock.now() - _textStart > OnceUpon::kGCTDelay
-#ifdef USE_TTS
-		&& !active
-#endif
-		))
+	if (_game.captionReady(_textStart))
 		drawGCT(_textItem);
 	_vm->_draw->blitInvalidated();
 	_textFramePending = true;
@@ -167,41 +148,11 @@ bool Parents::Movie::stepPlay() {
 		return false;
 	_textFramePending = false;
 #ifdef USE_TTS
-	publishNarration();
+	_game.publishCaptionNarration();
 #endif
 	return true;
 }
 
-void Parents::Movie::resumePlay() {
-	SEQFile::resumePlay();
-	_game.expireReadingInput();
-}
-
-void Parents::Movie::activate(MouseButtons buttons) {
-	if (buttons == kMouseButtonsRight)
-		_game._readingMenu = -1;
-}
-
-void Parents::Movie::requireFreshInput() {
-#ifdef USE_TTS
-	discardNarration();
-#endif
-	_game.expireReadingInput();
-}
-
-#ifdef USE_TTS
-void Parents::Movie::discardNarration() {
-	_game._captionWords.clear();
-	_game._captionNarrationPending = false;
-}
-
-void Parents::Movie::publishNarration() {
-	if (_game._captionNarrationPending && !_game._readingAdvance)
-		_game._narration.publishPage(_game._captionWords, _vm->_global->_language, g_system->getMillis());
-	discardNarration();
-}
-
-#endif
 void Parents::Movie::handleFrameEvent() {
 	++_frameCounter;
 	const uint16 frame = getFrame();
@@ -274,9 +225,13 @@ void Parents::Movie::handleFrameEvent() {
 void Parents::Movie::handleInput(int16 key, int16 mouseX, int16 mouseY, MouseButtons mouseButtons) {
 	// SEQ forces its mouse sample up; reading uses down edges, never that level.
 	_vm->_util->forceMouseButtonsSync();
-	_game.collectReadingInput(key);
-	if (_game._readingMenu) {
-		_game._readingMenu = 0;
+	readMovieInput(key);
+}
+
+void Parents::Movie::readMovieInput(int16 key) {
+	_game.readPagePresses(key);
+	if (_game._page.menuRequested()) {
+		_game._page.press = OnceUpon::kNoPress;
 		abortPlay();
 		return;
 	}
@@ -286,28 +241,12 @@ void Parents::Movie::handleInput(int16 key, int16 mouseX, int16 mouseY, MouseBut
 	for (uint i = 0; i < kHoldCount; ++i) {
 		if (getFrame() != kHoldFrames[i][0])
 			continue;
-#ifdef USE_TTS
-		const bool active = _game._narration.update(g_system->getMillis());
-#endif
-		if (!_game.takeReadingAdvance() && (_frameCounter < 100
-#ifdef USE_TTS
-			|| active
-#endif
-			))
+		if (!_game.finishPage(_frameCounter >= 100))
 			seekFrame(kHoldFrames[i][1]);
 		return;
 	}
-	if (getFrame() > 496) {
-#ifdef USE_TTS
-		const bool active = _game._narration.update(g_system->getMillis());
-#endif
-		if (_game.takeReadingAdvance() || (_frameCounter > 100
-#ifdef USE_TTS
-			&& !active
-#endif
-			))
-			_finished = true;
-	}
+	if (getFrame() > 496 && _game.finishPage(_frameCounter > 100))
+		_finished = true;
 }
 
 void Parents::Movie::playSound(Sound sound) {
@@ -343,7 +282,7 @@ void Parents::Movie::drawGCT(uint item, bool resetCounter) {
 	const bool drawn = _gct->draw(*_vm->_draw->_backSurface, item, *_font, 10, left, top, right, bottom);
 #endif
 	if (drawn) {
-		_game.beginReadingPage(_gct->finished() ? OnceUpon::kReadingAny : OnceUpon::kReadingSpace);
+		_game._page.prepared = _gct->finished() ? OnceUpon::kReadingAny : OnceUpon::kReadingSpace;
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
 	}
 
@@ -399,6 +338,7 @@ Section::Outcome Parents::step() {
 	// The SEQ update has unwound. Release its captures, art and borrowed
 	// samples before constructing the dwelling presentation.
 	_movie.reset();
+	_game._page = OnceUpon::PageInput();
 	// GCTFile::reset() preserves the old background capture. Discard it
 	// before the search caption captures its own background.
 	_text->setArea(17, 18, 303, 41);
@@ -421,13 +361,9 @@ void Parents::suspendMovie() {
 bool Parents::activateMovie(MouseButtons buttons) {
 	if (!_movie)
 		return false;
-	_movie->activate(buttons);
+	if (buttons == kMouseButtonsRight)
+		_game._page.press = OnceUpon::kPageMenu;
 	return true;
-}
-
-void Parents::resumeAfterPause() {
-	if (_movie)
-		_movie->requireFreshInput();
 }
 
 Section::Outcome Parents::Movie::step() {

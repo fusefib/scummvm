@@ -57,7 +57,6 @@ public:
 	bool atSaveBoundary() const override;
 	void suspendMovie() override;
 	bool activateMovie(MouseButtons buttons) override;
-	void resumeAfterPause() override;
 
 private:
 	enum Phase { kMovie, kSearch };
@@ -73,12 +72,6 @@ private:
 		void begin();
 		Outcome step();
 		bool stepPlay();
-		void resumePlay();
-		void activate(MouseButtons buttons);
-		void requireFreshInput();
-#ifdef USE_TTS
-		void discardNarration();
-#endif
 
 	protected:
 		void changeFrameRate(int16 rate) override;
@@ -129,9 +122,7 @@ private:
 		void setPalette(const byte *palette, uint size);
 
 		void drawGCT(uint item, bool resetCounter = false);
-#ifdef USE_TTS
-		void publishNarration();
-#endif
+		void readMovieInput(int16 key);
 	};
 
 	OnceUpon &_game;

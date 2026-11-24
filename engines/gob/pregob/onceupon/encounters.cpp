@@ -48,11 +48,11 @@ namespace OnceUpon {
 Encounter::Encounter(OnceUpon &game, int16 animation, bool boss) :
 	_vm(game._vm), _game(game), _ani(nullptr), _background(nullptr), _frame(nullptr), _animation(animation),
 	_animationFrame(0), _x(160), _y(100), _pressed(false), _assets(*game._assets), _boss(boss),
-	_phase(kExteriorDelay), _captionStart(0), _waitStart(0), _waitDuration(0), _textItem(0),
+	_phase(kExteriorDelay), _captionStart(0), _waitStart(0), _waitDuration(0), _caption(kText),
 #ifdef USE_TTS
-	_queuedText(-1), _queuedSelection(-1),
+	_queuedCaption(kText, -1),
 #endif
-	_captionPressed(false), _needsFadeIn(false) {
+	_needsFadeIn(false) {
 }
 
 Encounter::~Encounter() {
@@ -230,7 +230,7 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 			if (_damage == 10) {
 				_success = false;
 				_stage = kFailureWait;
-				return Event(kText, 10);
+				return Event(kResultText, 10);
 			}
 			_stage = kFrameEffects;
 			if (_animation == 19 && animationEnded()) {
@@ -243,7 +243,7 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 				playCue(2);
 				if (_game._pendingRestore)
 					return Event(kRestore);
-				return Event(kText, 7);
+				return Event(kResultText, 7);
 			}
 			if ((_animation == 22 || _animation == 23) && animationEnded()) {
 				_stage = kVictoryResume;
@@ -360,7 +360,7 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 			if (_animation >= 0 && ++_animationFrame >= _ani->getAnimationInfo(_animation).frameCount) {
 				if (_animation == 24) {
 					_stage = kSearchWait;
-					return Event(kText, 9);
+					return Event(kResultText, 9);
 				}
 				_animation = -1;
 			}
@@ -548,7 +548,7 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 			}
 			if (_damage == 5) {
 				_stage = kFailureWait;
-				return Event(kText, 8);
+				return Event(kResultText, 8);
 			}
 			_stage = kFrameEffects;
 			if (_animation == 18 && animationEnded()) {
@@ -561,7 +561,7 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 			_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 49, 319, 199);
 			_frame->blit(*_background);
 			_stage = kVictoryText;
-			return Event(kText, 5);
+			return Event(kResultText, 5);
 		case kVictoryText:
 			_cursorFrame = 0;
 			_animation = -1;
@@ -667,7 +667,7 @@ BossEncounter::Event BossEncounter::next(int16 x, int16 y, bool pressed, uint32 
 			if (_animation >= 0 && ++_animationFrame >= _ani->getAnimationInfo(_animation).frameCount) {
 				if (_animation == 23) {
 					_stage = kSearchWait;
-					return Event(kText, 6);
+					return Event(kResultText, 6);
 				}
 				_animation = -1;
 				_cursorFrame = 0;
@@ -784,7 +784,7 @@ void Encounter::beginExterior() {
 }
 
 void Encounter::beginFight() {
-	_game.endReadingPage();
+	_game._page.visible = OnceUpon::kNoReading;
 	const OnceUpon::EncounterSpec &spec = OnceUpon::encounterSpec(_boss);
 	assert(!_ani);
 	_game.fadeOut();
@@ -808,23 +808,28 @@ void Encounter::beginFight() {
 		return;
 	_game._acceptActivations = true;
 	_needsFadeIn = true;
-	_captionPressed = false;
-	drawCaption(0);
+	drawCaption(Event(kText, 0));
+	// A wrapped introduction waits for input before the first combat frame.
+	if (_phase == kCaption) {
+		_vm->_draw->forceBlit();
+		_game.fadeIn();
+		_needsFadeIn = false;
+	}
 }
 
-void Encounter::drawCaption(uint item, int selection) {
-	_textItem = item;
+void Encounter::drawCaption(const Event &caption) {
+	_caption = caption;
 	_text->reset();
-	if (selection >= 0)
-		_text->selectLine(item, selection);
+	if (caption.selection >= 0)
+		_text->selectLine(caption.value, caption.selection);
 	drawPage();
 }
 
 void Encounter::drawPage() {
-	const bool terminal = _boss ? _textItem == 5 || _textItem == 6 || _textItem == 8 :
-		_textItem == 7 || _textItem == 9 || _textItem == 10;
-	_phase = _game.drawScenePage(*_text, *_captionBackground, _textItem, _captionStart, terminal) ? kPlaying : kCaption;
-	if (_phase == kCaption)
+	const bool finished = _game.drawScenePage(*_text, *_captionBackground, _caption.value, _captionStart,
+		_caption.type == kResultText);
+	_phase = finished ? kPlaying : kCaption;
+	if (!finished)
 		_game.holdActionCursor();
 }
 
@@ -866,15 +871,14 @@ Section::Outcome Encounter::step() {
 			// The four-second reveal already showed the art. Keep the
 			// following skippable hold short on this text-free screen.
 			_waitDuration = 2000;
-			_game.beginReadingPage(OnceUpon::kReadingAny);
+			_game._page.prepared = OnceUpon::kReadingAny;
 		}
 		_game.endFrame();
 		return kSectionContinue;
 	}
 	if (_phase == kPlaying)
 		filterFightTaps();
-	const bool reading = _game._readingKeys != OnceUpon::kNoReading;
-	OnceUpon::SceneInput input = _game.readSceneInput(reading ? OnceUpon::kReadingInput : OnceUpon::kSceneInput);
+	OnceUpon::SceneInput input = _game.readSceneInput();
 
 	if (input.key == kKeyEscape || input.buttons == kMouseButtonsRight) {
 		bool resumePage = false;
@@ -899,17 +903,16 @@ Section::Outcome Encounter::step() {
 		_phase = kPlaying;
 		input = _game.readSceneInput();
 	}
-	const bool accepted = reading ? input.activation : _game.acceptCaption(input, _captionPressed);
 #ifdef USE_TTS
 	const bool caption = _phase == kCaption;
 	const bool playing = _phase == kPlaying;
-	if (accepted && ((playing && input.key == kKeySpace) || (caption && _queuedText >= 0)))
+	if ((playing && input.key == kKeySpace) || (caption && _queuedCaption.value >= 0 &&
+			(input.activation || input.key == kKeySpace || input.key == kKeyReturn)))
 		_game.cancelNarration();
-	if ((playing || caption) && _queuedText >= 0 &&
+	if ((playing || caption) && _queuedCaption.value >= 0 &&
 		!_game._narration.speakingOrStarting(g_system->getMillis())) {
-		const int16 item = _queuedText;
-		_queuedText = -1;
-		drawCaption(item, _queuedSelection);
+		drawCaption(_queuedCaption);
+		_queuedCaption.value = -1;
 		if (caption || _phase == kCaption) {
 			_game.endFrame();
 			return kSectionContinue;
@@ -919,31 +922,21 @@ Section::Outcome Encounter::step() {
 	if (_phase == kCaption) {
 		if (
 #ifdef USE_TTS
-			_queuedText < 0 &&
+			_queuedCaption.value < 0 &&
 #endif
-			_game.captionReady(accepted, _captionStart))
+			_game.captionReady(_captionStart))
 			drawPage();
 		_game.endFrame();
 		return kSectionContinue;
 	}
 	if (_phase == kExteriorHold || _phase == kTimedWait) {
-		const bool acknowledged = input.activation;
-		if (acknowledged)
-			_game.takeReadingAdvance();
-#ifdef USE_TTS
-		if (acknowledged)
-			_game.cancelNarration();
-#endif
-		if (acknowledged || (_game._clock.now() - _waitStart >= _waitDuration
-#ifdef USE_TTS
-			&& !_game._narration.update(g_system->getMillis())
-#endif
-			)) {
-			if (_phase == kExteriorHold)
+		if (_game.finishPage(_game._clock.now() - _waitStart >= _waitDuration)) {
+			if (_phase == kExteriorHold) {
 				beginFight();
-			else
+			} else {
+				_game._page.visible = OnceUpon::kNoReading;
 				_phase = kPlaying;
-			_game.endReadingPage();
+			}
 		}
 		_game.endFrame();
 		return kSectionContinue;
@@ -956,10 +949,10 @@ Section::Outcome Encounter::step() {
 		const Event event = next(input.x, input.y, pressed, keys);
 		switch (event.type) {
 		case Encounter::kText:
+		case Encounter::kResultText:
 #ifdef USE_TTS
 			if (_game._narration.speakingOrStarting(g_system->getMillis())) {
-				_queuedText = event.value;
-				_queuedSelection = event.selection;
+				_queuedCaption = event;
 				// Combat and search comments can be replaced during gameplay.
 				if ((event.value >= 2 && event.value <= 4) || event.value == (_boss ? 7 : 8))
 					break;
@@ -968,9 +961,9 @@ Section::Outcome Encounter::step() {
 				_game.endFrame();
 				return kSectionContinue;
 			}
-			_queuedText = -1;
+			_queuedCaption.value = -1;
 #endif
-			drawCaption(event.value, event.selection);
+			drawCaption(event);
 			if (_phase == kCaption) {
 				_game.endFrame();
 				return kSectionContinue;

@@ -48,7 +48,9 @@ class Assets;
 /** Presentation, surfaces and input for the Chapter 3 and Chapter 5 encounters. */
 class Encounter : public Section {
 public:
-	enum EventType { kText, kFlash, kShake, kWaitForCaption, kDelay, kPostFightHold, kFrame, kComplete, kRestore };
+	enum EventType {
+		kText, kResultText, kFlash, kShake, kWaitForCaption, kDelay, kPostFightHold, kFrame, kComplete, kRestore
+	};
 	struct Event {
 		EventType type;
 		int16 value, selection;
@@ -92,7 +94,7 @@ private:
 	void beginFight();
 	void captureBackground();
 	void loadCues();
-	void drawCaption(uint item, int selection = -1);
+	void drawCaption(const Event &caption);
 	void drawPage();
 	void shake(int16 first, int16 second);
 
@@ -103,11 +105,11 @@ private:
 	Common::ScopedPtr<GCTFile> _text;
 	Common::ScopedPtr<Surface> _captionBackground;
 	uint32 _captionStart, _waitStart, _waitDuration;
-	uint16 _textItem;
+	Event _caption;
 #ifdef USE_TTS
-	int16 _queuedText, _queuedSelection;
+	Event _queuedCaption;
 #endif
-	bool _captionPressed, _needsFadeIn;
+	bool _needsFadeIn;
 };
 
 /**

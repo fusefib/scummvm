@@ -643,34 +643,21 @@ void Forest::showBabaDosWipe() {
 Section::Outcome Forest::step() {
 	if (_phase == kPhaseComplete)
 		return kSectionComplete;
-	const bool reading = _game._readingKeys != OnceUpon::kNoReading;
-	const OnceUpon::SceneInput input = _game.readSceneInput(reading ? OnceUpon::kReadingInput : OnceUpon::kSceneInput);
+	const OnceUpon::SceneInput input = _game.readSceneInput();
 	if (input.key == kKeyEscape || input.buttons == kMouseButtonsRight)
 		return _game.sceneMenu();
 	if (_game._keyboard.takeSkipLevel())
 		return kSectionSkipRoom;
-	const bool accepted = input.activation;
 	if (_phase == kPhaseText) {
-		if (_game.captionReady(accepted, _captionStart))
+		if (_game.captionReady(_captionStart))
 			drawPage();
 		_game.endFrame();
 		return kSectionContinue;
 	}
 	if (_phase == kPhaseWait) {
-		const bool acknowledged = input.activation;
-		if (acknowledged)
-			_game.takeReadingAdvance();
-#ifdef USE_TTS
-		if (acknowledged)
-			_game.cancelNarration();
-#endif
-		if (acknowledged || (_game._clock.now() - _waitStart >= 5000
-#ifdef USE_TTS
-			&& !_game._narration.update(g_system->getMillis())
-#endif
-			)) {
+		if (_game.finishPage(_game._clock.now() - _waitStart >= 5000)) {
 			_phase = kPhasePlaying;
-			_game.endReadingPage();
+			_game._page.visible = OnceUpon::kNoReading;
 		}
 		_game.endFrame();
 		return kSectionContinue;

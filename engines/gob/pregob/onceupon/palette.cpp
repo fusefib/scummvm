@@ -31,6 +31,7 @@
 #include "gob/gob.h"
 #include "gob/global.h"
 #include "gob/draw.h"
+#include "gob/util.h"
 #include "gob/video.h"
 #include "gob/palanim.h"
 #include "gob/pregob/onceupon/palette.h"
@@ -84,7 +85,7 @@ void Palette::showTarget() {
 	_state.holdingBlack = false;
 }
 
-void Palette::fadeDOS(bool toBlack) {
+void Palette::fadeDOS(bool toBlack, bool pollBeforeReveal) {
 	const uint colorCount = 16;
 	// Both DOS games move one VGA DAC level per retrace.
 	const uint rate = 70 * MAX<int16>(1, _vm->_global->_speedFactor);
@@ -114,6 +115,9 @@ void Palette::fadeDOS(bool toBlack) {
 			scheduled = next;
 		}
 
+		// The first DOS retrace has a delay while the old page is still black.
+		if (step == 1 && pollBeforeReveal)
+			_vm->_util->processInput();
 		g_system->getPaletteManager()->setPalette(_state.visible, 0, colorCount);
 		projectVisible();
 		_vm->_video->retrace();
@@ -122,15 +126,18 @@ void Palette::fadeDOS(bool toBlack) {
 	}
 }
 
-void Palette::fadeToTarget() {
+void Palette::fadeToTarget(bool pollBeforeReveal) {
 	if (_vm->shouldQuit())
 		return;
 	captureVisible();
 	projectTarget();
-	if (_vm->getPlatform() == Common::kPlatformDOS)
-		fadeDOS(false);
-	else
+	if (_vm->getPlatform() == Common::kPlatformDOS) {
+		fadeDOS(false, pollBeforeReveal);
+	} else {
+		if (pollBeforeReveal)
+			_vm->_util->processInput();
 		_vm->_palAnim->fade(_vm->_global->_pPaletteDesc, 0, 0);
+	}
 	captureVisible();
 	_state.holdingBlack = false;
 }

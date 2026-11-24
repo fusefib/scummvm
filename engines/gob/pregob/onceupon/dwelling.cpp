@@ -205,7 +205,7 @@ void DwellingSearch::drawPage() {
 	if (drawn) {
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
 		if (_textItem == 15)
-			_game.beginReadingPage(OnceUpon::kReadingControls);
+			_game._page.prepared = OnceUpon::kReadingControls;
 	}
 	_captionStart = _game._clock.now();
 }
@@ -235,15 +235,14 @@ void DwellingSearch::begin() {
 SectionOutcome DwellingSearch::step() {
 	if (_phase == kPhaseComplete)
 		return kSectionComplete;
-	OnceUpon::SceneInput input = _game.readSceneInput(
-		_phase == kPhaseResult || _phase == kPhaseRewardRead ? OnceUpon::kReadingInput : OnceUpon::kSceneInput);
+	OnceUpon::SceneInput input = _game.readSceneInput();
 
 	if (input.key == kKeyEscape || input.buttons == kMouseButtonsRight) {
 		return _game.sceneMenu();
 	}
 	bool down = (input.buttons & kMouseButtonsLeft) || (input.keys & 0x0010);
 	if (_phase == kPhaseResult || _phase == kPhaseRewardRead) {
-		if (_game.captionReady(input.activation, _captionStart)) {
+		if (_game.captionReady(_captionStart)) {
 			if (_phase == kPhaseRewardRead) {
 				_phase = kPhaseComplete;
 				return kSectionComplete;
@@ -286,7 +285,7 @@ SectionOutcome DwellingSearch::step() {
 		if (_text->finished())
 			_phase = kPhaseRewardRead;
 		_vm->_draw->blitInvalidated();
-		_game.publishReadingPage();
+		_game.publishPreparedPage();
 		return kSectionContinue;
 	}
 	_game.endFrame();

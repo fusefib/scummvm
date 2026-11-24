@@ -25,7 +25,6 @@
  *
  */
 
-#include "common/system.h"
 #include "common/textconsole.h"
 #include "common/util.h"
 
@@ -335,12 +334,12 @@ void CharacterCreation::drawCaption(uint item) {
 #endif
 	syncCaption();
 	if (item == 11)
-		_game.beginReadingPage(OnceUpon::kReadingAny);
+		_game._page.prepared = OnceUpon::kReadingAny;
 	if (_game._pendingRestore)
 		return;
 	_vm->_draw->blitInvalidated();
 	if (item == 11)
-		_game.publishReadingPage();
+		_game.publishPreparedPage();
 	else
 		_vm->_video->retrace();
 
@@ -386,24 +385,14 @@ Section::Outcome CharacterCreation::step() {
 	}
 
 	const bool firstNameInput = awaitingNameRelease();
-	OnceUpon::SceneInput input = _game.readSceneInput(_phase == kPhaseWait ? OnceUpon::kReadingInput :
-		OnceUpon::kNameConfirmation | (firstNameInput ? OnceUpon::kWaitNameMouseRelease : 0) |
+	OnceUpon::SceneInput input = _game.readSceneInput(OnceUpon::kNameConfirmation | (firstNameInput ? OnceUpon::kWaitNameMouseRelease : 0) |
 		(revealing ? OnceUpon::kFlushCharacters : 0));
 	if (input.key == kKeyEscape || (input.keys & 0x0040) || input.buttons == kMouseButtonsRight)
 		return _game.sceneMenu();
 
 	if (_phase == kPhaseWait) {
-		const bool acknowledged = input.activation;
-		if (acknowledged || (_game._clock.now() - _waitStart >= 3000
-#ifdef USE_TTS
-			&& !_game._narration.update(g_system->getMillis())
-#endif
-			)) {
-#ifdef USE_TTS
-			_game.cancelNarration();
-#endif
+		if (_game.finishPage(_game._clock.now() - _waitStart >= 3000))
 			return kSectionComplete;
-		}
 		_game.endFrame();
 		return kSectionContinue;
 	}

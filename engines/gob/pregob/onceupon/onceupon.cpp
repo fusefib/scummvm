@@ -87,7 +87,7 @@ void OnceUpon::beginScene(SceneKind kind) {
 void OnceUpon::finishScene() {
 	if (_sceneKind == kSceneNone)
 		return;
-	endReadingPage();
+	_page = PageInput();
 	removeSelectionCursor();
 #ifdef USE_TTS
 	cancelNarration();
@@ -114,7 +114,6 @@ OnceUpon::ScreenBackup::~ScreenBackup() {
 OnceUpon::OnceUpon(GobEngine *vm) : PreGob(vm), _openedArchives(false),
 	_jeudak(nullptr), _lettre(nullptr), _plettre(nullptr), _glettre(nullptr), _palette(vm),
 	_assets(new Assets(vm)), _clock(vm), _sceneKind(kSceneNone), _sceneFrameRate(15),
-	_readingKeys(kNoReading), _readingVisible(false), _readingOpening(false), _readingAdvance(false), _readingMenu(0),
 	_yield(kNotYielded),
 	_introStage(kIntroLoading), _pendingRestore(nullptr), _initialized(false),
 	_paused(false), _quickForestControls(false),
@@ -292,7 +291,16 @@ void OnceUpon::fadeIn() {
 	if (!_palette.holdingBlack() || _vm->shouldQuit() || _pendingRestore)
 		return;
 	_vm->_draw->blitInvalidated();
-	_palette.fadeToTarget();
+	const bool newPage = _page.prepared != kPageUnchanged && !_menuInputActive && !_paused;
+	_palette.fadeToTarget(newPage);
+	if (_pendingRestore || _vm->shouldQuit())
+		return;
+	if (newPage) {
+		openPreparedPage();
+		_vm->_util->processInput();
+		if (_page.visible != kNoReading)
+			readPagePresses();
+	}
 	_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, 0, 0, 319, 199);
 }
 
@@ -477,7 +485,7 @@ void OnceUpon::publishCaptionNarration() {
 		return;
 	if (_palette.holdingBlack())
 		return;
-	if (!_readingAdvance)
+	if (_page.press != kAdvancePage)
 		_narration.publishPage(_captionWords, _vm->_global->_language, g_system->getMillis());
 	_captionWords.clear();
 	_captionNarrationPending = false;
@@ -489,7 +497,7 @@ void OnceUpon::endFrame(Forest *forest) {
 		return;
 	_vm->_draw->blitInvalidated();
 	_yield = kFrameYield;
-	publishReadingPage();
+	publishPreparedPage();
 	if (forest)
 		_keyboard.trackForestPress(true);
 	const bool waited = _clock.waitFrame(forest);
@@ -532,22 +540,18 @@ void OnceUpon::waitMenuNarration() {
 }
 
 #endif
-bool OnceUpon::captionReady(bool accepted, uint32 captionStart) {
-#ifdef USE_TTS
-	const bool active = _narration.update(g_system->getMillis());
-#endif
-	if (accepted) {
-		takeReadingAdvance();
+bool OnceUpon::finishPage(bool timedOut) {
+	if (_page.takeAdvance()) {
 #ifdef USE_TTS
 		cancelNarration();
 #endif
 		return true;
 	}
-	return _clock.now() - captionStart > kGCTDelay
 #ifdef USE_TTS
-		&& !active
+	if (_narration.update(g_system->getMillis()))
+		return false;
 #endif
-		;
+	return timedOut;
 }
 
 GCTFile *OnceUpon::loadStoryGCT(const Common::String &name) const {
@@ -840,7 +844,7 @@ OnceUpon::MenuAction OnceUpon::handleIngameMenu() {
 }
 
 void OnceUpon::beginMenuInput() {
-	expireReadingInput();
+	_page.press = kNoPress;
 	_keyboard.setContext(kPointerInput);
 #ifdef USE_TTS
 	cancelNarration();
@@ -866,7 +870,6 @@ void OnceUpon::endMenuInput() {
 	_keyboard.setContext(_sceneKind == kSceneForest ? kForestInput : kPointerInput);
 	_menuEscapePending = 0;
 	discardActivationInput();
-	publishReadingPage();
 }
 
 int16 OnceUpon::checkMenuInput(int16 &x, int16 &y, MouseButtons &buttons) {
@@ -1329,16 +1332,16 @@ OnceUpon::SceneInput OnceUpon::readSceneInput(uint policy) {
 	input.confirmation = policy & kNameConfirmation ? _keyboard.confirmationKeys() : 0;
 	input.awaitingRelease = (policy & kWaitNameMouseRelease) && (input.buttons & kMouseButtonsLeft);
 	input.key = input.awaitingRelease ? 0 : _vm->_util->checkKey();
-	if (policy & kReadingInput) {
+	if (_page.visible != kNoReading || _page.menuRequested()) {
 		if (input.buttons == kMouseButtonsNone && input.keys == 0)
 			_freshInput = false;
-		collectReadingInput(input.key);
-		input.key = _readingMenu ? kKeyEscape : 0;
-		_readingMenu = 0;
-		input.activation = _readingAdvance;
+		readPagePresses(input.key);
+		input.key = _page.menuRequested() ? kKeyEscape : 0;
+		if (input.key)
+			_page.press = kNoPress;
+		input.activation = false;
 		input.buttons = kMouseButtonsNone;
 		input.keys = input.confirmation = 0;
-		_activations.clear();
 		return input;
 	}
 	if (policy & kFlushCharacters) {
@@ -1370,88 +1373,74 @@ OnceUpon::SceneInput OnceUpon::readSceneInput(uint policy) {
 	return input;
 }
 
-void OnceUpon::queueReadingAdvance() {
-	if (!_readingVisible || _readingAdvance || _paused || _menuInputActive)
-		return;
-	_readingAdvance = true;
-#ifdef USE_TTS
-	_narration.cancel();
-#endif
+void OnceUpon::PageInput::keyDown(int16 key) {
+	if (key == kKeyEscape)
+		press = kPageMenu;
+	else if (press == kNoPress && visible != kNoReading &&
+			(visible == kReadingAny || key == kKeySpace || (visible == kReadingControls && key == kKeyReturn)))
+		press = kAdvancePage;
 }
 
-void OnceUpon::collectReadingInput(int16 key) {
-	if (_keyboard.takeFocusLost())
-		expireReadingInput();
-	// Preserve menu requests queued by an outgoing action scene.
-	for (Common::List<Activation>::const_iterator press = _activations.begin(); press != _activations.end(); ++press)
-		if (press->buttons == kMouseButtonsRight && _readingMenu != kKeyEscape)
-			_readingMenu = -1;
+void OnceUpon::PageInput::mouseDown(MouseButtons button, MouseButtons held) {
+	if (button == kMouseButtonsLeft) {
+		// A chord advances. A completed right click still opens the menu.
+		if (press == kNoPress || (press == kRightPress && (held & kMouseButtonsRight)))
+			press = kAdvancePage;
+	} else if (!(held & kMouseButtonsLeft) && press != kPageMenu) {
+		press = press == kRightPress ? kPageMenu : kRightPress;
+	}
+}
+
+void OnceUpon::readPagePresses(int16 key) {
+	const bool lostFocus = _keyboard.takeFocusLost();
+	if (lostFocus)
+		_page.press = kNoPress;
+	for (Common::List<Activation>::const_iterator it = _activations.begin(); it != _activations.end(); ++it)
+		if (it->buttons == kMouseButtonsRight && !lostFocus)
+			_page.press = kPageMenu;
 	_activations.clear();
+
 	do {
-		if (key == kKeyEscape)
-			_readingMenu = kKeyEscape;
-		else if (_readingKeys == kReadingAny ? key != 0 :
-			key == kKeySpace || (_readingKeys == kReadingControls && key == kKeyReturn))
-			queueReadingAdvance();
+		if (!lostFocus && key)
+			_page.keyDown(key);
 	} while (_vm->_util->checkKey(key));
+#ifdef USE_TTS
+	if (_page.press == kAdvancePage)
+		_narration.cancel();
+#endif
 }
 
-void OnceUpon::beginReadingPage(ReadingKeys keys) {
-	// Poll before replacing the visible page; old taps cannot pay for new text.
-	_vm->_util->processInput();
-	collectReadingInput();
+void OnceUpon::openPreparedPage() {
+	readPagePresses();
 #ifdef USE_TTS
 	_narration.cancel();
 #endif
-	_readingKeys = keys;
-	_readingVisible = false;
-	_readingOpening = keys != kNoReading;
-	_readingAdvance = false;
-	_activations.clear();
+	_page.visible = _page.prepared;
+	_page.prepared = kPageUnchanged;
+	if (_page.press == kAdvancePage)
+		_page.press = kNoPress;
 }
 
-void OnceUpon::publishReadingPage() {
-	if (!_readingOpening || _paused || _menuInputActive)
+void OnceUpon::publishPreparedPage() {
+	if (_page.prepared == kPageUnchanged || _palette.holdingBlack() || _menuInputActive || _paused)
 		return;
+	// Assign queued presses to the old page before the new pixels reach the screen.
 	_vm->_util->processInput();
-	collectReadingInput();
 	if (_pendingRestore || _vm->shouldQuit() || _paused || _menuInputActive)
 		return;
-	_readingOpening = false;
-	_readingVisible = true;
-	// The clock polls before retracing. Publish first so a short new-page tap
-	// received in that wait belongs to the pixels the player has already seen.
+	openPreparedPage();
 	_vm->_video->retrace();
 }
 
-bool OnceUpon::takeReadingAdvance() {
-	const bool advance = _readingAdvance;
-	_readingAdvance = false;
-	return advance;
-}
-
-void OnceUpon::expireReadingInput() {
-	_readingVisible = false;
-	_readingOpening = _readingKeys != kNoReading;
-	_readingAdvance = false;
-	_readingMenu = 0;
-}
-
-void OnceUpon::endReadingPage() {
-	_readingKeys = kNoReading;
-	expireReadingInput();
-}
-
-bool OnceUpon::acceptCaption(const SceneInput &input, bool &pressed) {
-	const bool down = (input.buttons & kMouseButtonsLeft) || (input.keys & 0x0030);
-	const bool accepted = input.activation || (down && !pressed) ||
-		((input.key == kKeySpace || input.key == kKeyReturn) && !pressed);
-	pressed = down;
-	return accepted;
+bool OnceUpon::PageInput::takeAdvance() {
+	if (press != kAdvancePage)
+		return false;
+	press = kNoPress;
+	return true;
 }
 
 void OnceUpon::discardActivationInput() {
-	expireReadingInput();
+	_page.press = kNoPress;
 	_activations.clear();
 	_keyboard.clearForestInput();
 	_freshInput = true;
@@ -1464,7 +1453,7 @@ void OnceUpon::pauseChanged(bool paused, uint32 duration) {
 	if (paused == _paused)
 		return;
 	_paused = paused;
-	expireReadingInput();
+	_page.press = kNoPress;
 	_keyboard.releaseActions();
 	if (paused) {
 		_clock.pause();
@@ -1474,8 +1463,6 @@ void OnceUpon::pauseChanged(bool paused, uint32 duration) {
 	} else {
 		_clock.resume();
 		readSettings();
-		if (_scene)
-			_scene->resumeAfterPause();
 		discardActivationInput();
 	}
 }
@@ -1499,46 +1486,25 @@ bool OnceUpon::handleKeyEvent(const Common::Event &event) {
 }
 
 void OnceUpon::handleMouseDown(int16 x, int16 y, MouseButtons buttons) {
-	if (_menuInputActive) {
-		MouseButtons held;
-		int16 mouseX, mouseY;
-		_vm->_util->getMouseState(&mouseX, &mouseY, &held);
-		_menuIgnoredButtons = (MouseButtons)((uint32)_menuIgnoredButtons & (uint32)held);
-		if ((held & buttons) || (_menuIgnoredButtons & buttons) || _activations.size() >= 16)
-			return;
-		Activation activation;
-		activation.x = x + _vm->_video->_scrollOffsetX - _vm->_video->_screenDeltaX;
-		activation.y = y + _vm->_video->_scrollOffsetY - _vm->_video->_screenDeltaY;
-		activation.buttons = buttons;
-		_activations.push_back(activation);
-		return;
-	}
-	if (_readingKeys != kNoReading) {
-		if (_keyboard.takeFocusLost())
-			expireReadingInput();
-		MouseButtons held;
-		int16 mouseX, mouseY;
-		_vm->_util->getMouseState(&mouseX, &mouseY, &held);
-		if (!(held & buttons)) {
-			if (buttons == kMouseButtonsLeft) {
-				// Both buttons together are not a menu request; Escape is independent.
-				if (_readingMenu == -1)
-					_readingMenu = 0;
-				queueReadingAdvance();
-			} else if (buttons == kMouseButtonsRight && !(held & kMouseButtonsLeft) && _readingMenu != kKeyEscape) {
-				_readingMenu = -1;
-			}
-		}
-		return;
-	}
-	if (_scene && _scene->activateMovie(buttons))
-		return;
-	if (!_acceptActivations || _freshInput || _activations.size() >= 16)
-		return;
 	MouseButtons held;
 	int16 mouseX, mouseY;
 	_vm->_util->getMouseState(&mouseX, &mouseY, &held);
 	if (held & buttons)
+		return;
+
+	if (_menuInputActive) {
+		_menuIgnoredButtons = (MouseButtons)((uint32)_menuIgnoredButtons & (uint32)held);
+		if (_menuIgnoredButtons & buttons)
+			return;
+	} else if (_page.visible != kNoReading) {
+		if (!_paused)
+			_page.mouseDown(buttons, held);
+		return;
+	} else if ((_scene && _scene->activateMovie(buttons)) || !_acceptActivations || _freshInput) {
+		return;
+	}
+
+	if (_activations.size() >= 16)
 		return;
 	Activation activation;
 	activation.x = x + _vm->_video->_scrollOffsetX - _vm->_video->_screenDeltaX;
@@ -1595,15 +1561,16 @@ bool OnceUpon::drawScenePage(GCTFile &text, const Surface &background, uint16 it
 #else
 	const bool drawn = text.draw(*_vm->_draw->_backSurface, item, *_plettre, 10, left, top, right, bottom);
 #endif
-	if (drawn)
+	if (drawn) {
 		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
-	if (drawn && (!text.finished() || terminal || _readingKeys != kNoReading))
-		beginReadingPage(!text.finished() ? kReadingControls : terminal ? kReadingAny : kNoReading);
-	if (_pendingRestore || _vm->shouldQuit())
-		return text.finished();
+		if (!text.finished())
+			_page.prepared = kReadingControls;
+		else if (terminal || _page.visible != kNoReading)
+			_page.prepared = terminal ? kReadingAny : kNoReading;
+	}
 	_vm->_draw->blitInvalidated();
-	if (_readingOpening)
-		publishReadingPage();
+	if (_page.prepared != kPageUnchanged && !_palette.holdingBlack())
+		publishPreparedPage();
 	else
 		_vm->_video->retrace();
 	captionStart = _clock.now();

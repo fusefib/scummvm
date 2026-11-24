@@ -279,16 +279,15 @@ void StoryText::drawPage() {
 	Common::String drawnText;
 	TXTFile &page = this->page(_page);
 	page.draw(*vm->_draw->_backSurface, fonts, ARRAYSIZE(fonts), -1, &drawnText);
-	_game.beginReadingPage(OnceUpon::kReadingAny);
+	_game._page.prepared = OnceUpon::kReadingAny;
+	vm->_draw->forceBlit();
+	_game.fadeIn();
 	if (_game._pendingRestore || vm->shouldQuit())
 		return;
-	vm->_draw->forceBlit();
-	_game.publishReadingPage();
-	_game.fadeIn();
 	_waitStart = _game._clock.now();
 	_waitDuration = storyPageDuration(drawnText);
 #ifdef USE_TTS
-	if (Narration::isEnabled() && !_game._readingAdvance) {
+	if (Narration::isEnabled() && _game._page.press != OnceUpon::kAdvancePage) {
 		const Common::StringArray parts = storySpeechParts(drawnText, page.getLines(), _chapter);
 		const uint32 now = g_system->getMillis();
 		if (parts.empty())
@@ -306,7 +305,7 @@ Section::Outcome StoryText::step() {
 	if (_phase == kPhaseComplete)
 		return kSectionComplete;
 	if (_phase == kPhaseDelay) {
-		_game.collectReadingInput();
+		_game.readPagePresses();
 		if (_game._clock.now() - _waitStart >= 500) {
 			if (_game._pendingRestore)
 				return kSectionRestore;
@@ -319,11 +318,9 @@ Section::Outcome StoryText::step() {
 			return kSectionContinue;
 		}
 	}
-	const OnceUpon::SceneInput input = _game.readSceneInput(OnceUpon::kReadingInput);
+	const OnceUpon::SceneInput input = _game.readSceneInput();
 	const bool menu = input.key == kKeyEscape;
-	const bool accepted = input.activation || menu;
-	if (accepted)
-		_game.takeReadingAdvance();
+	const bool accepted = _game._page.takeAdvance() || menu;
 	// A skip or menu request can arrive as one part finishes, before the
 	// next part has been submitted.
 	if (!accepted && (
