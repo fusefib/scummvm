@@ -311,7 +311,8 @@ void OnceUpon::drawLineByLine(const Surface &src, int16 left, int16 top, int16 r
 
 		_vm->_draw->_backSurface->blit(src, left, top + i, right, top + i, x, y + i);
 
-		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y + i, x + width - 1, y + 1);
+		// Draw normalizes reversed bounds, so the bottom must follow this row.
+		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y + i, x + width - 1, y + i);
 		_vm->_draw->blitInvalidated();
 
 		_vm->_util->longDelay(1);
@@ -324,7 +325,7 @@ void OnceUpon::drawLineByLine(const Surface &src, int16 left, int16 top, int16 r
 
 		_vm->_draw->_backSurface->blit(src, left, top + i, right, top + i, x, y + i);
 
-		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y + i, x + width - 1, y + 1);
+		_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, x, y + i, x + width - 1, y + i);
 		_vm->_draw->blitInvalidated();
 
 		_vm->_util->longDelay(1);
