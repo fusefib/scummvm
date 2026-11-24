@@ -80,6 +80,7 @@ public:
 	void pauseChanged(bool paused, uint32 duration) override;
 	bool canSaveGameState(Common::U32String *msg = nullptr) const override;
 	bool canLoadGameState(Common::U32String *msg = nullptr) const override;
+	Common::U32String getSaveGameDescription() const override;
 	Common::Error saveGameStream(Common::WriteStream &stream, bool isAutosave = false) const override;
 	Common::Error loadGameStream(Common::SeekableReadStream &stream) override;
 

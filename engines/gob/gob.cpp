@@ -422,6 +422,10 @@ Common::Error GobEngine::run() {
 	return Common::kNoError;
 }
 
+Common::U32String GobEngine::getSaveGameDescription() const {
+	return _preGob ? _preGob->getSaveGameDescription() : Common::U32String();
+}
+
 bool GobEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	return _preGob &&
 		_preGob->canSaveGameState(msg);

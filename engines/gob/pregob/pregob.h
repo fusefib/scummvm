@@ -64,6 +64,7 @@ public:
 	// Re-anchor transient clocks and discard input consumed by menus.
 	virtual bool canSaveGameState(Common::U32String *msg = nullptr) const { return false; }
 	virtual bool canLoadGameState(Common::U32String *msg = nullptr) const { return false; }
+	virtual Common::U32String getSaveGameDescription() const { return Common::U32String(); }
 	virtual Common::Error saveGameStream(Common::WriteStream &stream, bool isAutosave = false) const { return Common::kWritingFailed; }
 	virtual Common::Error loadGameStream(Common::SeekableReadStream &stream) { return Common::kReadingFailed; }
 

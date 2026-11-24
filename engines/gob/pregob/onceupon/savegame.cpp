@@ -44,6 +44,56 @@ static const uint kIntroPayloadSize = 7;
 static const uint kCheckpointPrefix = 25;
 static const uint kCheckpointNameLimit = 14;
 
+struct SaveNameLabels {
+	const char *intro;
+	const char *difficulty[3];
+	const char *chapter;
+	const char *room;
+};
+
+static const SaveNameLabels kSaveNameLabels[OnceUpon::kLanguageCount] = {
+	{"Introduction", {"Facile", "Moyen", "Difficile"},
+		"Chapitre %u, %S", "Chapitre %u, zone foresti\212re %u, %S"},
+	{"Einleitung", {"Anf\204nger", "Spielerfahrung", "Fortgeschrittene"},
+		"Kapitel %u, %S", "Kapitel %u, Waldabschnitt %u, %S"},
+	{"Intro", {"Beginner", "Intermediate", "Advanced"},
+		"Chapter %u, %S", "Chapter %u, forest room %u, %S"},
+	{"Introducci\242n", {"F\240cil", "Medio", "Dif\241cil"},
+		"Cap\241tulo %u, %S", "Cap\241tulo %u, zona del bosque %u, %S"},
+	{"Introduzione", {"Facile", "Medio", "Difficile"},
+		"Capitolo %u, %S", "Capitolo %u, zona del bosco %u, %S"}
+};
+
+Common::U32String OnceUpon::getSaveGameDescription() const {
+	if (!_checkpoint.valid)
+		return Common::U32String();
+	const SaveNameLabels &labels = kSaveNameLabels[_vm->_global->_language];
+	if (_checkpoint.intro())
+		return Common::String(labels.intro).decode(Common::kDos850);
+	// A menu change can leave the live difficulty different from the saved one.
+	const Common::U32String difficulty = Common::String(labels.difficulty[_checkpoint.progress.difficulty]).decode(Common::kDos850);
+	const uint chapter = (_checkpoint.progress.section + 1) / 2;
+	// Only Chapter 1 uses the chosen home to select its movie and search.
+	static const char *const houses[kLanguageCount][4] = {
+		{"Ch\203teau", "Chaumi\212re", "Cabane", "Palais"},
+		{"Schlo\341", "Bauernhaus", "H\201tte", "Palast"},
+		{"Castle", "Cottage", "Hut", "Palace"},
+		{"Castillo", "Casa", "Caba\244a", "Palacio"},
+		{"Castello", "Casetta", "Capanna", "Palazzo"}
+	};
+	Common::U32String detail = difficulty;
+	if (chapter == 1 && !_checkpoint.forest()) {
+		detail = Common::String(houses[_vm->_global->_language][_checkpoint.progress.house]).decode(Common::kDos850);
+		detail += Common::U32String(", ");
+		detail += difficulty;
+	}
+	// Match the game language and its difficulty labels, independently of the UI.
+	const Common::U32String format = Common::String(_checkpoint.forest() ? labels.room : labels.chapter).decode(Common::kDos850);
+	return _checkpoint.forest() ?
+		Common::U32String::format(format, chapter, _checkpoint.room + 1, difficulty.c_str()) :
+		Common::U32String::format(format, chapter, detail.c_str());
+}
+
 bool OnceUpon::validCheckpoint(const Checkpoint &checkpoint) const {
 	if (checkpoint.intro())
 		return true;

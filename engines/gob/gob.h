@@ -181,6 +181,7 @@ private:
 	void syncSoundSettings() override;
 	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
 	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
+	Common::U32String getSaveGameDescription() const override;
 	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override;
 	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
 
