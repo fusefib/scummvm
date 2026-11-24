@@ -179,6 +179,13 @@ void StoryText::begin(int chapter) {
 		error("StoryText::begin(): Invalid text in \"%s\"", filename.c_str());
 	for (uint i = 0; i < pageCount(); ++i)
 		_game.fixTXTStrings(page(i));
+	// Baba's chapter follows the sword reward, not the earlier dagger.
+	if (chapter == 4 && _game._vm->getGameType() == kGameTypeBabaYaga &&
+		_game._vm->_global->_language == kLanguageBritish) {
+		TXTFile::LineArray &lines = page(0).getLines();
+		if (lines.size() > 1 && lines[1].text == "Dagger in hand, the")
+			lines[1].text = "Sword in hand, the";
+	}
 	_canvas.reset(new Surface(320, 200, 1));
 	if (chapter >= 0) {
 		const Assets::Image artwork = _game._assets->image("parch.cmp");

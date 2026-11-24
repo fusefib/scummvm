@@ -169,6 +169,31 @@ void GCTFile::setText(uint item, const Common::String &text) {
 	setText(item, 0, text);
 }
 
+void GCTFile::replaceTextChunk(uint item, uint16 line, const char *from, const char *to) {
+	if (item >= _items.size() || line >= _items[item].lines.size())
+		return;
+
+	Chunks &chunks = _items[item].lines[line].chunks;
+	for (Chunks::iterator chunk = chunks.begin(); chunk != chunks.end(); ++chunk) {
+		if (chunk->type == kChunkTypeString && chunk->text == from) {
+			chunk->text = to;
+			return;
+		}
+	}
+}
+
+void GCTFile::trimEmptyTail(uint item, uint16 count) {
+	if (item >= _items.size() || count > _items[item].lines.size())
+		return;
+
+	Lines &lines = _items[item].lines;
+	const uint keep = lines.size() - count;
+	for (uint i = keep; i < lines.size(); ++i)
+		if (!lines[i].chunks.empty())
+			return;
+	lines.resize(keep);
+}
+
 void GCTFile::reset() {
 	_currentItem = 0xFFFF;
 	_currentText.clear();

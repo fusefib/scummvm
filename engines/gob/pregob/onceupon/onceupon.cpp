@@ -444,6 +444,12 @@ bool OnceUpon::captionReady(bool accepted, uint32 captionStart) {
 
 GCTFile *OnceUpon::loadStoryGCT(const Common::String &name) const {
 	GCTFile *gct = loadGCT(name);
+	const GameType game = _vm->getGameType();
+	for (uint i = 0; i < ARRAYSIZE(kBrokenGCTStrings); ++i) {
+		const BrokenGCTString &fix = kBrokenGCTStrings[i];
+		if ((fix.game == kGameTypeNone || fix.game == game) && name.equalsIgnoreCase(fix.resource))
+			gct->replaceTextChunk(fix.item, fix.line, fix.wrong, fix.correct);
+	}
 	gct->enableNativeLayout();
 	gct->setArea(17, 18, 303, 41);
 	return gct;

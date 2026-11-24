@@ -762,6 +762,10 @@ void Encounter::beginFight() {
 	captureBackground();
 	_captionBackground.reset(_game.captureSceneTextBackground(*_vm->_draw->_backSurface));
 	_text.reset(_game.loadStoryGCT(_game.getLocFile(spec.text)));
+	// English Abracadabra has two empty rows after the bracelet instruction.
+	// Put the existing terminal wait on the last readable page.
+	if (_boss && _vm->getGameType() == kGameTypeAbracadabra && _vm->_global->_language == kLanguageBritish)
+		_text->trimEmptyTail(5, 2);
 	_text->setText(1, _game._progress.name);
 	loadCues();
 	_game._clock.setFrameRate(spec.frameRate);

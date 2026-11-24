@@ -65,6 +65,10 @@ public:
 	void setText(uint item, uint16 line, const Common::String &text);
 	/** Change the item into one one line and set that line's text. */
 	void setText(uint item, const Common::String &text);
+	/** Replace a matching literal chunk in a line, keeping item references. */
+	void replaceTextChunk(uint item, uint16 line, const char *from, const char *to);
+	/** Remove the requested trailing records if all of them are empty. */
+	void trimEmptyTail(uint item, uint16 count);
 
 	/** Reset the item drawing state. */
 	void reset();
