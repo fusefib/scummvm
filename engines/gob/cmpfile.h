@@ -77,7 +77,12 @@ public:
 
 	void recolor(uint8 from, uint8 to);
 
+	/** Copy this indexed sprite and map all colors in one pass. */
+	CMPFile *cloneRecolored(const byte colors[256]) const;
+
 private:
+	CMPFile(const CMPFile &source, const byte colors[256]);
+
 	GobEngine *_vm;
 
 	uint16 _width;

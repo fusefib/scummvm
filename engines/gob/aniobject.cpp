@@ -49,6 +49,29 @@ ANIObject::ANIObject(const CMPFile &cmp) : _ani(nullptr), _cmp(&cmp),
 ANIObject::~ANIObject() {
 }
 
+bool ANIObject::rebind(const ANIFile &ani) {
+	if (!_ani || _cmp || ani.getAnimationCount() != _ani->getAnimationCount())
+		return false;
+	uint16 oldWidth, oldHeight, width, height;
+	_ani->getMaxSize(oldWidth, oldHeight);
+	ani.getMaxSize(width, height);
+	if (width != oldWidth || height != oldHeight)
+		return false;
+	for (uint i = 0; i < ani.getAnimationCount(); ++i) {
+		const ANIFile::Animation &before = _ani->getAnimationInfo(i);
+		const ANIFile::Animation &after = ani.getAnimationInfo(i);
+		if (before.frameCount != after.frameCount || before.x != after.x || before.y != after.y)
+			return false;
+		for (uint frame = 0; frame < before.frameCount; ++frame) {
+			const ANIFile::FrameArea &a = before.frameAreas[frame], &b = after.frameAreas[frame];
+			if (a.left != b.left || a.top != b.top || a.right != b.right || a.bottom != b.bottom)
+				return false;
+		}
+	}
+	_ani = &ani;
+	return true;
+}
+
 void ANIObject::setVisible(bool visible) {
 	_visible = visible;
 }

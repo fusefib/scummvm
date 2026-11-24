@@ -76,6 +76,20 @@ ANIFile::ANIFile(GobEngine *vm, const Common::String &fileName,
 	warning("ANIFile::ANIFile(): No such file \"%s\" (\"%s\")", endianFileName.c_str(), fileName.c_str());
 }
 
+ANIFile::ANIFile(const ANIFile &source, const byte colors[256]) :
+	_vm(source._vm), _width(source._width), _bpp(source._bpp), _hasPadding(source._hasPadding),
+	_animations(source._animations), _frames(source._frames),
+	_maxWidth(source._maxWidth), _maxHeight(source._maxHeight) {
+	assert(_bpp == 1);
+	_layers.reserve(source._layers.size());
+	for (uint i = 0; i < source._layers.size(); ++i)
+		_layers.push_back(source._layers[i] ? source._layers[i]->cloneRecolored(colors) : nullptr);
+}
+
+ANIFile *ANIFile::cloneRecolored(const byte colors[256]) const {
+	return new ANIFile(*this, colors);
+}
+
 ANIFile::~ANIFile() {
 	for (LayerArray::iterator l = _layers.begin(); l != _layers.end(); ++l)
 		delete *l;
@@ -260,6 +274,16 @@ const ANIFile::Animation &ANIFile::getAnimationInfo(uint16 animation) const {
 	assert(animation < _animations.size());
 
 	return _animations[animation];
+}
+
+bool ANIFile::getFrameOrigin(uint16 animation, uint16 frame, int16 &x, int16 &y) const {
+	if (animation >= _frames.size() || frame >= _frames[animation].size() || _frames[animation][frame].empty())
+		return false;
+
+	const AnimationChunk &chunk = _frames[animation][frame].front();
+	x = chunk.x;
+	y = chunk.y;
+	return true;
 }
 
 bool ANIFile::getCoordinates(uint16 layer, uint16 part,

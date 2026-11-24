@@ -94,11 +94,17 @@ public:
 	/** Get this animation's properties. */
 	const Animation &getAnimationInfo(uint16 animation) const;
 
+	/** Get the first chunk's relative origin, used for native actor grounding. */
+	bool getFrameOrigin(uint16 animation, uint16 frame, int16 &x, int16 &y) const;
+
 	/** Draw an animation frame. */
 	void draw(Surface &dest, uint16 animation, uint16 frame, int16 x, int16 y) const;
 
 	/** Recolor the animation sprites. */
 	void recolor(uint8 from, uint8 to);
+
+	/** Derive independent indexed sheets without rereading/parsing the resource. */
+	ANIFile *cloneRecolored(const byte colors[256]) const;
 
 private:
 	typedef Common::Array<CMPFile *> LayerArray;
@@ -117,6 +123,8 @@ private:
 	typedef Common::Array<ChunkList>     FrameArray;
 	typedef Common::Array<FrameArray>    AnimationFrameArray;
 
+
+	ANIFile(const ANIFile &source, const byte colors[256]);
 
 	GobEngine *_vm;
 

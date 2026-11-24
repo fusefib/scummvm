@@ -95,6 +95,26 @@ CMPFile::CMPFile(GobEngine *vm, Common::SeekableReadStream &cmp,
 	loadCMP(cmp);
 }
 
+CMPFile::CMPFile(const CMPFile &source, const byte colors[256]) :
+	_vm(source._vm), _width(source._width), _height(source._height), _bpp(source._bpp),
+	_maxWidth(source._maxWidth), _maxHeight(source._maxHeight), _surface(nullptr), _coordinates(nullptr) {
+	assert(_bpp == 1);
+	if (source._coordinates)
+		_coordinates = new RXYFile(*source._coordinates);
+	if (source._surface) {
+		_surface = new Surface(source._surface->getWidth(), source._surface->getHeight(), 1);
+		const uint32 pixels = (uint32)_surface->getWidth() * _surface->getHeight();
+		const byte *from = source._surface->getData();
+		byte *to = _surface->getData();
+		for (uint32 i = 0; i < pixels; ++i)
+			to[i] = colors[from[i]];
+	}
+}
+
+CMPFile *CMPFile::cloneRecolored(const byte colors[256]) const {
+	return new CMPFile(*this, colors);
+}
+
 CMPFile::~CMPFile() {
 	delete _surface;
 	delete _coordinates;

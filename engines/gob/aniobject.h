@@ -52,6 +52,9 @@ public:
 	ANIObject(const CMPFile &cmp);
 	virtual ~ANIObject();
 
+	/** Bind an equivalent immutable recolor without resetting pose or capture. */
+	bool rebind(const ANIFile &ani);
+
 	/** Make the object visible/invisible. */
 	void setVisible(bool visible);
 
