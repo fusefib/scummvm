@@ -80,6 +80,7 @@ void OnceUpon::beginScene(SceneKind kind) {
 	if (_sceneKind != kSceneNone)
 		finishScene();
 	_sceneKind = kind;
+	_keyboard.setContext(kind == kSceneForest ? kForestInput : kPointerInput);
 	_sceneFrameRate = _vm->_util->getFrameRate();
 }
 
@@ -809,6 +810,7 @@ OnceUpon::MenuAction OnceUpon::handleIngameMenu() {
 
 void OnceUpon::beginMenuInput() {
 	expireReadingInput();
+	_keyboard.setContext(kPointerInput);
 #ifdef USE_TTS
 	cancelNarration();
 #endif
@@ -830,6 +832,7 @@ void OnceUpon::endMenuInput() {
 	cancelNarration();
 #endif
 	_menuInputActive = false;
+	_keyboard.setContext(_sceneKind == kSceneForest ? kForestInput : kPointerInput);
 	_menuEscapePending = 0;
 	discardActivationInput();
 	publishReadingPage();
@@ -1342,6 +1345,7 @@ void OnceUpon::pauseChanged(bool paused, uint32 duration) {
 		return;
 	_paused = paused;
 	expireReadingInput();
+	_keyboard.releaseActions();
 	if (paused) {
 		_clock.pause();
 #ifdef USE_TTS

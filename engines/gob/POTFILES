@@ -4,3 +4,4 @@ engines/gob/inter_v2.cpp
 engines/gob/inter_v5.cpp
 engines/gob/inter_v7.cpp
 engines/gob/metaengine.cpp
+engines/gob/pregob/onceupon/input.cpp

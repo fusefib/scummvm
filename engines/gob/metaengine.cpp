@@ -33,6 +33,7 @@
 
 #include "gob/gameidtotype.h"
 #include "gob/gob.h"
+#include "gob/pregob/onceupon/input.h"
 
 // For struct GOBGameDescription.
 #include "gob/detection/detection.h"
@@ -71,6 +72,7 @@ public:
 		return "gob";
 	}
 
+	Common::KeymapArray initKeymaps(const char *target) const override;
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const Gob::GOBGameDescription *desc) const override;
 	SaveStateList listSaves(const char *target) const override;
@@ -83,6 +85,10 @@ public:
 	}
 };
 
+static bool isOnceUponGame(const Common::String &gameId) {
+	return gameId == "abracadabra" || gameId == "babayaga";
+}
+
 static bool supportsPreGobSaves(const Common::String &gameId) {
 	static const char *const supportedGames[] = {
 		"abracadabra",
@@ -94,6 +100,12 @@ static bool supportsPreGobSaves(const Common::String &gameId) {
 			return true;
 	}
 	return false;
+}
+
+Common::KeymapArray GobMetaEngine::initKeymaps(const char *target) const {
+	if (target && isOnceUponGame(getGameId(target)))
+		return Gob::OnceUpon::createKeymaps();
+	return MetaEngine::initKeymaps(target);
 }
 
 SaveStateList GobMetaEngine::listSaves(const char *target) const {

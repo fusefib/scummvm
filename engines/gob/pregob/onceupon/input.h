@@ -26,20 +26,28 @@
 #ifndef GOB_PREGOB_ONCEUPON_INPUT_H
 #define GOB_PREGOB_ONCEUPON_INPUT_H
 
+#include "backends/keymapper/keymap.h"
 #include "common/events.h"
 
 namespace Gob {
 namespace OnceUpon {
 
-/** Physical keyboard state for Abracadabra and Baba Yaga. */
+enum InputContext { kPointerInput, kForestInput, kTextInput };
+
+
+Common::KeymapArray createKeymaps();
+
+/** Held controls and literal text input for Abracadabra and Baba Yaga. */
 class KeyboardInput : public Common::EventObserver {
 public:
 	KeyboardInput();
 	~KeyboardInput() override;
 	void begin();
+	void end();
+	void setContext(InputContext context);
 	static void clampActionPointer(int16 &x, int16 &y);
 	static void moveActionPointer(int16 &x, int16 &y, uint32 heldKeys);
-	void end();
+	void releaseActions();
 	bool notifyEvent(const Common::Event &event) override;
 	bool takeFocusLost();
 	uint32 heldKeys() const;
@@ -47,8 +55,13 @@ public:
 
 private:
 	bool _pressed[Common::KEYCODE_LAST];
+	uint _mapped[Common::KEYCODE_LAST];
 	bool _registered;
+	InputContext _context;
 	bool _focusLost;
+	void applyContext();
+	bool mappedControlsActive() const;
+	static bool isControlKey(Common::KeyCode key);
 };
 
 } // End of namespace OnceUpon

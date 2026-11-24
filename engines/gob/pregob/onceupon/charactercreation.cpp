@@ -377,6 +377,8 @@ bool CharacterCreation::acceptsKeyRepeat(const Common::KeyState &key) const {
 }
 
 Section::Outcome CharacterCreation::step() {
+	// Names and localized Yes/No answers use literal keys, including repeats.
+	_game._keyboard.setContext(progress() >= kNameReveal && progress() <= kConfirmName ? kTextInput : kPointerInput);
 	const bool revealing = progress() == CharacterCreation::kNameReveal;
 	if (_phase == kPhasePlaying && !revealing) {
 		_phase = kPhaseInput;
@@ -473,6 +475,7 @@ Section::Outcome CharacterCreation::step() {
 			if (_game._pendingRestore)
 				return kSectionRestore;
 			prepareName();
+			_game._keyboard.setContext(kTextInput);
 			return stepNameReveal();
 		}
 		// CHOIX items 5 to 8 label the four appearance choices.
