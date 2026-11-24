@@ -133,7 +133,7 @@ void PreGob::setCursor(Surface &sprite, int16 left, int16 top, int16 right, int1
 
 	cursor.blit(sprite, left, top, right, bottom, 0, 0);
 
-	setCursor(cursor, hotspotX, hotspotX);
+	setCursor(cursor, hotspotX, hotspotY);
 }
 
 void PreGob::showCursor() {
