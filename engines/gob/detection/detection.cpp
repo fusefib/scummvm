@@ -170,9 +170,8 @@ const Gob::GOBGameDescription *GobMetaEngineDetection::detectOnceUponATime(const
 				// Little endian -> DOS
 				platform = Gob::kOnceUponATimePlatformDOS;
 		}
-
-		delete villeDEC;
 	}
+	delete villeDEC;
 
 	SearchMan.clear();
 
