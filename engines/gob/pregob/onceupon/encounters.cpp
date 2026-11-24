@@ -313,7 +313,8 @@ CastleEncounter::Event CastleEncounter::next(int16 x, int16 y, bool pressed, uin
 					_cursorFrame = 1;
 					_spellActive = true;
 					_spell = 8 + _vm->_util->getRandom(3);
-					_spellFrame = _ani->getAnimationInfo(_spell).frameCount - 1;
+					// Show the whole spell; the originals start on its final pose.
+					_spellFrame = 0;
 					return Event(kFlash, 1, 0);
 				}
 				return Event(kText, 4, _vm->_util->getRandom(3));
