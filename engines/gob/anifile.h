@@ -31,7 +31,6 @@
 #include "common/system.h"
 #include "common/str.h"
 #include "common/array.h"
-#include "common/list.h"
 
 namespace Common {
 	class SeekableReadStreamEndian;
@@ -119,9 +118,13 @@ private:
 		uint16 part;  ///< The layer part the chunk's sprite is.
 	};
 
-	typedef Common::List<AnimationChunk> ChunkList;
-	typedef Common::Array<ChunkList>     FrameArray;
-	typedef Common::Array<FrameArray>    AnimationFrameArray;
+	struct FrameRange {
+		uint first, count;
+		FrameRange() : first(0), count(0) {}
+	};
+
+	typedef Common::Array<FrameRange> FrameArray;
+	typedef Common::Array<FrameArray> AnimationFrameArray;
 
 
 	ANIFile(const ANIFile &source, const byte colors[256]);
@@ -136,6 +139,7 @@ private:
 	LayerArray          _layers;     ///< The animation sprite layers.
 	AnimationArray      _animations; ///< The animations.
 	AnimationFrameArray _frames;     ///< The animation frames.
+	Common::Array<AnimationChunk> _chunks; ///< All pieces in file order.
 
 	uint16 _maxWidth;
 	uint16 _maxHeight;

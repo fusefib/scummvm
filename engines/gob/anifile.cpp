@@ -78,7 +78,7 @@ ANIFile::ANIFile(GobEngine *vm, const Common::String &fileName,
 
 ANIFile::ANIFile(const ANIFile &source, const byte colors[256]) :
 	_vm(source._vm), _width(source._width), _bpp(source._bpp), _hasPadding(source._hasPadding),
-	_animations(source._animations), _frames(source._frames),
+	_animations(source._animations), _frames(source._frames), _chunks(source._chunks),
 	_maxWidth(source._maxWidth), _maxHeight(source._maxHeight) {
 	assert(_bpp == 1);
 	_layers.reserve(source._layers.size());
@@ -172,13 +172,14 @@ void ANIFile::loadAnimation(Animation &animation, FrameArray &frames,
 
 	animation.frameAreas.resize(animation.frameCount);
 	for (uint16 i = 0; i < animation.frameCount; i++) {
-		const ChunkList &frame = frames[i];
+		const FrameRange &frame = frames[i];
 		FrameArea &area = animation.frameAreas[i];
 
 		area.left  = area.top    =  0x7FFF;
 		area.right = area.bottom = -0x7FFF;
 
-		for (const auto &c : frame) {
+		for (uint piece = 0; piece < frame.count; ++piece) {
+			const AnimationChunk &c = _chunks[frame.first + piece];
 			uint16 cL, cT, cR, cB;
 
 			if (!getCoordinates(c.layer, c.part, cL, cT, cR, cB))
@@ -210,12 +211,15 @@ void ANIFile::loadFrames(FrameArray &frames, Common::SeekableReadStreamEndian &a
 
 	bool end = false;
 	while (!end) {
-		frames[curFrame].push_back(AnimationChunk());
-		AnimationChunk &chunk = frames[curFrame].back();
+		FrameRange &frame = frames[curFrame];
+		if (!frame.count)
+			frame.first = _chunks.size();
+		++frame.count;
 
 		uint8 layerFlags = ani.readByte();
 
 		// Chunk properties
+		AnimationChunk chunk;
 		chunk.layer = (layerFlags & 0x0F) - 1;
 		chunk.part  = ani.readByte();
 		chunk.x     = (int8) ani.readByte();
@@ -234,6 +238,7 @@ void ANIFile::loadFrames(FrameArray &frames, Common::SeekableReadStreamEndian &a
 			chunk.y += yOff;
 		else
 			chunk.y -= yOff;
+		_chunks.push_back(chunk);
 
 		uint8 multiPart = ani.readByte();
 		if      (multiPart == 0xFF) // No more frames in this animation
@@ -277,10 +282,10 @@ const ANIFile::Animation &ANIFile::getAnimationInfo(uint16 animation) const {
 }
 
 bool ANIFile::getFrameOrigin(uint16 animation, uint16 frame, int16 &x, int16 &y) const {
-	if (animation >= _frames.size() || frame >= _frames[animation].size() || _frames[animation][frame].empty())
+	if (animation >= _frames.size() || frame >= _frames[animation].size() || !_frames[animation][frame].count)
 		return false;
 
-	const AnimationChunk &chunk = _frames[animation][frame].front();
+	const AnimationChunk &chunk = _chunks[_frames[animation][frame].first];
 	x = chunk.x;
 	y = chunk.y;
 	return true;
@@ -303,10 +308,12 @@ void ANIFile::draw(Surface &dest, uint16 animation, uint16 frame, int16 x, int16
 	if (frame >= anim.frameCount)
 		return;
 
-	const ChunkList &chunks = _frames[animation][frame];
+	const FrameRange &range = _frames[animation][frame];
 
-	for (ChunkList::const_iterator c = chunks.begin(); c != chunks.end(); ++c)
-		drawLayer(dest, c->layer, c->part, x + c->x, y + c->y, anim.transp ? 0 : -1);
+	for (uint i = 0; i < range.count; ++i) {
+		const AnimationChunk &chunk = _chunks[range.first + i];
+		drawLayer(dest, chunk.layer, chunk.part, x + chunk.x, y + chunk.y, anim.transp ? 0 : -1);
+	}
 }
 
 void ANIFile::drawLayer(Surface &dest, uint16 layer, uint16 part,
