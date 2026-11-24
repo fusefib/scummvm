@@ -185,6 +185,8 @@ Common::String TXTFile::getStr(Common::SeekableReadStream &txt) {
 	Common::String string;
 	while (!txt.eos()) {
 		char c = txt.readByte();
+		if (txt.eos())
+			break;
 		if ((c == ' ') || (c == '\n') || (c == '\r'))
 			break;
 
