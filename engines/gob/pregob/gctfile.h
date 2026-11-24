@@ -49,7 +49,6 @@ public:
 	static const uint16 kSelectorAll    = 0xFFFE; ///< Print all lines.
 	static const uint16 kSelectorRandom = 0xFFFF; ///< Print a random line.
 
-
 	GCTFile(Common::SeekableReadStream &gct, Common::RandomSource &rnd);
 	~GCTFile();
 
@@ -69,6 +68,10 @@ public:
 
 	/** Reset the item drawing state. */
 	void reset();
+	/** Use native row wrapping and lazy selection, with pixel centering.
+	 * The Once Upon games enable this before drawing their first item.
+	 */
+	void enableNativeLayout();
 
 	/** Clear the drawn text, restoring the original content. */
 	bool clear(Surface &dest, int16 &left, int16 &top, int16 &right, int16 &bottom);
@@ -76,7 +79,9 @@ public:
 	/** Fill the text area with a color. */
 	bool fill(Surface &dest, uint8 color, int16 &left, int16 &top, int16 &right, int16 &bottom);
 
-	/** Draw an item onto the surface, until all text has been drawn or the area is filled. */
+	/** Draw an item until all text has been drawn or the area is filled.
+	 * Optional output reports this page without expanding or selecting again.
+	 */
 	bool draw(Surface &dest, uint16 item, const Font &font, uint8 color,
 	          int16 &left, int16 &top, int16 &right, int16 &bottom);
 
@@ -135,6 +140,8 @@ private:
 	uint16 _currentItem;
 	/** Text left to draw. */
 	Common::List<Common::String> _currentText;
+	bool _nativeLayout, _nativeDone;
+	uint16 _nativeNextLine;
 
 
 	// -- Loading helpers --
@@ -147,6 +154,9 @@ private:
 
 	Common::String getLineText(const Line &line) const;
 	void getItemText(uint item, Common::List<Common::String> &text) const;
+	Common::String getNativeLineText(const Line &line);
+	Common::String getNativeItemText(uint item);
+	bool nextNativeLine();
 };
 
 } // End of namespace Gob

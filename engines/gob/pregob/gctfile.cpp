@@ -40,7 +40,8 @@ GCTFile::Chunk::Chunk() : type(kChunkTypeNone) {
 
 
 GCTFile::GCTFile(Common::SeekableReadStream &gct, Common::RandomSource &rnd) : _rnd(&rnd),
-	_areaLeft(0), _areaTop(0), _areaRight(0), _areaBottom(0), _currentItem(0xFFFF) {
+	_hasArea(false), _areaLeft(0), _areaTop(0), _areaRight(0), _areaBottom(0), _currentItem(0xFFFF),
+	_nativeLayout(false), _nativeDone(false), _nativeNextLine(0) {
 
 	load(gct);
 }
@@ -140,7 +141,7 @@ uint16 GCTFile::getLineCount(uint item) const {
 }
 
 void GCTFile::selectLine(uint item, uint16 line) {
-	if ((item >= _items.size()) && (item != kSelectorAll) && (item != kSelectorRandom))
+	if (item >= _items.size())
 		return;
 
 	_items[item].selector = line;
@@ -171,6 +172,56 @@ void GCTFile::setText(uint item, const Common::String &text) {
 void GCTFile::reset() {
 	_currentItem = 0xFFFF;
 	_currentText.clear();
+	_nativeDone = false;
+	_nativeNextLine = 0;
+}
+
+void GCTFile::enableNativeLayout() {
+	_nativeLayout = true;
+	reset();
+}
+
+Common::String GCTFile::getNativeLineText(const Line &line) {
+	Common::String text;
+	for (Chunks::const_iterator chunk = line.chunks.begin(); chunk != line.chunks.end(); ++chunk) {
+		if (chunk->type == kChunkTypeString)
+			text += chunk->text;
+		else if (chunk->type == kChunkTypeItem)
+			text += getNativeItemText(chunk->item);
+	}
+	return text;
+}
+
+Common::String GCTFile::getNativeItemText(uint item) {
+	if (item >= _items.size() || _items[item].lines.empty())
+		return Common::String();
+	Item &source = _items[item];
+	if (source.selector == kSelectorRandom)
+		source.selector = _rnd->getRandomNumber(source.lines.size() - 1);
+	const uint line = source.selector == kSelectorAll ? 0 : source.selector;
+	if (line >= source.lines.size())
+		return Common::String();
+	return getNativeLineText(source.lines[line]);
+}
+
+bool GCTFile::nextNativeLine() {
+	if (_nativeDone)
+		return false;
+	Item &source = _items[_currentItem];
+	if (source.lines.empty()) {
+		_nativeDone = true;
+		return false;
+	}
+	if (source.selector == kSelectorRandom)
+		source.selector = _rnd->getRandomNumber(source.lines.size() - 1);
+	const uint line = source.selector == kSelectorAll ? _nativeNextLine++ : source.selector;
+	_nativeDone = source.selector != kSelectorAll || _nativeNextLine >= source.lines.size();
+	if (line >= source.lines.size()) {
+		_nativeDone = true;
+		return false;
+	}
+	_currentText.push_back(getNativeLineText(source.lines[line]));
+	return true;
 }
 
 Common::String GCTFile::getLineText(const Line &line) const {
@@ -263,7 +314,7 @@ bool GCTFile::fill(Surface &dest, uint8 color, int16 &left, int16 &top, int16 &r
 }
 
 bool GCTFile::finished() const {
-	return (_currentItem != 0xFFFF) && _currentText.empty();
+	return (_currentItem != 0xFFFF) && _currentText.empty() && (!_nativeLayout || _nativeDone);
 }
 
 bool GCTFile::draw(Surface &dest, uint16 item, const Font &font, uint8 color,
@@ -279,6 +330,8 @@ bool GCTFile::draw(Surface &dest, uint16 item, const Font &font, uint8 color,
 
 	const int16 width  = right  - left + 1;
 	const int16 height = bottom - top  + 1;
+	if (_nativeLayout && (!font.getCharWidth() || !font.getCharHeight() || width < font.getCharWidth()))
+		return false;
 
 	const uint lineCount = height / font.getCharHeight();
 	if (lineCount == 0)
@@ -289,20 +342,55 @@ bool GCTFile::draw(Surface &dest, uint16 item, const Font &font, uint8 color,
 
 	if (item != _currentItem) {
 		_currentItem = item;
-
-		getItemText(_currentItem, _currentText);
+		if (_nativeLayout) {
+			_nativeNextLine = 0;
+			_nativeDone = false;
+			_currentText.clear();
+		} else {
+			getItemText(_currentItem, _currentText);
+		}
 	}
 
-	if (_currentText.empty())
+	if (_currentText.empty() && (!_nativeLayout || !nextNativeLine()))
 		return false;
 
 	int16 y = top;
-	for (uint i = 0; (i < lineCount) && !_currentText.empty(); i++, y += font.getCharHeight()) {
-		const Common::String &line = _currentText.front();
-		const int16 x = left + ((width - (line.size() * font.getCharWidth())) / 2);
+	for (uint i = 0; i < lineCount; i++, y += font.getCharHeight()) {
+		if (_currentText.empty() && (!_nativeLayout || !nextNativeLine()))
+			break;
+		Common::String line = _currentText.front();
+		if (_nativeLayout) {
+			uint first = 0;
+			while (first < line.size() && line[first] == ' ')
+				++first;
+			line.erase(0, first);
+			const uint columns = width / font.getCharWidth();
+			if (line.size() > columns) {
+				uint end = columns;
+				while (end && line[end] != ' ')
+					--end;
+				while (end && line[end] == ' ')
+					--end;
+				// A break after just the first character also uses the hard split.
+				const uint count = end ? end + 1 : columns;
+				_currentText.front() = line.substr(count);
+				line = line.substr(0, count);
+			} else {
+				_currentText.pop_front();
+			}
+		} else {
+			_currentText.pop_front();
+		}
+		uint centeredLength = line.size();
+		if (_nativeLayout) {
+			// Once Upon wraps as in the original, which also rounded x to a
+			// whole cell. Center its visible row in pixels, ignoring end padding.
+			while (centeredLength && line[centeredLength - 1] == ' ')
+				--centeredLength;
+		}
+		const int16 x = left + (width - centeredLength * font.getCharWidth()) / 2;
 
 		font.drawString(line, x, y, color, 0, true, dest);
-		_currentText.pop_front();
 	}
 
 	return true;
