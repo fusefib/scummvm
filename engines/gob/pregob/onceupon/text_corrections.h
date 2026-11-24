@@ -25,8 +25,8 @@
  *
  */
 
-#ifndef GOB_PREGOB_ONCEUPON_BROKENSTRINGS_H
-#define GOB_PREGOB_ONCEUPON_BROKENSTRINGS_H
+#ifndef GOB_PREGOB_ONCEUPON_TEXT_CORRECTIONS_H
+#define GOB_PREGOB_ONCEUPON_TEXT_CORRECTIONS_H
 
 struct BrokenString {
 	const char *wrong;
@@ -54,7 +54,7 @@ static const BrokenString kBrokenStringsGerman[] = {
 	{ "Wohin fliegt der Drachen?"    , "Wohin fliegt der Drache?"     }
 };
 
-static const BrokenStringLanguage kBrokenStrings[kLanguageCount] = {
+static const BrokenStringLanguage kBrokenStrings[Gob::OnceUpon::OnceUpon::kLanguageCount] = {
 	{                    0,                               0 }, // French
 	{ kBrokenStringsGerman, ARRAYSIZE(kBrokenStringsGerman) }, // German
 	{                    0,                               0 }, // English
@@ -62,4 +62,4 @@ static const BrokenStringLanguage kBrokenStrings[kLanguageCount] = {
 	{                    0,                               0 }, // Italian
 };
 
-#endif // GOB_PREGOB_ONCEUPON_BROKENSTRINGS_H
+#endif // GOB_PREGOB_ONCEUPON_TEXT_CORRECTIONS_H

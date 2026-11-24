@@ -191,19 +191,12 @@ void DECFile::drawBackdrop(Surface &dest, int16 x, int16 y) const {
 	_backdrop->draw(dest, 0, x, y);
 }
 
-bool DECFile::getPartPosition(uint16 scene, uint16 part, int16 &x, int16 &y) const {
-	if (scene >= _scenes.size() || part >= _scenes[scene].size())
-		return false;
-	x = _scenes[scene][part].x;
-	y = _scenes[scene][part].y;
-	return true;
-}
 
-bool DECFile::setPartPosition(uint16 scene, uint16 part, int16 x, int16 y) {
+
+bool DECFile::setPartX(uint16 scene, uint16 part, int16 x) {
 	if (scene >= _scenes.size() || part >= _scenes[scene].size())
 		return false;
 	_scenes[scene][part].x = x;
-	_scenes[scene][part].y = y;
 	return true;
 }
 

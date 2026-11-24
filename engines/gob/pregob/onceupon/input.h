@@ -11,56 +11,47 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  * This file is dual-licensed.
  * In addition to the GPLv3 license mentioned above, this code is also
  * licensed under LGPL 2.1. See LICENSES/COPYING.LGPL file for the
  * full text of the license.
- *
  */
 
-#ifndef GOB_PREGOB_ONCEUPON_ABRACADABRA_H
-#define GOB_PREGOB_ONCEUPON_ABRACADABRA_H
+#ifndef GOB_PREGOB_ONCEUPON_INPUT_H
+#define GOB_PREGOB_ONCEUPON_INPUT_H
 
-#include "gob/pregob/onceupon/onceupon.h"
+#include "common/events.h"
 
 namespace Gob {
-
 namespace OnceUpon {
 
-class Abracadabra : public OnceUpon {
+/** Physical keyboard state for Abracadabra and Baba Yaga. */
+class KeyboardInput : public Common::EventObserver {
 public:
-	Abracadabra(GobEngine *vm);
-	~Abracadabra() override;
-
-	void run() override;
-
-protected:
-	const StorkParam &getStorkParameters() const override;
+	KeyboardInput();
+	~KeyboardInput() override;
+	void begin();
+	static void clampActionPointer(int16 &x, int16 &y);
+	static void moveActionPointer(int16 &x, int16 &y, uint32 heldKeys);
+	void end();
+	bool notifyEvent(const Common::Event &event) override;
+	bool takeFocusLost();
+	uint32 heldKeys() const;
+	uint8 confirmationKeys() const;
 
 private:
-	/** Definition of the menu button that leads to the animal names screen. */
-	static const MenuButton kAnimalsButtons;
-
-	/** Definition of the buttons that make up the animals in the animal names screen. */
-	static const MenuButton kAnimalButtons[];
-	/** File prefixes for the name of each animal. */
-	static const char *kAnimalNames[];
-
-	// Parameters for the stork section.
-	static const MenuButton kStorkHouses[];
-	static const Stork::BundleDrop kStorkBundleDrops[];
-	static const struct StorkParam kStorkParam;
+	bool _pressed[Common::KEYCODE_LAST];
+	bool _registered;
+	bool _focusLost;
 };
 
 } // End of namespace OnceUpon
-
 } // End of namespace Gob
 
-#endif // GOB_PREGOB_ONCEUPON_ABRACADABRA_H
+#endif // GOB_PREGOB_ONCEUPON_INPUT_H

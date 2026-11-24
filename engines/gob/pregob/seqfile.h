@@ -30,7 +30,7 @@
 
 #include "common/system.h"
 #include "common/array.h"
-#include "common/list.h"
+#include "common/ptr.h"
 
 #include "gob/util.h"
 
@@ -57,23 +57,25 @@ class ANIObject;
  */
 class SEQFile {
 public:
-	SEQFile(GobEngine *vm, const Common::String &fileName);
+	/** Optional immutable resource owner; existing clients keep private assets. */
+	class ResourceProvider {
+	public:
+		virtual ~ResourceProvider() {}
+		virtual Common::SharedPtr<const ANIFile> acquireAnimation(const Common::String &name) = 0;
+		virtual Common::SharedPtr<const DECFile> acquireBackground(const Common::String &name) = 0;
+	};
+
+	SEQFile(GobEngine *vm, const Common::String &fileName, ResourceProvider *resources = nullptr);
 	virtual ~SEQFile();
 
-	/** Play the SEQ.
-	 *
-	 *  @param abortable If true, end playback on any user input.
-	 *  @param endFrame  The frame on where to end, or 0xFFFF for infinite playback.
-	 *  @param frameRate The frame rate at which to play the SEQ, or 0 for playing at
-	 *                   the speed the SEQ itself wants to.
-	 */
-	void play(bool abortable = true, uint16 endFrame = 0xFFFF, uint16 frameRate = 0);
-	/** The same playback, with control returned at each completed frame. */
-	void beginPlay(bool abortable = true, uint16 endFrame = 0xFFFF, uint16 frameRate = 0);
+	/** Start frame-by-frame playback at the rate selected by the scene. */
+	void beginPlay(uint16 frameRate);
 	bool stepPlay();
 	void endPlay();
 	bool isAborted() const { return _abortPlay; }
 	void resumePlay() { _abortPlay = false; }
+
+	/** Yield after the current publication without repeating its effects. */
 
 
 protected:
@@ -86,17 +88,11 @@ protected:
 	/** Seek to a specific frame. */
 	void seekFrame(uint16 frame);
 
-	/** Add a frame loop. */
-	uint addLoop(uint16 startFrame, uint16 endFrame, uint16 loopCount);
-
-	/** Skip a frame loop. */
-	void skipLoop(uint loopID);
-
-	/** Delete a frame loop. */
-	void delLoop(uint loopID);
-
 	/** Ends SEQ playback. */
 	void abortPlay();
+
+	virtual void changeFrameRate(int16 rate);
+	virtual void waitFrame();
 
 	/** Callback for special frame events. */
 	virtual void handleFrameEvent();
@@ -117,7 +113,6 @@ private:
 
 	/** A key for playing an object animation. */
 	struct AnimationKey {
-		uint object; ///< The object this key belongs to.
 
 		uint16 frame; ///< Frame the change is to happen.
 
@@ -138,33 +133,16 @@ private:
 		int16 order; ///< The current drawing order.
 	};
 
-	/** A frame loop. */
-	struct Loop {
-		uint16 startFrame;
-		uint16 endFrame;
-
-		uint16 loopCount;
-		uint16 currentLoop;
-
-		bool empty;
-	};
-
-	typedef Common::Array<DECFile *> Backgrounds;
-	typedef Common::Array<ANIFile *> Animations;
+	typedef Common::Array<Common::SharedPtr<const DECFile> > Backgrounds;
+	typedef Common::Array<Common::SharedPtr<const ANIFile> > Animations;
 
 	typedef Common::Array<BackgroundKey> BackgroundKeys;
 	typedef Common::Array<AnimationKey>  AnimationKeys;
-
-	typedef Common::List<Object> Objects;
-
-	typedef Common::Array<Loop> Loops;
 
 
 	uint16 _frame;     ///< The current frame.
 	bool   _abortPlay; ///< Was the end of the playback requested?
 
-	uint16 _frameRate;
-	uint16 _endFrame;
 	int16 _savedFrameRate;
 	bool _playing;
 	// Consumed keys stay consumed across frame-word wraparound.
@@ -175,35 +153,27 @@ private:
 	Animations  _animations;  ///< All animations in this SEQ.
 
 	BackgroundKeys _bgKeys;   ///< The background change keyframes.
-	AnimationKeys  _animKeys; ///< The animation change keyframes.
+	AnimationKeys _animKeys[kObjectCount]; ///< The keys in each original object track.
 
 	Object _objects[kObjectCount]; ///< The managed animation objects.
-
-	Loops _loops;
-
-	/** Whether the playback should be abortable by user input. */
-	bool _abortable;
 
 
 	// -- Loading helpers --
 
-	void load(Common::SeekableReadStream &seq);
+	void load(Common::SeekableReadStream &seq, ResourceProvider *resources);
 
 	const ANIFile *findANI(uint16 index, uint16 &animation);
 
 	// -- Playback helpers --
 
 	void playFrame();
-	void resetKeyCursors(uint16 frame);
 
 	/** Get a list of objects ordered by drawing order. */
-	Objects getOrderedObjects();
+	uint getOrderedObjects(Object *objects[kObjectCount]);
 
 	void clearAnims(); ///< Remove all animation frames.
 	void drawAnims();  ///< Draw the animation frames.
 
-	/** Look if we can compact the loop array. */
-	void cleanLoops();
 };
 
 } // End of namespace Gob

@@ -30,19 +30,38 @@
 
 #include "common/system.h"
 #include "common/str.h"
+#include "common/list.h"
+#include "common/ptr.h"
 
+#include "gob/detection/detection.h"
+#include "gob/sound/sounddesc.h"
 #include "gob/pregob/pregob.h"
-
-#include "gob/pregob/onceupon/stork.h"
+#include "gob/pregob/onceupon/input.h"
+#include "gob/pregob/onceupon/scene.h"
+#include "gob/pregob/onceupon/runtime_clock.h"
+#include "gob/pregob/onceupon/palette.h"
 
 namespace Gob {
 
 class Surface;
 class Font;
+class ANIFile;
 
-class ANIObject;
+class GCTFile;
 
 namespace OnceUpon {
+
+class Parents;
+class DwellingSearch;
+class Forest;
+class CastleEncounter;
+class BossEncounter;
+class HouseChoice;
+class CharacterCreation;
+class Ending;
+class StoryText;
+class Title;
+class Assets;
 
 class OnceUpon : public PreGob {
 public:
@@ -52,9 +71,13 @@ public:
 
 	OnceUpon(GobEngine *vm);
 	~OnceUpon() override;
+	void run() override;
+	void handleMouseDown(int16 x, int16 y, MouseButtons buttons) override;
+	bool handleKeyEvent(const Common::Event &event) override;
+	void pauseChanged(bool paused, uint32 duration) override;
 
 
-protected:
+private:
 	/** A description of a menu button. */
 	struct MenuButton {
 		bool needDraw; ///< Does the button need drawing?
@@ -67,7 +90,7 @@ protected:
 		int16 srcLeft;   ///< Left  coordinate of the button's sprite.
 		int16 srcTop;    ///< Top   coordinate of the button's sprite.
 		int16 srcRight;  ///< Right coordinate of the button's sprite.
-		int16 srcBottom; ///< Right coordinate of the button's sprite.
+		int16 srcBottom; ///< Bottom coordinate of the button's sprite.
 
 		int16 dstX; ///< Destination X coordinate of the button's sprite.
 		int16 dstY; ///< Destination Y coordinate of the button's sprite.
@@ -75,50 +98,27 @@ protected:
 		uint id; ///< The button's ID.
 	};
 
-	/** Parameters for the stork section. */
-	struct StorkParam {
-		const char *backdrop; ///< Backdrop image file.
-
-		uint  houseCount;         ///< Number of houses.
-		const MenuButton *houses; ///< House button definitions.
-
-		const Stork::BundleDrop *drops; ///< The bundle drop parameters.
-	};
-
 	void init();
 	void deinit();
 
-	/** Handle the copy protection.
-	 *
-	 *  @param  colors    Colors the copy protection animals can be.
-	 *  @param  shapes    The shape that's the correct answer for each animal in each color.
-	 *  @param  obfuscate Extra obfuscate table. correctShape = shapes[colors][obfuscate[animal]].
-	 *  @return true if the user guessed the correct shape, false otherwise.
-	 */
-	bool doCopyProtection(const uint8 colors[7], const uint8 shapes[7 * 20], const uint8 obfuscate[4]);
+	bool doCopyProtection();
+	void doStartMenu();
+	const MenuButton &animalNamesButton() const;
 
-	/** Show the intro. */
-	void showIntro();
-
-	/** Handle the start menu.
-	 *
-	 *  @param animalsButton Definition of the menu button that leads to the animal names screen. Can be 0.
-	 *  @param animalCount   Number of animals in the animal names screen.
-	 *  @param animalButtons Definition of the buttons that make up the animals in the animal names screen.
-	 *  @param animalNames   File prefixes for the name of each animal.
-	 */
-	void doStartMenu(const MenuButton *animalsButton, uint animalCount,
-	                 const MenuButton *animalButtons, const char * const *animalNames);
-
-	/** Play the game proper. */
-	void playGame();
+	void runStory();
 
 
-	/** Return the parameters for the stork section. */
-	virtual const StorkParam &getStorkParameters() const = 0;
-
-
-private:
+	friend class DwellingSearch;
+	friend class Forest;
+	friend class Encounter;
+	friend class CastleEncounter;
+	friend class BossEncounter;
+	friend class StoryText;
+	friend class Ending;
+	friend class HouseChoice;
+	friend class CharacterCreation;
+	friend class Title;
+	friend class Parents;
 	/** All actions a user can request in a menu. */
 	enum MenuAction {
 		kMenuActionNone = 0, ///< No action.
@@ -140,22 +140,16 @@ private:
 	/** The different sounds common in the game. */
 	enum Sound {
 		kSoundClick = 0,
-		kSoundStork    ,
+		kSoundCourier  ,
 		kSoundJump     ,
+		kSoundReward   ,
 		kSoundCount
-	};
-
-	/** Action the character generation wants us to take. */
-	enum CharGenAction {
-		kCharGenDone    = 0, ///< Created a character, move on.
-		kCharGenAbort      , ///< Aborted the character generation.
-		kCharGenRestart      ///< Restart the character generation.
 	};
 
 	/** A complete screen backup. */
 	struct ScreenBackup {
 		Surface *screen; ///< Screen contents.
-		int palette;     ///< Screen palette.
+		Palette::State palette; ///< Target and visible color roles.
 
 		bool changedCursor; ///< Did we change the cursor?
 		bool cursorVisible; ///< Was the cursor visible?
@@ -167,39 +161,24 @@ private:
 
 	/** The number of game sections. */
 	static const int kSectionCount = 15;
+	static const uint32 kGCTDelay = 12000;
 
 	static const MenuButton kMainMenuDifficultyButton[]; ///< Difficulty buttons.
 	static const MenuButton kSectionButtons[];           ///< Section buttons.
 
 	static const MenuButton kIngameButtons[];            ///< Ingame menu buttons.
 
+	static const MenuButton kAbracadabraAnimalsButtons;
+	static const MenuButton kAbracadabraAnimalButtons[10];
+	static const char *kAbracadabraAnimalNames[10];
+	static const MenuButton kBabaYagaAnimalsButtons;
+	static const MenuButton kBabaYagaAnimalButtons[10];
+	static const char *kBabaYagaAnimalNames[10];
 	static const MenuButton kAnimalNamesBack;   ///< "Back" button in the animal names screens.
 	static const MenuButton kLanguageButtons[]; ///< Language buttons in the animal names screen.
 
-	static const MenuButton kSectionStorkHouses[];
-
-	static const MenuButton kCharGenHeadButtons[];
-	static const MenuButton kCharGenHeads[];
-	static const MenuButton kCharGenHairButtons[];
-	static const MenuButton kCharGenJacketButtons[];
-	static const MenuButton kCharGenTrousersButtons[];
-	static const MenuButton kCharGenNameEntry[];
-
 	/** All general game sounds we know about. */
 	static const char *kSound[kSoundCount];
-
-
-	static const AnimProperties kClownAnimations[];
-	static const AnimProperties kTitleAnimation;
-	static const AnimProperties kSectionStorkAnimations[];
-	static const AnimProperties kSectionEndAnimations[];
-
-
-	/** Function pointer type for a section handler. */
-	typedef bool (OnceUpon::*SectionFunc)();
-	/** Section handler function. */
-	static const SectionFunc kSectionFuncs[kSectionCount];
-
 
 	/** Did we open the game archives? */
 	bool _openedArchives;
@@ -210,37 +189,106 @@ private:
 	Font *_plettre;
 	Font *_glettre;
 
-	/** The current palette. */
-	int _palette;
+	Palette _palette;
 
 	bool _quit; ///< Did the user request a normal game quit?
 
-	Difficulty _difficulty; ///< The current difficulty.
-	int        _section;    ///< The current game section.
+	Common::ScopedPtr<Assets> _assets;
+	RuntimeClock _clock;
+	Progress _progress;
+	Common::ScopedPtr<Section> _scene;
+	SceneKind _sceneKind;
+	int16 _sceneFrameRate;
 
-	Common::String _name; ///< The name of the child.
 
-	uint8 _house;
+	struct Activation {
+		int16 x, y;
+		MouseButtons buttons;
+	};
 
-	uint8 _head;
-	uint8 _colorHair;
-	uint8 _colorJacket;
-	uint8 _colorTrousers;
+	struct SceneInput {
+		int16 x, y, key;
+		MouseButtons buttons;
+		uint32 keys;
+		uint8 confirmation;
+		bool activation, awaitingRelease;
+	};
+	enum InputPolicy {
+		kSceneInput = 0,
+		kNameConfirmation = 1,
+		kWaitNameMouseRelease = 2,
+		kFlushCharacters = 4,
+		kActivationButtons = 8,
+		kReadingInput = 16
+	};
+	SceneInput readSceneInput(uint policy = kSceneInput);
+	bool acceptCaption(const SceneInput &input, bool &pressed);
+	// An advance belongs to the page visible at its down edge, not its successor.
+	enum ReadingKeys { kNoReading, kReadingSpace, kReadingControls, kReadingAny };
+	ReadingKeys _readingKeys;
+	bool _readingVisible, _readingOpening, _readingAdvance;
+	int16 _readingMenu;
+	void beginReadingPage(ReadingKeys keys);
+	void publishReadingPage();
+	void collectReadingInput(int16 key = 0);
+	void queueReadingAdvance();
+	bool takeReadingAdvance();
+	void expireReadingInput();
+	void endReadingPage();
+
+	enum IntroStage { kIntroLoading, kIntroQuote, kIntroTitle, kIntroGameTitle, kIntroReady, kIntroDone };
+	IntroStage _introStage;
+	SoundDesc _commonSounds[kSoundCount];
+	void playSample(SoundDesc &sample, int16 repeats, int16 frequency = 0);
+	void replaceSample(SoundDesc &sample, int16 repeats, int16 frequency = 0);
+	void playSound(uint sound, int16 frequency = 0, int16 repeats = 0);
+	bool _paused;
+	bool _selectionCursor;
+	const ANIFile *_actionCursorANI;
+	uint16 _actionCursorAnimation, _actionCursorFrame;
+	int16 _actionCursorX, _actionCursorY;
+	bool _acceptActivations;
+	bool _freshInput;
+	KeyboardInput _keyboard;
+	Common::List<Activation> _activations;
+	bool _menuInputActive, _menuIgnoreEscape;
+	uint _menuEscapePending;
+	MouseButtons _menuHeld, _menuIgnoredButtons;
 
 
 	// -- General helpers --
 
-	void setGamePalette(uint palette); ///< Set a game palette.
+	void resetProgress();
+	void beginScene(SceneKind kind);
+	void finishScene();
+	void beginStorySection();
+	SectionOutcome stepScene();
+	void leaveScene();
+	void completeScene(SectionOutcome outcome);
+	void endFrame();
+	bool captionReady(bool accepted, uint32 captionStart);
+	GCTFile *loadStoryGCT(const Common::String &name) const;
+	void setGamePalette(uint palette); ///< Select the next game palette.
+	void showTemporaryPalette(uint palette); ///< Publish a temporary color pulse.
+	void setPalette(const byte *palette, uint16 size);
+	void fadeOut();
+	void fadeIn();
 	void setGameCursor();              ///< Set the default game cursor.
+	void showSelectionCursor(Surface &cursor);
+	void showActionCursor(const ANIFile &ani, uint16 animation, uint16 frame, int16 x, int16 y);
+	void holdActionCursor();
+	void removeSelectionCursor();
 
-	/** Draw this sprite in a fancy, animated line-by-line way. */
+	/** Reveal alternating rows downwards, then the remaining rows upwards. */
 	void drawLineByLine(const Surface &src, int16 left, int16 top, int16 right, int16 bottom,
 	                    int16 x, int16 y) const;
 
 	/** Backup the screen contents. */
 	void backupScreen(ScreenBackup &backup, bool setDefaultCursor = false);
 	/** Restore the screen contents with a previously made backup. */
-	void restoreScreen(ScreenBackup &backup);
+	void restoreScreen(ScreenBackup &backup, bool keepBlack = false);
+	void finishMenu(ScreenBackup &backup, bool fade);
+	void waitInputDelay(uint16 milliseconds);
 
 	Common::String fixString(const Common::String &str) const; ///< Fix a string if necessary.
 	void fixTXTStrings(TXTFile &txt) const override;                    ///< Fix all strings in a TXT.
@@ -251,8 +299,6 @@ private:
 	/** Set up the copy protection. */
 	int8 cpSetup(const uint8 colors[7], const uint8 shapes[7 * 20],
 	             const uint8 obfuscate[4], const Surface sprites[2]);
-	/** Find the shape under these coordinates. */
-	int8 cpFindShape(int16 x, int16 y) const;
 	/** Display the "You are wrong" screen. */
 	void cpWrong();
 
@@ -260,13 +306,12 @@ private:
 	// -- Show different game screens --
 
 	void showWait(uint palette = 0xFFFF); ///< Show the wait / loading screen.
-	void showQuote();                     ///< Show the quote about fairytales.
-	void showTitle();                     ///< Show the Once Upon A Time title.
-	void showChapter(int chapter);        ///< Show a chapter intro text.
+	void beginStoryText(int chapter);
+	void beginTitle();
 	void showByeBye();                    ///< Show the "bye bye" screen.
 
 	/** Handle the "listen to animal names" part. */
-	void handleAnimalNames(uint count, const MenuButton *buttons, const char * const *names);
+	void handleAnimalNames();
 
 
 	// -- Menu helpers --
@@ -274,6 +319,9 @@ private:
 	MenuAction handleStartMenu(const MenuButton *animalsButton); ///< Handle the start  menu.
 	MenuAction handleMainMenu();                                 ///< Handle the main   menu.
 	MenuAction handleIngameMenu();                               ///< Handle the ingame menu.
+	void beginMenuInput();
+	void endMenuInput();
+	int16 checkMenuInput(int16 &x, int16 &y, MouseButtons &buttons);
 
 	void drawStartMenu(const MenuButton *animalsButton); ///< Draw the start  menu.
 	void drawMainMenu();                                 ///< Draw the main   menu.
@@ -287,8 +335,7 @@ private:
 
 	/** Handle the whole ingame menu. */
 	MenuAction doIngameMenu();
-	/** Handle the whole ingame menu if ESC or right mouse button was pressed. */
-	MenuAction doIngameMenu(int16 &key, MouseButtons &mouseButtons);
+	SectionOutcome sceneMenu();
 
 
 	// -- Menu button helpers --
@@ -317,29 +364,27 @@ private:
 
 	// -- Game sections --
 
-	bool playSection();
 
-	bool sectionStork();
-	bool sectionChapter1();
-	bool sectionParents();
-	bool sectionChapter2();
-	bool sectionForest0();
-	bool sectionChapter3();
-	bool sectionEvilCastle();
-	bool sectionChapter4();
-	bool sectionForest1();
-	bool sectionChapter5();
-	bool sectionBossFight();
-	bool sectionChapter6();
-	bool sectionForest2();
-	bool sectionChapter7();
-	bool sectionEnd();
+	void beginHouseChoice();
+	void finishHouseChoice();
+	void beginParents();
+	void discardActivationInput();
+	void drawScore(uint8 color = 10);
+	void drawScore(Surface &dest, uint32 score, uint8 color = 10) const;
+	void changeScore(int16 amount);
+	void beginForest(uint variant);
+	bool drawScenePage(GCTFile &text, const Surface &background, uint16 item, uint32 &captionStart);
+	struct EncounterSpec {
+		SceneKind kind;
+		int16 exteriorPalette, fightPalette, frameRate, retrySection;
+		const char *text;
+	};
+	static const EncounterSpec &encounterSpec(bool boss);
+	void beginEncounter(bool boss);
+	void beginEnding();
 
-	CharGenAction characterGenerator();
-	void charGenSetup(uint stage);
-	void charGenDrawName();
-
-	static bool enterString(Common::String &name, int16 key, uint maxLength, const Font &font);
+	void beginCharacterCreation();
+	void finishCharacterCreation();
 };
 
 } // End of namespace OnceUpon

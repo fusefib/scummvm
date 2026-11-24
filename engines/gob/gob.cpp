@@ -57,8 +57,7 @@
 #include "gob/save/saveload.h"
 
 #include "gob/pregob/pregob.h"
-#include "gob/pregob/onceupon/abracadabra.h"
-#include "gob/pregob/onceupon/babayaga.h"
+#include "gob/pregob/onceupon/onceupon.h"
 
 namespace Gob {
 
@@ -426,10 +425,14 @@ Common::Error GobEngine::run() {
 void GobEngine::pauseEngineIntern(bool pause) {
 	if (pause) {
 		_pauseStart = _system->getMillis();
+		if (_preGob)
+			_preGob->pauseChanged(true, 0);
 	} else {
 		uint32 duration = _system->getMillis() - _pauseStart;
 
 		_util->notifyPaused(duration);
+		if (_preGob)
+			_preGob->pauseChanged(false, duration);
 
 		_game->_startTimeKey += duration;
 		_draw->_cursorTimeKey += duration;
@@ -709,16 +712,6 @@ Common::Error GobEngine::initGameParts() {
 		break;
 
 	case kGameTypeAbracadabra:
-		_init     = new Init_v2(this);
-		_video    = new Video_v2(this);
-		_mult     = new Mult_v2(this);
-		_draw     = new Draw_v2(this);
-		_map      = new Map_v2(this);
-		_goblin   = new Goblin_v2(this);
-		_scenery  = new Scenery_v2(this);
-		_preGob   = new OnceUpon::Abracadabra(this);
-		break;
-
 	case kGameTypeBabaYaga:
 		_init     = new Init_v2(this);
 		_video    = new Video_v2(this);
@@ -727,7 +720,7 @@ Common::Error GobEngine::initGameParts() {
 		_map      = new Map_v2(this);
 		_goblin   = new Goblin_v2(this);
 		_scenery  = new Scenery_v2(this);
-		_preGob   = new OnceUpon::BabaYaga(this);
+		_preGob   = new OnceUpon::OnceUpon(this);
 		break;
 
 	default:

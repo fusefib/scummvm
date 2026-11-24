@@ -39,6 +39,7 @@
 #include "gob/video.h"
 #include "gob/videoplayer.h"
 #include "gob/sound/sound.h"
+#include "gob/pregob/pregob.h"
 
 namespace Gob {
 
@@ -112,9 +113,13 @@ void Util::processInput(bool scroll) {
 			y = event.mouse.y;
 			break;
 		case Common::EVENT_LBUTTONDOWN:
+			if (_vm->_preGob)
+				_vm->_preGob->handleMouseDown(event.mouse.x, event.mouse.y, kMouseButtonsLeft);
 			_mouseButtons = (MouseButtons) (((uint32) _mouseButtons) | ((uint32) kMouseButtonsLeft));
 			break;
 		case Common::EVENT_RBUTTONDOWN:
+			if (_vm->_preGob)
+				_vm->_preGob->handleMouseDown(event.mouse.x, event.mouse.y, kMouseButtonsRight);
 			_mouseButtons = (MouseButtons) (((uint32) _mouseButtons) | ((uint32) kMouseButtonsRight));
 			break;
 		case Common::EVENT_LBUTTONUP:
@@ -135,10 +140,13 @@ void Util::processInput(bool scroll) {
 					_vm->pauseGame();
 				break;
 			}
-			addKeyToBuffer(event.kbd);
+			if (!_vm->_preGob || !_vm->_preGob->handleKeyEvent(event))
+				addKeyToBuffer(event.kbd);
 			break;
 		case Common::EVENT_KEYUP:
 			keyUp(event);
+			if (_vm->_preGob)
+				_vm->_preGob->handleKeyEvent(event);
 			break;
 		default:
 			break;

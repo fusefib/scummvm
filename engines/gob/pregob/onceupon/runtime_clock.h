@@ -25,42 +25,35 @@
  *
  */
 
-#ifndef GOB_PREGOB_ONCEUPON_BABAYAGA_H
-#define GOB_PREGOB_ONCEUPON_BABAYAGA_H
+#ifndef GOB_PREGOB_ONCEUPON_RUNTIME_CLOCK_H
+#define GOB_PREGOB_ONCEUPON_RUNTIME_CLOCK_H
 
-#include "gob/pregob/onceupon/onceupon.h"
+#include "common/scummsys.h"
 
 namespace Gob {
-
+class GobEngine;
 namespace OnceUpon {
 
-class BabaYaga : public OnceUpon {
+/** Once Upon's gameplay epoch; menus and nested engine pauses stop it once. */
+class RuntimeClock {
 public:
-	BabaYaga(GobEngine *vm);
-	~BabaYaga() override;
-
-	void run() override;
-
-protected:
-	const StorkParam &getStorkParameters() const override;
+	explicit RuntimeClock(GobEngine *vm);
+	uint32 now() const;
+	void pause();
+	void resume();
+	void setFrameRate(int16 rate);
+	bool waitFrame();
+	void limitActionCursor(bool limited) { _limitActionCursor = limited; }
 
 private:
-	/** Definition of the menu button that leads to the animal names screen. */
-	static const MenuButton kAnimalsButtons;
-
-	/** Definition of the buttons that make up the animals in the animal names screen. */
-	static const MenuButton kAnimalButtons[];
-	/** File prefixes for the name of each animal. */
-	static const char *kAnimalNames[];
-
-	// Parameters for the stork section.
-	static const MenuButton kStorkHouses[];
-	static const Stork::BundleDrop kStorkBundleDrops[];
-	static const struct StorkParam kStorkParam;
+	GobEngine *_vm;
+	mutable uint32 _time, _lastWall;
+	mutable uint16 _speed;
+	uint _pauseDepth;
+	bool _limitActionCursor;
+	uint32 _frameStart, _menuFrameStart;
 };
 
-} // End of namespace OnceUpon
-
-} // End of namespace Gob
-
-#endif // GOB_PREGOB_ONCEUPON_BABAYAGA_H
+} // namespace OnceUpon
+} // namespace Gob
+#endif

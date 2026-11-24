@@ -88,12 +88,12 @@ MODULE_OBJS := \
 	pregob/gctfile.o \
 	pregob/seqfile.o \
 	pregob/onceupon/onceupon.o \
-	pregob/onceupon/abracadabra.o \
-	pregob/onceupon/babayaga.o \
-	pregob/onceupon/title.o \
-	pregob/onceupon/parents.o \
-	pregob/onceupon/stork.o \
-	pregob/onceupon/chargenchild.o \
+	pregob/onceupon/runtime_clock.o \
+	pregob/onceupon/palette.o \
+	pregob/onceupon/assets.o \
+	pregob/onceupon/input.o \
+	pregob/onceupon/copy_protection.o \
+	pregob/onceupon/animal_names.o \
 	minigames/geisha/evilfish.o \
 	minigames/geisha/oko.o \
 	minigames/geisha/meter.o \

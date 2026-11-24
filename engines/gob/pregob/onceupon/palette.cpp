@@ -25,13 +25,154 @@
  *
  */
 
-#ifndef GOB_PREGOB_ONCEUPON_PALETTES_H
-#define GOB_PREGOB_ONCEUPON_PALETTES_H
+#include "common/system.h"
+#include "common/util.h"
+#include "graphics/paletteman.h"
+#include "gob/gob.h"
+#include "gob/global.h"
+#include "gob/draw.h"
+#include "gob/video.h"
+#include "gob/palanim.h"
+#include "gob/pregob/onceupon/palette.h"
 
-static const  int kPaletteSize  = 16;
-static const uint kPaletteCount = 20;
+namespace Gob {
+namespace OnceUpon {
 
-static const byte kCopyProtectionPalette[3 * kPaletteSize] = {
+Palette::State::State() : holdingBlack(false) {
+	memset(target, 0, sizeof(target));
+	memset(visible, 0, sizeof(visible));
+}
+
+Palette::Palette(GobEngine *vm) : _vm(vm) {
+}
+
+void Palette::reset(bool holdingBlack) {
+	_state = State();
+	_state.holdingBlack = holdingBlack;
+	memcpy(_state.target, _vm->_draw->_vgaPalette, sizeof(_state.target));
+	captureVisible();
+}
+
+void Palette::projectTarget() {
+	memcpy(_vm->_draw->_vgaPalette, _state.target, sizeof(_state.target));
+}
+
+void Palette::projectVisible() {
+	// PalAnim starts from Global, while presentation reads the backend palette.
+	// Synchronize both from the same visible role before any following fade.
+	for (uint i = 0; i < 256; ++i) {
+		_vm->_global->_redPalette[i] = _state.visible[3 * i] >> 2;
+		_vm->_global->_greenPalette[i] = _state.visible[3 * i + 1] >> 2;
+		_vm->_global->_bluePalette[i] = _state.visible[3 * i + 2] >> 2;
+	}
+}
+
+void Palette::captureVisible() {
+	g_system->getPaletteManager()->grabPalette(_state.visible, 0, 256);
+	projectVisible();
+}
+
+void Palette::selectTarget(const byte *colors, uint size) {
+	memcpy(_state.target, colors, 3 * MIN<uint>(size, 256));
+	projectTarget();
+}
+
+void Palette::showTarget() {
+	projectTarget();
+	_vm->_video->setFullPalette(_vm->_global->_pPaletteDesc);
+	captureVisible();
+	_state.holdingBlack = false;
+}
+
+void Palette::fadeDOS(bool toBlack) {
+	const uint colorCount = 16;
+	// Both DOS games move one VGA DAC level per retrace.
+	const uint rate = 70 * MAX<int16>(1, _vm->_global->_speedFactor);
+	uint32 last = g_system->getMillis();
+	uint32 scheduled = 0;
+	for (uint step = 1; !_vm->shouldQuit(); ++step) {
+		bool pending = false;
+		bool changed = false;
+		for (uint i = 0; i < 3 * colorCount; ++i) {
+			int level = _state.visible[i] >> 2;
+			const int target = toBlack ? 0 : (_state.target[i] & 0x3F);
+			if (level != target) {
+				level += level < target ? 1 : -1;
+				changed = true;
+			}
+			pending |= level != target;
+			_state.visible[i] = level << 2;
+		}
+
+		if (changed) {
+			const uint32 next = step * 1000 / rate;
+			const uint32 slot = next - scheduled;
+			const uint32 elapsed = g_system->getMillis() - last;
+			if (elapsed < slot)
+				g_system->delayMillis(slot - elapsed);
+			last = g_system->getMillis();
+			scheduled = next;
+		}
+
+		g_system->getPaletteManager()->setPalette(_state.visible, 0, colorCount);
+		projectVisible();
+		_vm->_video->retrace();
+		if (!pending)
+			break;
+	}
+}
+
+void Palette::fadeToTarget() {
+	if (_vm->shouldQuit())
+		return;
+	captureVisible();
+	projectTarget();
+	if (_vm->getPlatform() == Common::kPlatformDOS)
+		fadeDOS(false);
+	else
+		_vm->_palAnim->fade(_vm->_global->_pPaletteDesc, 0, 0);
+	captureVisible();
+	_state.holdingBlack = false;
+}
+
+void Palette::fadeToBlack() {
+	if (_state.holdingBlack || _vm->shouldQuit())
+		return;
+	captureVisible();
+	if (_vm->getPlatform() == Common::kPlatformDOS)
+		fadeDOS(true);
+	else
+		_vm->_palAnim->fade(nullptr, 0, 0);
+	captureVisible();
+	_state.holdingBlack = true;
+}
+
+void Palette::showTemporary(const byte *colors, uint size) {
+	// A lightning pulse changes visible colors, not the selected scene target.
+	Video::Color temporary[256];
+	memcpy(temporary, _state.target, sizeof(temporary));
+	memcpy(temporary, colors, 3 * MIN<uint>(size, 256));
+	Video::PalDesc descriptor = *_vm->_global->_pPaletteDesc;
+	descriptor.vgaPal = temporary;
+	_vm->_video->setFullPalette(&descriptor);
+	captureVisible();
+	_state.holdingBlack = false;
+}
+
+Palette::State Palette::snapshot() const {
+	State state = _state;
+	g_system->getPaletteManager()->grabPalette(state.visible, 0, 256);
+	return state;
+}
+
+void Palette::adopt(const State &state) {
+	_state = state;
+	projectTarget();
+	projectVisible();
+	g_system->getPaletteManager()->setPalette(_state.visible, 0, 256);
+}
+
+const byte kCopyProtectionPalette[3 * kPaletteSize] = {
 	0x00, 0x00, 0x00,
 	0x19, 0x00, 0x19,
 	0x00, 0x3F, 0x00,
@@ -50,7 +191,7 @@ static const byte kCopyProtectionPalette[3 * kPaletteSize] = {
 	0x3F, 0x3F, 0x3F
 };
 
-static const byte kGamePalettes[kPaletteCount][3 * kPaletteSize] = {
+const byte kGamePalettes[kPaletteCount][3 * kPaletteSize] = {
 	{
 		0x00, 0x00, 0x00,
 		0x00, 0x00, 0x10,
@@ -413,4 +554,5 @@ static const byte kGamePalettes[kPaletteCount][3 * kPaletteSize] = {
 	}
 };
 
-#endif // GOB_PREGOB_ONCEUPON_PALETTES_H
+} // namespace OnceUpon
+} // namespace Gob

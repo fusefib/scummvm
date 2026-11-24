@@ -68,8 +68,7 @@ public:
 	/** Restore the foreground intersecting an actor's area after drawing it. */
 	void drawForeground(Surface &dest, uint16 scene, const Common::Rect &area, int16 depth) const;
 
-	bool getPartPosition(uint16 scene, uint16 part, int16 &x, int16 &y) const;
-	bool setPartPosition(uint16 scene, uint16 part, int16 x, int16 y);
+	bool setPartX(uint16 scene, uint16 part, int16 x);
 
 	/** Explicitly draw a layer part. */
 	void drawLayer(Surface &dest, uint16 layer, uint16 part,

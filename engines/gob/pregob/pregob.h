@@ -51,6 +51,12 @@ public:
 	virtual ~PreGob();
 
 	virtual void run() = 0;
+	/** Retain the original mouse-down coordinates before held state changes. */
+	virtual void handleMouseDown(int16 x, int16 y, MouseButtons buttons) {}
+	/** Duration is zero on entry and elapsed host milliseconds on resume. */
+	virtual void pauseChanged(bool paused, uint32 duration) {}
+	/** Return true to consume a key-down before it enters the shared buffer. */
+	virtual bool handleKeyEvent(const Common::Event &event) { return false; }
 
 	struct AnimProperties {
 		uint16 animation;

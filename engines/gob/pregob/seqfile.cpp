@@ -39,11 +39,13 @@
 
 namespace Gob {
 
-SEQFile::SEQFile(GobEngine *vm, const Common::String &fileName) : _vm(vm),
-	_frame(0), _abortPlay(false), _frameRate(0), _endFrame(0xFFFF), _savedFrameRate(0),
-	_playing(false), _nextBackgroundKey(0), _abortable(true) {
+SEQFile::SEQFile(GobEngine *vm, const Common::String &fileName, ResourceProvider *resources) : _vm(vm),
+	_frame(0), _abortPlay(false), _savedFrameRate(0),
+	_playing(false),
+	_nextBackgroundKey(0) {
 	for (uint i = 0; i < kObjectCount; i++) {
 		_objects[i].object = nullptr;
+		_objects[i].order = 0;
 		_nextAnimationKey[i] = 0;
 	}
 
@@ -53,7 +55,7 @@ SEQFile::SEQFile(GobEngine *vm, const Common::String &fileName) : _vm(vm),
 		return;
 	}
 
-	load(*seq);
+	load(*seq, resources);
 
 	delete seq;
 }
@@ -63,14 +65,9 @@ SEQFile::~SEQFile() {
 	for (uint i = 0; i < kObjectCount; i++)
 		delete _objects[i].object;
 
-	for (Backgrounds::iterator b = _backgrounds.begin(); b != _backgrounds.end(); ++b)
-		delete *b;
-
-	for (Animations::iterator a = _animations.begin(); a != _animations.end(); ++a)
-		delete *a;
 }
 
-void SEQFile::load(Common::SeekableReadStream &seq) {
+void SEQFile::load(Common::SeekableReadStream &seq, ResourceProvider *resources) {
 	const uint16 decCount = (uint16)seq.readByte() + 1;
 	const uint16 aniCount = (uint16)seq.readByte() + 1;
 
@@ -84,7 +81,8 @@ void SEQFile::load(Common::SeekableReadStream &seq) {
 			return;
 		}
 
-		_backgrounds.push_back(new DECFile(_vm, dec, 320, 200));
+		_backgrounds.push_back(resources ? resources->acquireBackground(dec) :
+			Common::SharedPtr<const DECFile>(new DECFile(_vm, dec, 320, 200)));
 	}
 
 	// Load animations
@@ -97,10 +95,11 @@ void SEQFile::load(Common::SeekableReadStream &seq) {
 			return;
 		}
 
-		_animations.push_back(new ANIFile(_vm, ani));
+		_animations.push_back(resources ? resources->acquireAnimation(ani) :
+			Common::SharedPtr<const ANIFile>(new ANIFile(_vm, ani)));
 	}
 
-	_frameRate = seq.readUint16LE();
+	seq.skip(2); // The scene selects the rate instead of using this header word.
 
 	// Load background change keys
 
@@ -112,34 +111,24 @@ void SEQFile::load(Common::SeekableReadStream &seq) {
 		const uint16 index = seq.readUint16LE();
 
 		_bgKeys[i].frame      = frame;
-		_bgKeys[i].background = index < _backgrounds.size() ? _backgrounds[index] : 0;
+		_bgKeys[i].background = index < _backgrounds.size() ? _backgrounds[index].get() : nullptr;
 	}
 
-	// Load animation keys for all 4 objects
-
-	for (uint i = 0; i < kObjectCount; i++) {
+	// Keep the four tracks in their original file order.
+	for (uint i = 0; i < kObjectCount; ++i) {
 		const uint16 animKeyCount = seq.readUint16LE();
-		_animKeys.reserve(_animKeys.size() + animKeyCount);
-
-		for (uint16 j = 0; j < animKeyCount; j++) {
-			_animKeys.push_back(AnimationKey());
-
-			const uint16 frame = seq.readUint16LE();
+		AnimationKeys &keys = _animKeys[i];
+		keys.resize(animKeyCount);
+		for (uint16 j = 0; j < animKeyCount; ++j) {
+			AnimationKey &key = keys[j];
+			key.frame = seq.readUint16LE();
 			const uint16 index = seq.readUint16LE();
-
-			uint16 animation;
-			const ANIFile *ani = findANI(index, animation);
-
-			_animKeys.back().object    = i;
-			_animKeys.back().frame     = frame;
-			_animKeys.back().ani       = ani;
-			_animKeys.back().animation = animation;
-			_animKeys.back().x         = seq.readSint16LE();
-			_animKeys.back().y         = seq.readSint16LE();
-			_animKeys.back().order     = seq.readSint16LE();
+			key.ani = findANI(index, key.animation);
+			key.x = seq.readSint16LE();
+			key.y = seq.readSint16LE();
+			key.order = seq.readSint16LE();
 		}
 	}
-
 }
 
 const ANIFile *SEQFile::findANI(uint16 index, uint16 &animation) {
@@ -152,7 +141,7 @@ const ANIFile *SEQFile::findANI(uint16 index, uint16 &animation) {
 	for (const auto &anim : _animations) {
 		if (index < anim->getAnimationCount()) {
 			animation = index;
-			return anim;
+			return anim.get();
 		}
 
 		index -= anim->getAnimationCount();
@@ -161,61 +150,45 @@ const ANIFile *SEQFile::findANI(uint16 index, uint16 &animation) {
 	return nullptr;
 }
 
-void SEQFile::play(bool abortable, uint16 endFrame, uint16 frameRate) {
-	beginPlay(abortable, endFrame, frameRate);
-	while (stepPlay()) {}
+void SEQFile::beginPlay(uint16 frameRate) {
 	endPlay();
-}
-
-void SEQFile::beginPlay(bool abortable, uint16 endFrame, uint16 frameRate) {
-	endPlay();
-	if (_bgKeys.empty() && _animKeys.empty())
-		// Nothing to do
+	bool hasKeys = !_bgKeys.empty();
+	for (uint i = 0; !hasKeys && i < kObjectCount; ++i)
+		hasKeys = !_animKeys[i].empty();
+	if (!hasKeys)
 		return;
 
 	// Init
 
 	_frame = 0;
 	_abortPlay = false;
-	resetKeyCursors(0);
+	_nextBackgroundKey = 0;
 
 	for (uint i = 0; i < kObjectCount; i++) {
 		delete _objects[i].object;
 
 		_objects[i].object = nullptr;
 		_objects[i].order  = 0;
+		_nextAnimationKey[i] = 0;
 	}
-
-	for (Loops::iterator l = _loops.begin(); l != _loops.end(); ++l)
-		l->currentLoop = 0;
 
 	// Set the frame rate
 
 	_savedFrameRate = _vm->_util->getFrameRate();
-
-	if (frameRate == 0)
-		frameRate = _frameRate;
-
-	_vm->_util->setFrameRate(frameRate);
-
-	_abortable = abortable;
-	_endFrame = endFrame ? endFrame : 1;
+	changeFrameRate(frameRate);
 	_playing = true;
 }
 
 bool SEQFile::stepPlay() {
-	if (!_playing || _vm->shouldQuit() || _abortPlay || (_endFrame != 0xFFFF && _frame >= _endFrame))
+	if (!_playing || _vm->shouldQuit() || _abortPlay)
 		return false;
 
-	// Handle the frame contents
 	playFrame();
-
-	// Handle extra frame events
 	handleFrameEvent();
+	_vm->_draw->blitInvalidated();
 
 	// Wait for the frame to end
-	_vm->_draw->blitInvalidated();
-	_vm->_util->waitEndFrame();
+	waitFrame();
 
 	// Handle input
 
@@ -230,28 +203,13 @@ bool SEQFile::stepPlay() {
 
 	handleInput(key, mouseX, mouseY, mouseButtons);
 
-	// Loop
-
-	bool looped = false;
-	for (Loops::iterator loop = _loops.begin(); loop != _loops.end(); ++loop) {
-		if (loop->endFrame == _frame && loop->currentLoop < loop->loopCount) {
-			_frame = loop->startFrame;
-			++loop->currentLoop;
-			looped = true;
-		}
-	}
-
-	// If we didn't loop, advance the frame and look if we should end here.
-	if (looped)
-		resetKeyCursors(_frame);
-	else
-		++_frame;
-	return !_vm->shouldQuit() && !_abortPlay && (_endFrame == 0xFFFF || _frame < _endFrame);
+	++_frame;
+	return !_vm->shouldQuit() && !_abortPlay;
 }
 
 void SEQFile::endPlay() {
 	if (_playing)
-		_vm->_util->setFrameRate(_savedFrameRate);
+		changeFrameRate(_savedFrameRate);
 	_playing = false;
 }
 
@@ -271,9 +229,10 @@ void SEQFile::playFrame() {
 	// Handle the animation keys, updating the objects
 	for (uint i = 0; i < kObjectCount; ++i) {
 		uint &nextKey = _nextAnimationKey[i];
-		if (nextKey >= _animKeys.size() || _animKeys[nextKey].object != i)
+		const AnimationKeys &keys = _animKeys[i];
+		if (nextKey >= keys.size())
 			continue;
-		const AnimationKey &anim = _animKeys[nextKey];
+		const AnimationKey &anim = keys[nextKey];
 		if (anim.frame != _frame)
 			continue;
 		++nextKey;
@@ -303,69 +262,43 @@ void SEQFile::playFrame() {
 	drawAnims();
 }
 
-void SEQFile::resetKeyCursors(uint16 frame) {
-	_nextBackgroundKey = 0;
-	while (_nextBackgroundKey < _bgKeys.size() && _bgKeys[_nextBackgroundKey].frame < frame)
-		++_nextBackgroundKey;
+// At most four objects; insertion preserves slot order for equal keys.
+uint SEQFile::getOrderedObjects(Object *objects[kObjectCount]) {
+	uint count = 0;
 	for (uint i = 0; i < kObjectCount; ++i) {
-		uint key = 0;
-		while (key < _animKeys.size() && (_animKeys[key].object < i ||
-			(_animKeys[key].object == i && _animKeys[key].frame < frame)))
-			++key;
-		_nextAnimationKey[i] = key;
-	}
-}
-
-// NOTE: This is really not at all efficient. However, since there's only a
-//       small number of objects, it should matter. We really do need a stable
-//       sort, though, so Common::sort() is out.
-SEQFile::Objects SEQFile::getOrderedObjects() {
-	int16 minOrder = (int16)0x7FFF;
-	int16 maxOrder = (int16)0x8000;
-
-	Objects objects;
-
-	// Find the span of order values
-	for (uint i = 0; i < kObjectCount; i++) {
 		if (!_objects[i].object)
 			continue;
-
-		minOrder = MIN(minOrder, _objects[i].order);
-		maxOrder = MAX(maxOrder, _objects[i].order);
+		uint at = count;
+		while (at && objects[at - 1]->order > _objects[i].order) {
+			objects[at] = objects[at - 1];
+			--at;
+		}
+		objects[at] = &_objects[i];
+		++count;
 	}
-
-	// Stably sort the objects by order value
-	for (int16 o = minOrder; o <= maxOrder; o++)
-		for (uint i = 0; i < kObjectCount; i++)
-			if (_objects[i].object && (_objects[i].order == o))
-				objects.push_back(_objects[i]);
-
-	return objects;
+	return count;
 }
 
 void SEQFile::clearAnims() {
-	Objects objects = getOrderedObjects();
-
-	// Remove the animation frames, in reverse drawing order
-	for (Objects::iterator o = objects.reverse_begin(); o != objects.end(); --o) {
+	Object *objects[kObjectCount];
+	const uint count = getOrderedObjects(objects);
+	// Remove old frames in reverse drawing order. Keys may replace objects
+	// after this call, so drawAnims() orders the new set independently.
+	for (uint i = count; i > 0; --i) {
 		int16 left, top, right, bottom;
-
-		if (o->object->clear(*_vm->_draw->_backSurface, left, top, right, bottom))
+		if (objects[i - 1]->object->clear(*_vm->_draw->_backSurface, left, top, right, bottom))
 			_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
 	}
 }
 
 void SEQFile::drawAnims() {
-	Objects objects = getOrderedObjects();
-
-	// Draw the animation frames and advance the animation
-	for (auto &obj : objects) {
+	Object *objects[kObjectCount];
+	const uint count = getOrderedObjects(objects);
+	for (uint i = 0; i < count; ++i) {
 		int16 left, top, right, bottom;
-
-		if (obj.object->draw(*_vm->_draw->_backSurface, left, top, right, bottom))
+		if (objects[i]->object->draw(*_vm->_draw->_backSurface, left, top, right, bottom))
 			_vm->_draw->dirtiedRect(_vm->_draw->_backSurface, left, top, right, bottom);
-
-		obj.object->advance();
+		objects[i]->object->advance();
 	}
 }
 
@@ -377,48 +310,23 @@ void SEQFile::seekFrame(uint16 frame) {
 	_frame = frame;
 }
 
-uint SEQFile::addLoop(uint16 startFrame, uint16 endFrame, uint16 loopCount) {
-	_loops.resize(_loops.size() + 1);
-
-	_loops.back().startFrame  = startFrame;
-	_loops.back().endFrame    = endFrame;
-	_loops.back().loopCount   = loopCount;
-	_loops.back().currentLoop = 0;
-	_loops.back().empty       = false;
-
-	return _loops.size() - 1;
-}
-
-void SEQFile::skipLoop(uint loopID) {
-	if (loopID >= _loops.size())
-		return;
-
-	_loops[loopID].currentLoop = 0xFFFF;
-}
-
-void SEQFile::delLoop(uint loopID) {
-	if (loopID >= _loops.size())
-		return;
-
-	_loops[loopID].empty = true;
-
-	cleanLoops();
-}
-
-void SEQFile::cleanLoops() {
-	while (!_loops.empty() && _loops.back().empty)
-		_loops.pop_back();
-}
-
 void SEQFile::abortPlay() {
 	_abortPlay = true;
+}
+
+void SEQFile::changeFrameRate(int16 rate) {
+	_vm->_util->setFrameRate(rate);
+}
+
+void SEQFile::waitFrame() {
+	_vm->_util->waitEndFrame();
 }
 
 void SEQFile::handleFrameEvent() {
 }
 
 void SEQFile::handleInput(int16 key, int16 mouseX, int16 mouseY, MouseButtons mouseButtons) {
-	if (_abortable && ((key != 0) || (mouseButtons != kMouseButtonsNone)))
+	if (key != 0 || mouseButtons != kMouseButtonsNone)
 		abortPlay();
 }
 
