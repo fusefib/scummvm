@@ -25,8 +25,8 @@
  *
  */
 
-#ifndef GOB_PREGOB_ONCEUPON_CHARGENCHILD_H
-#define GOB_PREGOB_ONCEUPON_CHARGENCHILD_H
+#ifndef GOB_PREGOB_ONCEUPON_CHARACTER_PREVIEW_H
+#define GOB_PREGOB_ONCEUPON_CHARACTER_PREVIEW_H
 
 #include "common/system.h"
 
@@ -39,7 +39,7 @@ class ANIFile;
 
 namespace OnceUpon {
 
-/** The child running around on the character generator screen. */
+/** The child on the shared Abracadabra and Baba Yaga character-choice screen. */
 class CharGenChild : public ANIObject {
 public:
 	enum Sound {
@@ -62,4 +62,4 @@ public:
 
 } // End of namespace Gob
 
-#endif // GOB_PREGOB_ONCEUPON_CHARGENCHILD_H
+#endif // GOB_PREGOB_ONCEUPON_CHARACTER_PREVIEW_H
