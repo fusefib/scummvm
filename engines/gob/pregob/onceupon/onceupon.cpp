@@ -194,6 +194,13 @@ void OnceUpon::init() {
 
 	for (uint i = 0; i < kSoundCount; ++i)
 		Assets::loadSample(_vm, _commonSounds[i], kSound[i]);
+	// Both games' courier cue has two isolated nonzero samples after silence.
+	SoundDesc &courier = _commonSounds[kSoundCourier];
+	if (!courier.empty() && courier.size() == 4634) {
+		byte *tail = courier.getData() + courier.size() - 2;
+		if (tail[0] == 23 && tail[1] == 16)
+			tail[0] = tail[1] = 0;
+	}
 	initScreen();
 
 	// Match the palette state to the black screen cleared by PreGob.
